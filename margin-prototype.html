@@ -1,0 +1,1754 @@
+<!doctype html>
+<html lang="en" data-visualize-standalone>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="referrer" content="no-referrer">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval' blob: data: https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh https://fonts.bunny.net https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com; style-src 'unsafe-inline' blob: data: https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh https://fonts.bunny.net https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com; img-src blob: data: https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh https://fonts.bunny.net https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com; font-src blob: data: https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh https://fonts.bunny.net https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com; media-src blob: data: https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh https://fonts.bunny.net https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com; worker-src blob:; connect-src blob: data:; frame-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'">
+<title>Plan Comments V2</title>
+<style>:root{color-scheme:light dark;background:light-dark(rgb(255 255 255), rgb(24 24 24))}html,body{margin:0}body{box-sizing:border-box;padding:1rem;background:inherit}iframe{display:block;width:100%;height:calc(100vh - 2rem);margin:0 auto;border:0}</style>
+</head>
+<body>
+<iframe sandbox="allow-scripts allow-popups allow-popups-to-escape-sandbox" referrerpolicy="no-referrer" title="Plan Comments V2" srcdoc="&lt;!doctype html&gt;
+&lt;html lang=&quot;en&quot; data-visualize-standalone&gt;
+&lt;head&gt;
+&lt;meta charset=&quot;utf-8&quot;&gt;
+&lt;meta name=&quot;viewport&quot; content=&quot;width=device-width, initial-scale=1&quot;&gt;
+&lt;meta name=&quot;referrer&quot; content=&quot;no-referrer&quot;&gt;
+&lt;meta http-equiv=&quot;Content-Security-Policy&quot; content=&quot;default-src &#x27;none&#x27;; script-src &#x27;unsafe-inline&#x27; &#x27;unsafe-eval&#x27; &#x27;wasm-unsafe-eval&#x27; blob: data: https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh https://fonts.bunny.net https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com; style-src &#x27;unsafe-inline&#x27; blob: data: https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh https://fonts.bunny.net https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com; img-src blob: data: https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh https://fonts.bunny.net https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com; font-src blob: data: https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh https://fonts.bunny.net https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com; media-src blob: data: https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh https://fonts.bunny.net https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com; worker-src blob:; connect-src blob: data:; frame-src &#x27;none&#x27;; object-src &#x27;none&#x27;; base-uri &#x27;none&#x27;; form-action &#x27;none&#x27;&quot;&gt;
+&lt;title&gt;Plan Comments V2&lt;/title&gt;
+&lt;style&gt;:root {
+  color-scheme: light dark;
+  background-color: var(
+    --background,
+    var(--color-background-primary, light-dark(rgb(255 255 255), rgb(24 24 24)))
+  ) !important;
+
+  /* Agent-facing contract; keep in sync with SKILL.md. */
+  --background: var(
+    --color-background-primary,
+    light-dark(rgb(255 255 255), rgb(24 24 24))
+  );
+  --foreground: var(
+    --color-text-primary,
+    light-dark(rgb(26 28 31), rgb(255 255 255))
+  );
+  --card: color-mix(in oklab, var(--foreground) 5%, var(--background));
+  --card-foreground: var(
+    --color-text-primary,
+    light-dark(rgb(26 28 31), rgb(255 255 255))
+  );
+  --popover: var(
+    --color-background-secondary,
+    light-dark(rgb(255 255 255), rgb(45 45 45))
+  );
+  --popover-foreground: var(
+    --color-text-primary,
+    light-dark(rgb(26 28 31), rgb(255 255 255))
+  );
+  --primary: var(
+    --color-text-info,
+    light-dark(rgb(51 156 255), rgb(131 195 255))
+  );
+  --primary-foreground: var(
+    --color-text-inverse,
+    light-dark(rgb(255 255 255), rgb(13 13 13))
+  );
+  --secondary: var(
+    --color-background-secondary,
+    light-dark(rgb(255 255 255 / 96%), rgb(54 54 54 / 96%))
+  );
+  --secondary-foreground: var(
+    --color-text-primary,
+    light-dark(rgb(26 28 31), rgb(255 255 255))
+  );
+  --muted: color-mix(in srgb, var(--foreground) 10%, transparent);
+  --muted-foreground: var(
+    --color-text-secondary,
+    light-dark(rgb(26 28 31 / 49.4%), rgb(255 255 255 / 49.8%))
+  );
+  --accent: var(
+    --color-background-info,
+    light-dark(rgb(229 242 255), rgb(13 39 63))
+  );
+  --accent-foreground: var(
+    --color-text-info,
+    light-dark(rgb(51 156 255), rgb(131 195 255))
+  );
+  --destructive: var(
+    --color-text-warning,
+    light-dark(rgb(226 85 7), rgb(255 133 73))
+  );
+  --border: var(
+    --color-border-secondary,
+    light-dark(rgb(26 28 31 / 8%), rgb(255 255 255 / 8.2%))
+  );
+  --input: var(
+    --color-border-primary,
+    light-dark(
+      rgb(26 28 31 / 11.8%),
+      color-mix(in oklab, rgb(0 0 0) 10%, transparent)
+    )
+  );
+  --ring: var(
+    --color-ring-primary,
+    light-dark(rgb(51 156 255), rgb(131 195 255 / 76%))
+  );
+  --font-size-base: var(--font-text-md-size, 14px);
+  --blue: light-dark(rgb(51 156 255), rgb(51 156 255));
+  --orange: light-dark(rgb(226 85 7), rgb(251 106 34));
+  --green: light-dark(rgb(0 162 64), rgb(64 201 119));
+  --red: light-dark(rgb(224 46 42), rgb(255 103 100));
+  --purple: light-dark(rgb(146 79 247), rgb(173 123 249));
+  --yellow: light-dark(rgb(255 195 0), rgb(255 210 64));
+  --viz-series-1: var(--primary);
+  --viz-series-2: light-dark(rgb(243 136 59), rgb(245 154 86));
+  --viz-series-3: light-dark(rgb(93 201 119), rgb(116 213 139));
+  --viz-series-4: light-dark(rgb(235 119 177), rgb(240 143 192));
+  --viz-series-5: light-dark(rgb(155 121 236), rgb(170 145 239));
+  --viz-series-6: light-dark(rgb(58 185 177), rgb(90 203 194));
+
+  /* Internal implementation variables; not part of the agent contract. */
+  --font-sans: -apple-system, system-ui, &quot;Segoe UI&quot;, sans-serif;
+  --font-mono:
+    ui-monospace, SFMono-Regular, &quot;SF Mono&quot;, Menlo, Consolas, &quot;Liberation Mono&quot;,
+    monospace;
+  --font-size-normal: max(11px, var(--font-size-base));
+  --font-size-tooltip: calc(var(--font-size-base) - 1px);
+  --font-size-small: max(11px, calc(var(--font-size-base) - 2px));
+  --font-size-h1: calc(var(--font-size-normal) * 1.7142857143);
+  --font-size-h2: calc(var(--font-size-normal) * 1.4285714286);
+  --font-size-h3: calc(var(--font-size-normal) * 1.2857142857);
+  --font-weight-normal: 430;
+  --font-weight-medium: 500;
+  --icon-size: 16px;
+  --line-height-normal: calc(var(--font-size-normal) * 1.5);
+  --line-height-tooltip: calc(var(--font-size-tooltip) * 1.4285714286);
+  --line-height-small: calc(var(--font-size-small) + 4px);
+  --corner-shape: round;
+  --radius: var(--border-radius-lg, 10px);
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-2xl: calc(var(--radius) * 1.6);
+  --radius-full: 9999px;
+  --shadow-sm: 0 1px 2px -1px rgb(0 0 0 / 8%);
+  --checkmark-image: url(&quot;data:image/svg+xml,%3Csvg xmlns=&#x27;http://www.w3.org/2000/svg&#x27; viewBox=&#x27;0 0 17 17&#x27;%3E%3Cpath d=&#x27;M12.8961 3.64101C13.1297 3.41418 13.4984 3.37523 13.7779 3.56581C14.0571 3.75635 14.1554 4.11331 14.0299 4.41347L13.9615 4.53847L7.71151 13.7045C7.59411 13.8767 7.4063 13.9877 7.19881 14.0072C6.99136 14.0267 6.78564 13.9533 6.63826 13.806L2.88826 10.056L2.79842 9.9457C2.6192 9.67407 2.64927 9.30496 2.88826 9.06581C3.12738 8.82669 3.49647 8.79676 3.76815 8.97597L3.8785 9.06581L7.03084 12.2182L12.8053 3.74941L12.8961 3.64101Z&#x27;/%3E%3C/svg%3E&quot;);
+
+  /* Legacy aliases; not part of the current agent contract. */
+  --viz-bg: transparent;
+  --viz-panel: var(--card);
+  --viz-border: var(--border);
+  --viz-text: var(--foreground);
+  --viz-muted: var(--muted-foreground);
+  --viz-accent: var(--primary);
+  --viz-accent-text: var(--primary-foreground);
+  --viz-accent-bg: var(--accent);
+  --viz-font-size: var(--font-size-base);
+  --viz-warning: var(--destructive);
+}
+
+:root[data-theme=&quot;light&quot;] {
+  color-scheme: light;
+}
+
+:root[data-theme=&quot;dark&quot;] {
+  color-scheme: dark;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html &gt; body {
+  /* Preserve MCP aliases for older inline renderers without creating :root cycles. */
+  --color-background-primary: var(
+    --background,
+    light-dark(rgb(255 255 255), rgb(24 24 24))
+  );
+  --color-text-primary: var(
+    --foreground,
+    light-dark(rgb(26 28 31), rgb(255 255 255))
+  );
+  --color-border-secondary: var(
+    --border,
+    light-dark(rgb(26 28 31 / 8%), rgb(255 255 255 / 8.2%))
+  );
+
+  margin: 0;
+  padding: var(--visualize-paint-gutter, 0px);
+  color: var(--foreground);
+  background: transparent !important;
+  font-family: var(--font-sans) !important;
+  font-size: var(--font-size-normal);
+  font-weight: var(--font-weight-normal);
+  line-height: var(--line-height-normal);
+}
+
+:root:not([data-app-block-surface], [data-visualize-standalone]) &gt; body {
+  padding: 12px;
+}
+
+a {
+  color: color-mix(in srgb, var(--viz-accent) 80%, var(--viz-text) 20%);
+  cursor: pointer;
+  font-weight: var(--font-weight-medium, 500);
+  text-decoration: none;
+  text-underline-offset: 2px;
+}
+
+a:is(:hover, :focus-visible) {
+  text-decoration-line: underline;
+  text-decoration-style: dashed;
+  text-decoration-thickness: 0.5px;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6,
+p {
+  margin-block: 0;
+}
+
+h1 {
+  font-size: var(--font-size-h1);
+  font-weight: var(--font-weight-medium);
+  line-height: 1.25;
+}
+
+h2 {
+  font-size: var(--font-size-h2);
+  font-weight: var(--font-weight-medium);
+  line-height: 1.25;
+}
+
+h3,
+h4,
+h5,
+h6 {
+  font-size: var(--font-size-h3);
+  font-weight: var(--font-weight-medium);
+  line-height: 1.3;
+}
+
+b,
+strong,
+th {
+  font-weight: var(--font-weight-medium);
+}
+
+code:not(pre code) {
+  display: inline;
+  padding: 1px 6px;
+  border-radius: var(--radius-sm);
+  corner-shape: var(--corner-shape);
+  background: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 0.92em;
+  overflow-wrap: anywhere;
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
+  word-break: break-word;
+}
+
+.table-responsive {
+  width: 100%;
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  color: var(--foreground);
+  font: inherit;
+  text-align: start;
+}
+
+.table :is(th, td) {
+  padding-block: 10px;
+  padding-inline: 0 24px;
+  overflow-wrap: anywhere;
+  border-bottom: 1px solid var(--border);
+  text-align: start;
+  vertical-align: top;
+}
+
+.table-responsive &gt; .table :is(th, td) {
+  overflow-wrap: break-word;
+}
+
+.table :is(th, td):last-child {
+  padding-inline-end: 0;
+}
+
+.table :is(caption, thead th) {
+  font-weight: 600;
+}
+
+.table thead th {
+  padding-block: 8px;
+  border-bottom-color: color-mix(in srgb, var(--foreground) 16%, transparent);
+}
+
+.table tbody tr:last-child :is(th, td) {
+  border-bottom: 0;
+}
+
+.table.table-sm :is(th, td) {
+  padding-block: 6px;
+}
+
+.table.table-sm :is(th, td):not(:last-child) {
+  padding-inline-end: 16px;
+}
+
+.table :is(.text-end, [align=&quot;right&quot;]) {
+  text-align: end;
+  font-variant-numeric: tabular-nums;
+}
+
+.table :is(.text-center, [align=&quot;center&quot;]) {
+  text-align: center;
+}
+
+.table .text-nowrap {
+  white-space: nowrap;
+}
+
+#widget {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: 100%;
+  padding: 0;
+  background: transparent !important;
+}
+
+.card {
+  min-width: 0;
+  padding: 12px;
+  overflow: hidden;
+  overflow-wrap: break-word;
+  border-radius: var(--radius-2xl);
+  corner-shape: var(--corner-shape);
+  color: var(--card-foreground);
+  background: var(--card);
+}
+
+#widget &gt; :not(.card, .progress) {
+  width: 100% !important;
+  max-width: none !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+.tooltip {
+  position: fixed;
+  z-index: 50;
+  top: 0;
+  left: 0;
+  width: max-content;
+  max-width: min(
+    20rem,
+    var(--tooltip-available-width, calc(100vw - 10px)),
+    calc(100vw - 10px)
+  );
+  max-height: min(
+    var(--tooltip-available-height, calc(100vh - 10px)),
+    calc(100vh - 10px)
+  );
+  padding: 4px 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  corner-shape: var(--corner-shape);
+  color: var(--popover-foreground);
+  background: var(--popover);
+  box-shadow: none;
+  font-size: var(--font-size-tooltip);
+  line-height: var(--line-height-tooltip);
+  overflow-wrap: break-word;
+  white-space: normal;
+  pointer-events: none;
+  user-select: none;
+}
+
+/* The shared runtime owns data-tooltip; suppress AppBlock&#x27;s pseudo-tooltip. */
+main [data-tooltip]::after {
+  content: none;
+}
+
+.viz-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(max(180px, 24%), 1fr));
+  gap: 10px;
+}
+
+.viz-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.viz-stat-value {
+  font-size: var(--font-size-h2);
+  font-weight: var(--font-weight-medium);
+  line-height: 1.25;
+}
+
+.viz-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+hr {
+  width: 100%;
+  height: 1px;
+  margin-block: 6px;
+  border: 0;
+  background: var(--border);
+}
+
+.nav {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 4px;
+}
+
+.progress {
+  display: flex;
+  height: 8px;
+  margin-block: calc((var(--line-height-normal, 1.5em) - 8px) / 2);
+  overflow: hidden;
+  border: 0;
+  border-radius: var(--radius-full);
+  background: var(--muted);
+}
+
+.progress-bar:only-child {
+  border-radius: var(--radius-full);
+}
+
+.progress-bar {
+  height: 100%;
+  flex-shrink: 0;
+  border: 0;
+  background: var(--viz-series-1);
+}
+
+.viz-badge {
+  padding: 3px 8px;
+  border-radius: var(--radius-full);
+  color: var(--accent-foreground);
+  background: var(--accent);
+  font-weight: var(--font-weight-medium);
+}
+
+small,
+.text-small,
+.viz-badge {
+  font-size: var(--font-size-small);
+  line-height: var(--line-height-small);
+}
+
+.text-muted {
+  color: var(--muted-foreground);
+}
+
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.viz-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.viz-controls &gt; .form-label {
+  display: grid;
+  min-width: min(100%, 260px);
+  flex: 1 1 280px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: baseline;
+  gap: 2px 12px;
+  margin-bottom: 0;
+}
+
+.viz-controls &gt; .form-label &gt; :is(.form-control, .form-range, .form-select) {
+  grid-column: 1 / -1;
+}
+
+.btn,
+.nav-link,
+.form-check-input,
+.form-control,
+.form-range,
+.form-select {
+  font: inherit;
+}
+
+.btn,
+.nav-link {
+  appearance: button;
+  display: inline-flex;
+  inline-size: fit-content;
+  max-inline-size: 100%;
+  min-height: 28px;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  margin: 0;
+  padding: 0 8px;
+  -webkit-app-region: no-drag;
+  border: 1px solid var(--input);
+  border-radius: var(--radius-lg);
+  corner-shape: var(--corner-shape);
+  color: var(--secondary-foreground);
+  background: var(--secondary);
+  cursor: var(--cursor-interaction, pointer);
+  text-align: center;
+  text-decoration: none;
+  white-space: nowrap;
+  user-select: none;
+  -webkit-font-smoothing: antialiased;
+}
+
+.btn:is(.btn-block, .viz-tile) {
+  inline-size: 100%;
+}
+
+.btn.viz-tile {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+
+a.btn {
+  cursor: pointer;
+  text-decoration: none;
+}
+
+.btn:not(:disabled):hover,
+.nav-link:not(:disabled):not([aria-disabled=&quot;true&quot;]):hover {
+  background: color-mix(in srgb, var(--foreground) 6%, var(--secondary));
+}
+
+.btn-primary {
+  border-color: transparent;
+  color: var(--primary-foreground);
+  background: var(--foreground);
+  background-clip: padding-box;
+}
+
+.btn-primary .text-muted {
+  color: color-mix(in srgb, var(--primary-foreground) 50%, transparent);
+}
+
+.btn-primary:not(:disabled):hover {
+  background: color-mix(in srgb, var(--foreground) 80%, transparent);
+  background-clip: padding-box;
+}
+
+.btn-ghost {
+  border-color: transparent;
+  color: var(--muted-foreground);
+  background: transparent;
+}
+
+.btn-ghost:not(:disabled):hover {
+  color: var(--foreground);
+  background: color-mix(in srgb, var(--foreground) 6%, var(--secondary));
+}
+
+.nav-pills .nav-link {
+  min-width: 0;
+  border-color: transparent;
+  color: var(--muted-foreground);
+  background: transparent;
+}
+
+.nav-justified .nav-link {
+  flex: 1 1 0;
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+
+.nav-pills .nav-link.active {
+  color: var(--foreground);
+  background: var(--muted);
+}
+
+.btn:disabled,
+.nav-link:disabled,
+.nav-link[aria-disabled=&quot;true&quot;] {
+  cursor: not-allowed;
+  opacity: 0.4;
+}
+
+[data-lucide] {
+  stroke-width: 1.6;
+}
+
+.form-label {
+  display: block;
+  margin-bottom: 6px;
+  color: var(--foreground);
+}
+
+.form-control {
+  display: block;
+  width: 100%;
+  min-height: 28px;
+  padding: 0 8px;
+  outline: none;
+  border: 1px solid var(--input);
+  border-radius: var(--radius-lg);
+  corner-shape: var(--corner-shape);
+  color: var(--foreground);
+  background: var(--secondary);
+}
+
+.form-control::placeholder {
+  color: var(--muted-foreground);
+}
+
+.form-control[type=&quot;file&quot;] {
+  padding: 0;
+  overflow: hidden;
+  cursor: var(--cursor-interaction, pointer);
+}
+
+.form-control[type=&quot;file&quot;]::file-selector-button {
+  min-height: 26px;
+  margin-right: 8px;
+  padding: 0 8px;
+  border: 0;
+  border-right: 1px solid var(--input);
+  color: var(--secondary-foreground);
+  background: var(--secondary);
+  cursor: inherit;
+  font: inherit;
+}
+
+.form-control[type=&quot;file&quot;]:not(:disabled):hover::file-selector-button {
+  background: color-mix(in srgb, var(--foreground) 6%, var(--secondary));
+}
+
+.form-control-color[type=&quot;color&quot;] {
+  width: 40px;
+  height: 28px;
+  padding: 3px;
+  cursor: var(--cursor-interaction, pointer);
+}
+
+.form-control-color[type=&quot;color&quot;]::-webkit-color-swatch-wrapper {
+  padding: 0;
+}
+
+.form-control-color[type=&quot;color&quot;]::-webkit-color-swatch {
+  border: 0;
+  border-radius: calc(var(--radius-lg) - 4px);
+  corner-shape: var(--corner-shape);
+}
+
+textarea.form-control {
+  height: auto;
+  min-height: 72px;
+  padding: 8px 10px;
+  resize: vertical;
+}
+
+.form-control:focus-visible {
+  border-color: var(--ring);
+  box-shadow: inset 0 0 0 1px var(--ring);
+}
+
+.form-control:disabled,
+.form-select:disabled {
+  cursor: not-allowed;
+  opacity: 0.4;
+}
+
+.form-select {
+  appearance: none;
+  display: block;
+  width: 100%;
+  min-height: 28px;
+  margin: 0;
+  padding: 0 32px 0 8px;
+  outline: none;
+  border: 1px solid var(--input);
+  border-radius: var(--radius-lg);
+  corner-shape: var(--corner-shape);
+  color: var(--foreground);
+  background-color: var(--secondary);
+  background-image:
+    linear-gradient(45deg, transparent 50%, var(--muted-foreground) 50%),
+    linear-gradient(135deg, var(--muted-foreground) 50%, transparent 50%);
+  background-position:
+    calc(100% - 14px) 50%,
+    calc(100% - 10px) 50%;
+  background-repeat: no-repeat;
+  background-size: 4px 4px;
+  cursor: var(--cursor-interaction, default);
+}
+
+.form-select:not(:disabled):hover {
+  background-color: color-mix(in srgb, var(--foreground) 6%, var(--secondary));
+}
+
+.form-select:focus-visible {
+  border-color: var(--ring);
+  box-shadow: inset 0 0 0 1px var(--ring);
+}
+
+.form-check {
+  display: flex;
+  min-height: 20px;
+  align-items: center;
+  gap: 6px;
+}
+
+.form-check-input {
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  flex: 0 0 auto;
+  margin: 0;
+  border: 1px solid var(--input);
+  color: var(--primary-foreground);
+  background-color: transparent;
+  cursor: var(--cursor-interaction, default);
+  transition:
+    background-color 150ms,
+    border-color 150ms,
+    box-shadow 150ms;
+}
+
+.form-check:not(.form-switch) .form-check-input[type=&quot;checkbox&quot;] {
+  border-color: var(--input);
+  border-radius: var(--radius-sm);
+  corner-shape: var(--corner-shape);
+  background-color: var(--secondary);
+  box-shadow: var(--shadow-sm);
+}
+
+.form-check:not(.form-switch)
+  .form-check-input:not(:disabled):not(:checked):hover {
+  background-color: var(--card);
+}
+
+.form-check:not(.form-switch) .form-check-input[type=&quot;checkbox&quot;]:checked {
+  border-color: var(--primary);
+  background-color: var(--primary);
+}
+
+.form-check:not(.form-switch)
+  .form-check-input[type=&quot;checkbox&quot;]:checked::before {
+  display: block;
+  width: 100%;
+  height: 100%;
+  background: var(--primary-foreground);
+  content: &quot;&quot;;
+  mask: var(--checkmark-image) center / 12px 12px no-repeat;
+}
+
+.form-check-input[type=&quot;radio&quot;] {
+  width: 14px;
+  height: 14px;
+  border-radius: var(--radius-full);
+}
+
+.form-check-input[type=&quot;radio&quot;]:checked {
+  border: 2px solid var(--primary);
+  background:
+    radial-gradient(circle, var(--primary-foreground) 0 2.5px, transparent 3px),
+    var(--primary);
+}
+
+.form-check:not(.form-switch) .form-check-input:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+
+.form-check:not(.form-switch) .form-check-input:disabled {
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+.form-check:not(.form-switch) .form-check-input:disabled + .form-check-label {
+  cursor: not-allowed;
+}
+
+.form-switch .form-check-input:disabled,
+.form-switch .form-check-input:disabled + .form-check-label {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.form-check-label {
+  color: var(--foreground);
+  cursor: var(--cursor-interaction, default);
+}
+
+.form-switch .form-check-input {
+  position: relative;
+  width: 32px;
+  height: 20px;
+  border: 0;
+  border-radius: var(--radius-full);
+  background: var(--muted);
+  box-shadow: none;
+  transition: background-color 200ms cubic-bezier(0, 0, 0.2, 1);
+}
+
+.form-switch .form-check-input::before {
+  position: absolute;
+  top: 50%;
+  left: 0;
+  width: 16px;
+  height: 16px;
+  box-sizing: border-box;
+  border: 1px solid light-dark(var(--primary-foreground), var(--foreground));
+  border-radius: var(--radius-full);
+  background: light-dark(var(--primary-foreground), var(--foreground));
+  box-shadow: var(--shadow-sm);
+  content: &quot;&quot;;
+  transform: translate(2px, -50%);
+  transition: transform 200ms cubic-bezier(0, 0, 0.2, 1);
+}
+
+.form-switch .form-check-input:checked {
+  background: var(--primary);
+}
+
+.form-switch .form-check-input:checked::before {
+  transform: translate(14px, -50%);
+}
+
+.form-switch .form-check-input:focus-visible {
+  box-shadow: 0 0 0 2px var(--ring);
+}
+
+.form-range {
+  appearance: none;
+  display: block;
+  width: 100%;
+  height: 28px;
+  flex: 1;
+  margin: 0;
+  padding: 0;
+  outline: none;
+  border: 0;
+  accent-color: var(--primary);
+  background: linear-gradient(
+      color-mix(in srgb, var(--foreground) 7%, transparent),
+      color-mix(in srgb, var(--foreground) 7%, transparent)
+    )
+    center / 100% 2px no-repeat;
+}
+
+.form-range::-webkit-slider-runnable-track {
+  height: 28px;
+  background: transparent;
+}
+
+.form-range::-webkit-slider-thumb {
+  appearance: none;
+  width: 20px;
+  height: 20px;
+  margin-top: 4px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-full);
+  background: light-dark(var(--primary-foreground), var(--foreground));
+}
+
+.form-range:focus-visible::-webkit-slider-thumb {
+  border-color: var(--ring);
+  box-shadow: inset 0 0 0 1px var(--ring);
+}
+
+.form-range::-moz-range-track {
+  height: 28px;
+  background: transparent;
+}
+
+.form-range::-moz-range-thumb {
+  width: 20px;
+  height: 20px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-full);
+  background: light-dark(var(--primary-foreground), var(--foreground));
+}
+
+.form-range:focus-visible::-moz-range-thumb {
+  border-color: var(--ring);
+  box-shadow: inset 0 0 0 1px var(--ring);
+}
+
+.form-range:disabled {
+  cursor: not-allowed;
+  opacity: 0.4;
+}
+
+.btn:not(.btn-primary, .viz-tile):is(
+  [aria-pressed=&quot;true&quot;],
+  [aria-selected=&quot;true&quot;],
+  .is-selected
+) {
+  border-color: var(--primary);
+  color: var(--primary-foreground);
+  background: var(--primary);
+}
+
+.btn.viz-tile:is([aria-pressed=&quot;true&quot;], [aria-selected=&quot;true&quot;], .is-selected) {
+  border-color: var(--primary);
+  box-shadow: inset 0 0 0 1px var(--primary);
+}
+
+.btn:focus-visible,
+.nav-link:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+
+@media (pointer: coarse) {
+  .btn,
+  .nav-link,
+  .form-control,
+  .form-select {
+    min-width: 44px;
+    min-height: 44px;
+  }
+
+  /* Keep small-screen WebKit from zooming when a text field receives focus. */
+  .form-control,
+  .form-select {
+    font-size: max(16px, var(--font-size-normal));
+  }
+
+  .form-control[type=&quot;file&quot;]::file-selector-button {
+    min-width: 44px;
+    min-height: 44px;
+  }
+
+  .form-control-color[type=&quot;color&quot;] {
+    width: 44px;
+    height: 44px;
+  }
+
+  .form-control:is(
+    [type=&quot;date&quot;],
+    [type=&quot;datetime-local&quot;],
+    [type=&quot;month&quot;],
+    [type=&quot;time&quot;],
+    [type=&quot;week&quot;]
+  ) {
+    min-width: 0;
+    max-width: 100%;
+    padding-block: 8px;
+  }
+
+  .form-check {
+    min-height: 44px;
+    padding-inline: 15px;
+  }
+
+  .form-check-input {
+    position: relative;
+  }
+
+  .form-check-input::after {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 44px;
+    height: 44px;
+    content: &quot;&quot;;
+    transform: translate(-50%, -50%);
+  }
+
+  .form-check-label {
+    display: inline-flex;
+    min-width: 44px;
+    min-height: 44px;
+    align-items: center;
+  }
+
+  .form-range {
+    height: 44px;
+    touch-action: pan-y;
+  }
+
+  .form-range::-webkit-slider-runnable-track {
+    height: 44px;
+  }
+
+  .form-range::-moz-range-track {
+    height: 44px;
+  }
+
+  .form-range::-webkit-slider-thumb {
+    margin-top: 12px;
+  }
+}
+
+svg {
+  display: block;
+  max-width: 100%;
+  height: auto;
+}
+
+#widget &gt; svg {
+  width: 100%;
+}
+
+/* Model-authored chart rules can otherwise stretch icons after these styles load. */
+svg.lucide {
+  display: block;
+  width: var(--icon-size) !important;
+  height: var(--icon-size) !important;
+  flex: none;
+  margin: 0 !important;
+  stroke-width: 1.6;
+}
+
+.text-warning,
+.text-destructive {
+  color: var(--destructive);
+}
+
+html&gt;body{padding:0}&lt;/style&gt;
+&lt;/head&gt;
+&lt;body&gt;
+&lt;div id=&quot;margin-prototype&quot;&gt;
+  &lt;style&gt;
+    #margin-prototype{--mg-bg:light-dark(#fff,#202020);--mg-soft:light-dark(#f6f6f5,#292929);--mg-hover:light-dark(#ececeb,#363636);--mg-text:light-dark(#252525,#ececea);--mg-muted:light-dark(#666663,#afafaa);--mg-line:light-dark(#e6e6e2,#40403c);--mg-ink:light-dark(#292927,#eee);--mg-inverse:light-dark(#fff,#222);--mg-mark:light-dark(#fff0b5,#655320);--mg-mark-active:light-dark(#ffdf78,#826921);--mg-blue:light-dark(#315ba6,#aac7ff);--mg-shadow:light-dark(#00000012,#00000050);font-family:Inter,-apple-system,BlinkMacSystemFont,&quot;Segoe UI&quot;,sans-serif;color:var(--mg-text);background:var(--mg-bg);border:1px solid var(--mg-line);border-radius:14px;position:relative;isolation:isolate;overflow-wrap:anywhere;color-scheme:light dark}
+    #margin-prototype *{box-sizing:border-box}
+    #margin-prototype [hidden]{display:none!important}
+    #margin-prototype button,#margin-prototype select,#margin-prototype textarea,#margin-prototype input{font:inherit;color:inherit}
+    #margin-prototype button{cursor:pointer;border:0;background:transparent;border-radius:7px;padding:7px 9px;display:inline-flex;align-items:center;justify-content:center;gap:6px;white-space:normal}
+    #margin-prototype button:hover{background:var(--mg-hover)}
+    #margin-prototype button:disabled{opacity:.45;cursor:default}
+    #margin-prototype button:disabled:hover{background:transparent}
+    #margin-prototype .mg-primary{background:var(--mg-ink);color:var(--mg-inverse);border-radius:9px;padding:9px 13px}
+    #margin-prototype .mg-primary:hover{background:var(--mg-ink);opacity:.86}
+    #margin-prototype .mg-primary:disabled:hover{background:var(--mg-ink)}
+    #margin-prototype .mg-muted{color:var(--mg-muted)}
+    #margin-prototype .mg-small{font-size:.85em}
+    #margin-prototype .mg-top{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;padding:12px 18px;border-bottom:1px solid var(--mg-line)}
+    #margin-prototype .mg-brand{display:flex;align-items:center;gap:8px;font-weight:500;letter-spacing:-.03em}
+    #margin-prototype .mg-top-meta{display:flex;gap:9px;align-items:center;flex-wrap:wrap}
+    #margin-prototype .mg-prototype-label{color:var(--mg-muted);background:var(--mg-soft);padding:4px 8px;border-radius:5px;font-size:.8em;letter-spacing:0}
+    #margin-prototype .mg-provider{border:1px solid var(--mg-line);background:var(--mg-bg);padding:7px 10px;border-radius:8px;max-width:150px}
+    #margin-prototype .mg-workspace{display:grid;grid-template-columns:148px minmax(0,1fr);align-items:stretch}
+    #margin-prototype .mg-sidebar{background:var(--mg-soft);border-right:1px solid var(--mg-line);padding:22px 10px;border-bottom-left-radius:14px}
+    #margin-prototype .mg-sidebar-label{padding:0 9px;margin:0 0 10px;color:var(--mg-muted);font-size:.85em}
+    #margin-prototype .mg-project{display:flex;gap:7px;align-items:center;padding:7px 9px;font-weight:500}
+    #margin-prototype .mg-conversation{background:var(--mg-hover);padding:9px;border-radius:7px;margin-top:9px}
+    #margin-prototype .mg-main{min-width:0}
+    #margin-prototype .mg-toolbar{padding:14px 20px;display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap}
+    #margin-prototype .mg-toolbar-title{color:var(--mg-muted)}
+    #margin-prototype .mg-review{display:grid;grid-template-columns:minmax(0,1fr);align-items:start;gap:22px;padding:6px 28px 24px;max-width:820px;margin:auto}
+    #margin-prototype.mg-comments-open .mg-review{grid-template-columns:minmax(0,1fr) 250px;max-width:none;padding:6px 22px 24px;gap:22px}
+    #margin-prototype.mg-comments-open .mg-workspace{grid-template-columns:minmax(0,1fr)}
+    #margin-prototype.mg-comments-open .mg-sidebar{display:none}
+    #margin-prototype .mg-thread{min-width:0}
+    #margin-prototype .mg-user{margin:4px 0 26px auto;background:var(--mg-soft);padding:13px 17px;border-radius:17px;max-width:92%}
+    #margin-prototype .mg-agent{display:flex;align-items:center;gap:8px;margin-bottom:14px;font-weight:500}
+    #margin-prototype .mg-agent-icon{display:inline-flex;align-items:center;justify-content:center;width:27px;height:27px;background:var(--mg-soft);border:1px solid var(--mg-line);border-radius:8px;flex:none}
+    #margin-prototype h2{font-size:1.35em;letter-spacing:-.025em;font-weight:500;margin:0 0 9px}
+    #margin-prototype h3{font-size:1em;font-weight:500;margin:23px 0 8px}
+    #margin-prototype p{margin:0 0 12px;line-height:1.65}
+    #margin-prototype .mg-plan-intro{color:var(--mg-muted)}
+    #margin-prototype .mg-paragraph{position:relative;padding-right:26px}
+    #margin-prototype .mg-paragraph p{white-space:pre-wrap}
+    #margin-prototype strong{font-weight:650}
+    #margin-prototype a{color:var(--mg-blue);text-decoration:underline;text-underline-offset:3px}
+    #margin-prototype code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.9em;background:var(--mg-soft);padding:2px 4px;border-radius:4px}
+    #margin-prototype .mg-plan-table{width:100%;border-collapse:collapse;table-layout:fixed;margin:14px 0 20px;font-size:.92em}
+    #margin-prototype .mg-plan-table th,#margin-prototype .mg-plan-table td{padding:10px 9px;border-bottom:1px solid var(--mg-line);vertical-align:top;text-align:left;line-height:1.5;overflow-wrap:anywhere}
+    #margin-prototype .mg-plan-table th{font-weight:500;background:var(--mg-soft)}
+    #margin-prototype .mg-plan-table th:last-child,#margin-prototype .mg-plan-table td:last-child{width:34px;padding:6px 0}
+    #margin-prototype .mg-plan-table th:first-child{width:24%}
+    #margin-prototype .mg-plan-table button{padding:6px}
+    #margin-prototype .mg-paragraph-action{position:absolute;right:-5px;top:0;color:var(--mg-muted);padding:6px}
+    #margin-prototype .mg-paragraph-action:hover{color:var(--mg-text)}
+    #margin-prototype .mg-paragraph-action svg{width:15px;height:15px}
+    #margin-prototype mark{background:var(--mg-mark);color:var(--mg-text);border-bottom:1px solid var(--mg-mark-active);cursor:pointer;padding:1px 0}
+    #margin-prototype mark.mg-highlight-active{background:var(--mg-mark-active)}
+    #margin-prototype .mg-plan-footer{display:flex;gap:7px;align-items:center;color:var(--mg-muted);font-size:.85em;margin:18px 0 24px}
+    #margin-prototype .mg-rail{min-width:0;border-left:1px solid var(--mg-line);padding-left:17px}
+    #margin-prototype .mg-rail-head{display:flex;align-items:center;justify-content:space-between;gap:4px;font-weight:500}
+    #margin-prototype .mg-rail-head button{color:var(--mg-muted)}
+    #margin-prototype .mg-rail-hint{margin:6px 0 0;color:var(--mg-muted);font-size:.85em;line-height:1.5}
+    #margin-prototype .mg-comment-list{display:flex;flex-direction:column;gap:0}
+    #margin-prototype .mg-empty{padding:20px 0;color:var(--mg-muted)}
+    #margin-prototype .mg-comment{background:var(--mg-bg);border:1px solid var(--mg-line);border-radius:10px;padding:12px;min-width:0;box-shadow:0 2px 8px var(--mg-shadow)}
+    #margin-prototype .mg-comment.mg-active{border-color:var(--mg-muted)}
+    #margin-prototype .mg-comment-top{display:flex;align-items:center;justify-content:space-between;gap:4px;margin-bottom:9px}
+    #margin-prototype .mg-avatar{display:inline-flex;align-items:center;justify-content:center;background:var(--mg-soft);border-radius:50%;width:23px;height:23px;flex:none;font-size:.8em}
+    #margin-prototype .mg-author{display:flex;align-items:center;gap:6px;font-weight:500;font-size:.9em}
+    #margin-prototype .mg-status{font-size:.78em;color:var(--mg-muted)}
+    #margin-prototype .mg-quote{display:block;width:100%;border-left:2px solid var(--mg-mark-active);border-radius:0;padding:0 0 0 9px;text-align:left;justify-content:flex-start;color:var(--mg-muted);font-size:.85em;margin:0 0 10px;line-height:1.45}
+    #margin-prototype .mg-comment-body{white-space:pre-wrap;line-height:1.5;margin:0;font-size:.95em}
+    #margin-prototype .mg-comment-actions{display:flex;gap:3px;justify-content:flex-end;margin-top:8px;font-size:.82em}
+    #margin-prototype textarea{width:100%;background:var(--mg-bg);border:1px solid var(--mg-line);border-radius:7px;resize:vertical;padding:10px;min-height:72px;line-height:1.5}
+    #margin-prototype .mg-comment textarea{font-size:1em}
+    #margin-prototype .mg-selection-action{position:absolute;z-index:10;background:var(--mg-ink);color:var(--mg-inverse);box-shadow:0 4px 18px var(--mg-shadow);border-radius:8px;max-width:calc(100% - 20px);padding:8px 11px}
+    #margin-prototype .mg-selection-action:hover{background:var(--mg-ink)}
+    #margin-prototype .mg-composer{border:1px solid var(--mg-line);border-radius:17px;padding:12px;margin-top:25px;background:var(--mg-bg);box-shadow:0 3px 14px var(--mg-shadow)}
+    #margin-prototype .mg-composer textarea{border:0;padding:5px 2px;background:transparent;min-height:50px}
+    #margin-prototype .mg-composer-foot{display:flex;justify-content:space-between;align-items:center;gap:9px;flex-wrap:wrap;margin-top:7px}
+    #margin-prototype .mg-batch-chip{display:inline-flex;align-items:center;gap:6px;border-radius:6px;background:var(--mg-soft);padding:5px 8px;color:var(--mg-muted);font-size:.85em}
+    #margin-prototype .mg-composer-mode{color:var(--mg-muted);font-size:.85em}
+    #margin-prototype .mg-composer-note{font-size:.8em;text-align:center;color:var(--mg-muted);margin:9px 0 0}
+    #margin-prototype .mg-event{border-top:1px solid var(--mg-line);padding-top:24px;margin-top:24px}
+    #margin-prototype .mg-batch-message{background:var(--mg-soft);border-radius:14px;padding:14px 16px;margin:0 0 22px}
+    #margin-prototype details{font-size:.9em}
+    #margin-prototype summary{cursor:pointer;font-weight:500}
+    #margin-prototype .mg-batch-item{padding:10px 0;border-top:1px solid var(--mg-line);margin-top:10px}
+    #margin-prototype .mg-batch-item blockquote{border-left:2px solid var(--mg-mark-active);padding-left:10px;margin:0 0 8px;color:var(--mg-muted)}
+    #margin-prototype .mg-question{background:var(--mg-bg);border:1px solid var(--mg-line);border-radius:12px;padding:17px}
+    #margin-prototype .mg-question p{font-weight:500}
+    #margin-prototype .mg-question label{display:flex;align-items:center;gap:9px;margin:5px 0;padding:9px;border-radius:7px;cursor:pointer}
+    #margin-prototype .mg-question label:has(input:checked){background:var(--mg-soft)}
+    #margin-prototype .mg-question input[type=radio]{accent-color:var(--mg-ink);flex:none}
+    #margin-prototype .mg-question input[type=text]{width:100%;border:1px solid var(--mg-line);border-radius:6px;padding:9px;background:var(--mg-bg);margin:8px 0}
+    #margin-prototype .mg-question-footer{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-top:12px}
+    #margin-prototype .mg-notice{margin:12px 20px 0;border-radius:7px;padding:9px 12px;background:var(--mg-soft);font-size:.85em;color:var(--mg-muted)}
+    #margin-prototype .mg-reply-list{padding-left:21px;line-height:1.6}
+    #margin-prototype .mg-reply-list li{margin-bottom:7px}
+    #margin-prototype svg{width:16px;height:16px;flex:none}
+    #margin-prototype .mg-live{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%)}
+    @media(max-width:850px){#margin-prototype .mg-workspace{grid-template-columns:minmax(0,1fr)}#margin-prototype .mg-sidebar{display:none}}
+    @media(max-width:660px){#margin-prototype .mg-review,#margin-prototype.mg-comments-open .mg-review{grid-template-columns:minmax(0,1fr);padding:6px 17px 20px}#margin-prototype .mg-rail{border-left:0;border-top:1px solid var(--mg-line);padding:15px 0 0;grid-row:1}#margin-prototype .mg-comment{margin-top:12px!important}#margin-prototype .mg-top{padding:12px}#margin-prototype .mg-toolbar{padding:13px 15px}#margin-prototype .mg-top-meta{gap:6px}#margin-prototype .mg-prototype-label{font-size:.75em}#margin-prototype textarea,#margin-prototype input[type=text]{font-size:16px}}
+    @media(pointer:coarse){#margin-prototype button,#margin-prototype select{min-height:44px}#margin-prototype .mg-paragraph{padding-right:42px}#margin-prototype .mg-paragraph-action{min-width:40px}}
+    @media(prefers-reduced-motion:reduce){#margin-prototype *{scroll-behavior:auto!important}}
+  &lt;/style&gt;
+  &lt;header class=&quot;mg-top&quot;&gt;
+    &lt;div class=&quot;mg-brand&quot;&gt;&lt;i data-lucide=&quot;panel-right&quot; aria-hidden=&quot;true&quot;&gt;&lt;/i&gt; margin &lt;span class=&quot;mg-prototype-label&quot;&gt;Prototype · simulated agents&lt;/span&gt;&lt;/div&gt;
+    &lt;div class=&quot;mg-top-meta&quot;&gt;&lt;label for=&quot;mg-provider&quot; class=&quot;mg-small mg-muted&quot;&gt;Agent&lt;/label&gt;&lt;select id=&quot;mg-provider&quot; class=&quot;mg-provider&quot; aria-label=&quot;Agent for this demo conversation&quot;&gt;&lt;option&gt;Codex&lt;/option&gt;&lt;option&gt;Claude Code&lt;/option&gt;&lt;/select&gt;&lt;/div&gt;
+  &lt;/header&gt;
+  &lt;div class=&quot;mg-workspace&quot;&gt;
+    &lt;nav class=&quot;mg-sidebar&quot; aria-label=&quot;Workspace&quot;&gt;&lt;p class=&quot;mg-sidebar-label&quot;&gt;Workspace&lt;/p&gt;&lt;div class=&quot;mg-project&quot;&gt;&lt;i data-lucide=&quot;folder&quot; aria-hidden=&quot;true&quot;&gt;&lt;/i&gt; playground&lt;/div&gt;&lt;div class=&quot;mg-conversation mg-small&quot;&gt;Meeting notes app&lt;/div&gt;&lt;/nav&gt;
+    &lt;main class=&quot;mg-main&quot;&gt;
+      &lt;div class=&quot;mg-toolbar&quot;&gt;&lt;span class=&quot;mg-toolbar-title&quot;&gt;Meeting notes app&lt;/span&gt;&lt;button id=&quot;mg-toggle&quot; type=&quot;button&quot; aria-expanded=&quot;false&quot; aria-controls=&quot;mg-rail&quot;&gt;&lt;i data-lucide=&quot;message-square&quot; aria-hidden=&quot;true&quot;&gt;&lt;/i&gt;&lt;span id=&quot;mg-toggle-label&quot;&gt;Comments&lt;/span&gt;&lt;/button&gt;&lt;/div&gt;
+      &lt;div id=&quot;mg-notice&quot; class=&quot;mg-notice&quot; role=&quot;status&quot; hidden&gt;&lt;/div&gt;
+      &lt;div class=&quot;mg-review&quot;&gt;
+        &lt;div class=&quot;mg-thread&quot;&gt;
+          &lt;div class=&quot;mg-user&quot;&gt;Help me plan a small meeting-notes app. Start with a proposal before writing any code.&lt;/div&gt;
+          &lt;article aria-label=&quot;Proposed plan, version 1&quot;&gt;
+            &lt;div class=&quot;mg-agent&quot;&gt;&lt;span class=&quot;mg-agent-icon&quot;&gt;&lt;i data-lucide=&quot;terminal&quot; aria-hidden=&quot;true&quot;&gt;&lt;/i&gt;&lt;/span&gt;&lt;span class=&quot;mg-agent-name&quot;&gt;Codex&lt;/span&gt;&lt;span class=&quot;mg-small mg-muted&quot;&gt;· Plan&lt;/span&gt;&lt;/div&gt;
+            &lt;h2&gt;A focused meeting-notes app&lt;/h2&gt;
+            &lt;p class=&quot;mg-plan-intro&quot;&gt;Here’s the proposed approach, from the first usable flow through rollout.&lt;/p&gt;
+            &lt;div id=&quot;mg-plan&quot; class=&quot;mg-rich-message&quot;&gt;&lt;/div&gt;
+            &lt;div class=&quot;mg-plan-footer&quot;&gt;&lt;i data-lucide=&quot;check&quot; aria-hidden=&quot;true&quot;&gt;&lt;/i&gt;Plan ready for review · no files changed&lt;/div&gt;
+          &lt;/article&gt;
+          &lt;div id=&quot;mg-events&quot;&gt;&lt;/div&gt;
+          &lt;form id=&quot;mg-composer&quot; class=&quot;mg-composer&quot;&gt;
+            &lt;span id=&quot;mg-batch-chip&quot; class=&quot;mg-batch-chip&quot; hidden&gt;&lt;/span&gt;
+            &lt;textarea id=&quot;mg-message&quot; rows=&quot;2&quot; aria-label=&quot;Message or note for your feedback batch&quot; placeholder=&quot;Message Codex, or select text above to comment…&quot;&gt;&lt;/textarea&gt;
+            &lt;div class=&quot;mg-composer-foot&quot;&gt;&lt;span class=&quot;mg-composer-mode&quot;&gt;Plan only&lt;/span&gt;&lt;button type=&quot;submit&quot; class=&quot;mg-primary&quot; id=&quot;mg-send&quot; disabled&gt;&lt;span id=&quot;mg-send-label&quot;&gt;Send&lt;/span&gt;&lt;i data-lucide=&quot;arrow-up&quot; aria-hidden=&quot;true&quot;&gt;&lt;/i&gt;&lt;/button&gt;&lt;/div&gt;
+          &lt;/form&gt;
+          &lt;p class=&quot;mg-composer-note&quot;&gt;Prototype only. Messages stay in this preview; no agent is connected.&lt;/p&gt;
+        &lt;/div&gt;
+        &lt;aside class=&quot;mg-rail&quot; id=&quot;mg-rail&quot; aria-label=&quot;Plan comments&quot; hidden&gt;
+          &lt;div class=&quot;mg-rail-head&quot;&gt;&lt;span&gt;Comments &lt;span id=&quot;mg-rail-count&quot; class=&quot;mg-muted&quot;&gt;&lt;/span&gt;&lt;/span&gt;&lt;button id=&quot;mg-close&quot; aria-label=&quot;Close comments&quot; type=&quot;button&quot;&gt;&lt;i data-lucide=&quot;x&quot; aria-hidden=&quot;true&quot;&gt;&lt;/i&gt;&lt;/button&gt;&lt;/div&gt;
+          &lt;p class=&quot;mg-rail-hint&quot;&gt;Collect your feedback here. Send it together when you’re ready.&lt;/p&gt;
+          &lt;div id=&quot;mg-comment-list&quot; class=&quot;mg-comment-list&quot;&gt;&lt;/div&gt;
+        &lt;/aside&gt;
+      &lt;/div&gt;
+    &lt;/main&gt;
+  &lt;/div&gt;
+  &lt;button id=&quot;mg-selection&quot; type=&quot;button&quot; class=&quot;mg-selection-action&quot; hidden&gt;&lt;i data-lucide=&quot;message-square-plus&quot; aria-hidden=&quot;true&quot;&gt;&lt;/i&gt;Comment&lt;/button&gt;
+  &lt;div class=&quot;mg-live&quot; id=&quot;mg-live&quot; aria-live=&quot;polite&quot;&gt;&lt;/div&gt;
+  &lt;script&gt;
+  (() =&gt; {
+    const root = document.getElementById(&#x27;margin-prototype&#x27;);
+    const $ = s =&gt; root.querySelector(s);
+    const blocks = [
+      {id:&#x27;p1&#x27;,heading:&#x27;1. Start with the core loop&#x27;,runs:[{text:&#x27;Create a note, capture the discussion, and turn decisions into &#x27;},{text:&#x27;a short list of action items&#x27;,kind:&#x27;strong&#x27;},{text:&#x27;. Keep the first version focused on that loop before expanding into team collaboration.&#x27;}]},
+      {id:&#x27;p2&#x27;,runs:[{text:&#x27;Here is the proposed scope. The &#x27;},{text:&#x27;first version&#x27;,kind:&#x27;strong&#x27;},{text:&#x27; should be useful enough to test with your own meetings.&#x27;}]},
+      {id:&#x27;t00&#x27;,table:&#x27;scope&#x27;,row:0,col:0,text:&#x27;Feature&#x27;},
+      {id:&#x27;t01&#x27;,table:&#x27;scope&#x27;,row:0,col:1,text:&#x27;First version&#x27;},
+      {id:&#x27;t02&#x27;,table:&#x27;scope&#x27;,row:0,col:2,text:&#x27;Later&#x27;},
+      {id:&#x27;t10&#x27;,table:&#x27;scope&#x27;,row:1,col:0,runs:[{text:&#x27;Notes&#x27;,kind:&#x27;strong&#x27;}]},
+      {id:&#x27;t11&#x27;,table:&#x27;scope&#x27;,row:1,col:1,text:&#x27;Rich-text editor and search&#x27;},
+      {id:&#x27;t12&#x27;,table:&#x27;scope&#x27;,row:1,col:2,text:&#x27;Templates and attachments&#x27;},
+      {id:&#x27;t20&#x27;,table:&#x27;scope&#x27;,row:2,col:0,runs:[{text:&#x27;Accounts&#x27;,kind:&#x27;strong&#x27;}]},
+      {id:&#x27;t21&#x27;,table:&#x27;scope&#x27;,row:2,col:1,text:&#x27;Email and password sign-in&#x27;},
+      {id:&#x27;t22&#x27;,table:&#x27;scope&#x27;,row:2,col:2,text:&#x27;Shared workspaces and roles&#x27;},
+      {id:&#x27;t30&#x27;,table:&#x27;scope&#x27;,row:3,col:0,runs:[{text:&#x27;Storage&#x27;,kind:&#x27;strong&#x27;}]},
+      {id:&#x27;t31&#x27;,table:&#x27;scope&#x27;,row:3,col:1,text:&#x27;Hosted database with offline cache&#x27;},
+      {id:&#x27;t32&#x27;,table:&#x27;scope&#x27;,row:3,col:2,text:&#x27;Version history and live sync&#x27;},
+      {id:&#x27;p3&#x27;,heading:&#x27;2. Choose a storage approach&#x27;,runs:[{text:&#x27;Use a hosted database for the first release, with a local cache for offline reading. If we decide to keep the prototype entirely local, &#x27;},{text:&#x27;SQLite&#x27;,kind:&#x27;link&#x27;,href:&#x27;https://www.sqlite.org/docs.html&#x27;},{text:&#x27; is another option. Store notes in &#x27;},{text:&#x27;notes.db&#x27;,kind:&#x27;code&#x27;},{text:&#x27; inside the application data directory.&#x27;}]},
+      {id:&#x27;p4&#x27;,heading:&#x27;3. Build and verify the first flow&#x27;,runs:[{text:&#x27;Begin with the meeting list and note editor, then add sign-in and search. &#x27;},{text:&#x27;Verify creating, editing, and reopening a note&#x27;,kind:&#x27;strong&#x27;},{text:&#x27; before introducing synchronization. Keep the writing area generous and move secondary details out of the way.&#x27;}]},
+      {id:&#x27;p5&#x27;,runs:[{text:&#x27;Ship a private beta with a short onboarding flow. Capture feedback from actual use before committing to shared workspaces. I will wait for your review before changing any project files.&#x27;}]}
+    ];
+    blocks.forEach(b=&gt;{b.runs=b.runs||[{text:b.text}];b.text=b.runs.map(r=&gt;r.text).join(&#x27;&#x27;);b.messageLabel=&#x27;Original plan&#x27;;b.messageId=&#x27;plan-1&#x27;;});
+    const states = new Map();
+    let provider = &#x27;Codex&#x27;;
+    function fresh(){return {comments:[],batches:[],messages:[],extraBlocks:[],editing:null,active:null,rail:false,question:null,seq:0,note:&#x27;&#x27;};}
+    states.set(provider,fresh());
+    let state=states.get(provider),pending=null;
+    const make=(tag,cls,text)=&gt;{const el=document.createElement(tag);if(cls)el.className=cls;if(text!==undefined)el.textContent=text;return el;};
+    const announce=text=&gt;{$(&#x27;#mg-live&#x27;).textContent=text;};
+    const icons=()=&gt;{if(typeof lucide!==&#x27;undefined&#x27;)lucide.createIcons({attrs:{width:16,height:16}});};
+    function notice(text){$(&#x27;#mg-notice&#x27;).textContent=text;$(&#x27;#mg-notice&#x27;).hidden=!text;}
+    function setRail(open){state.rail=open;root.classList.toggle(&#x27;mg-comments-open&#x27;,open);$(&#x27;#mg-rail&#x27;).hidden=!open;$(&#x27;#mg-toggle&#x27;).setAttribute(&#x27;aria-expanded&#x27;,String(open));requestAnimationFrame(alignComments);}
+    function allBlocks(){return [...blocks,...state.extraBlocks];}
+    function getBlock(id){return allBlocks().find(b=&gt;b.id===id);}
+    function quoteFor(segments){return segments.map(s=&gt;getBlock(s.pid).text.slice(s.start,s.end)).join(&#x27;\n\n&#x27;);}
+    function focusAnchor(segments,id){state.active=id;renderPlan();renderEvents();renderComments();const el=$(&#x27;[data-pid=&quot;&#x27;+segments[0].pid+&#x27;&quot;]&#x27;);el.scrollIntoView({behavior:matchMedia(&#x27;(prefers-reduced-motion: reduce)&#x27;).matches?&#x27;auto&#x27;:&#x27;smooth&#x27;,block:&#x27;center&#x27;});}
+    function renderRichText(target,b){
+      target.dataset.pid=b.id;
+      const spans=[];
+      for(const c of state.comments){if(c.resolved)continue;for(const seg of c.segments)if(seg.pid===b.id)spans.push({...seg,cid:c.id});}
+      if(state.editing&amp;&amp;!state.editing.id)for(const seg of state.editing.segments)if(seg.pid===b.id)spans.push({...seg,cid:&#x27;editing&#x27;});
+      let at=0;const runs=b.runs.map(r=&gt;{const x={...r,start:at,end:at+r.text.length};at=x.end;return x;});
+      const edges=[...new Set([0,b.text.length,...spans.flatMap(s=&gt;[s.start,s.end]),...runs.flatMap(r=&gt;[r.start,r.end])])].sort((a,b)=&gt;a-b);
+      for(let i=0;i&lt;edges.length-1;i++){
+        const start=edges[i],end=edges[i+1],hits=spans.filter(s=&gt;s.start&lt;end&amp;&amp;s.end&gt;start),run=runs.find(r=&gt;r.start&lt;=start&amp;&amp;r.end&gt;=end),txt=b.text.slice(start,end);
+        let node=document.createTextNode(txt);
+        if(hits.length){const m=make(&#x27;mark&#x27;,hits.some(s=&gt;s.cid===state.active||s.cid===&#x27;editing&#x27;)?&#x27;mg-highlight-active&#x27;:&#x27;&#x27;,txt);m.addEventListener(&#x27;click&#x27;,e=&gt;{if(!window.getSelection()?.isCollapsed)return;const c=state.comments.find(c=&gt;c.id===hits[0].cid);if(!c)return;e.preventDefault();setRail(true);state.active=c.id;renderComments();renderPlan();renderEvents();});node=m;}
+        if(run?.kind){const tag=run.kind===&#x27;link&#x27;?&#x27;a&#x27;:run.kind===&#x27;code&#x27;?&#x27;code&#x27;:&#x27;strong&#x27;;const wrapper=make(tag);if(tag===&#x27;a&#x27;){wrapper.href=run.href;wrapper.target=&#x27;_blank&#x27;;wrapper.rel=&#x27;noopener noreferrer&#x27;;wrapper.addEventListener(&#x27;click&#x27;,e=&gt;{if(!window.getSelection()?.isCollapsed)e.preventDefault();});}wrapper.append(node);node=wrapper;}
+        target.append(node);
+      }
+    }
+    function paragraphNode(b){
+      const row=make(&#x27;div&#x27;,&#x27;mg-paragraph&#x27;),p=make(&#x27;p&#x27;);renderRichText(p,b);
+      const action=make(&#x27;button&#x27;,&#x27;mg-paragraph-action&#x27;);action.type=&#x27;button&#x27;;action.setAttribute(&#x27;aria-label&#x27;,&#x27;Comment on paragraph: &#x27;+b.text.slice(0,65));action.innerHTML=&#x27;&lt;i data-lucide=&quot;message-square-plus&quot; aria-hidden=&quot;true&quot;&gt;&lt;/i&gt;&#x27;;
+      action.addEventListener(&#x27;click&#x27;,()=&gt;startComment([{pid:b.id,start:0,end:b.text.length}]));row.append(p,action);return row;
+    }
+    function renderPlan(){
+      const plan=$(&#x27;#mg-plan&#x27;);plan.replaceChildren();
+      const renderedTables=new Set();
+      for(const b of blocks){
+        if(b.heading)plan.append(make(&#x27;h3&#x27;,&#x27;&#x27;,b.heading));
+        if(!b.table){plan.append(paragraphNode(b));continue;}
+        if(renderedTables.has(b.table))continue;renderedTables.add(b.table);
+        const table=make(&#x27;table&#x27;,&#x27;mg-plan-table&#x27;);table.setAttribute(&#x27;aria-label&#x27;,&#x27;Proposed feature scope&#x27;);const head=make(&#x27;thead&#x27;),body=make(&#x27;tbody&#x27;);
+        const cells=blocks.filter(x=&gt;x.table===b.table);const rows=[...new Set(cells.map(c=&gt;c.row))];
+        for(const rowNum of rows){const row=make(&#x27;tr&#x27;);const rowCells=cells.filter(c=&gt;c.row===rowNum);for(const c of rowCells){const cell=make(rowNum===0?&#x27;th&#x27;:&#x27;td&#x27;);if(!rowNum)cell.scope=&#x27;col&#x27;;const span=make(&#x27;span&#x27;);renderRichText(span,c);cell.append(span);row.append(cell);}
+          const actionCell=make(rowNum===0?&#x27;th&#x27;:&#x27;td&#x27;);if(rowNum===0){actionCell.scope=&#x27;col&#x27;;actionCell.setAttribute(&#x27;aria-label&#x27;,&#x27;Comments&#x27;);}else{const action=make(&#x27;button&#x27;);action.type=&#x27;button&#x27;;action.setAttribute(&#x27;aria-label&#x27;,&#x27;Comment on &#x27;+rowCells[0].text+&#x27; row&#x27;);action.innerHTML=&#x27;&lt;i data-lucide=&quot;message-square-plus&quot; aria-hidden=&quot;true&quot;&gt;&lt;/i&gt;&#x27;;action.addEventListener(&#x27;click&#x27;,()=&gt;startComment(rowCells.map(c=&gt;({pid:c.id,start:0,end:c.text.length}))));actionCell.append(action);}row.append(actionCell);(rowNum===0?head:body).append(row);}
+        table.append(head,body);plan.append(table);
+      }
+      icons();requestAnimationFrame(alignComments);
+    }
+    function startComment(segments){
+      if(state.editing){notice(&#x27;Finish or cancel your current comment before adding another.&#x27;);$(&#x27;#mg-comment-text&#x27;)?.focus();return;}
+      pending=null;$(&#x27;#mg-selection&#x27;).hidden=true;window.getSelection()?.removeAllRanges();
+      state.editing={id:null,segments,text:&#x27;&#x27;};state.active=&#x27;editing&#x27;;setRail(true);notice(&#x27;&#x27;);renderPlan();renderEvents();renderComments();updateComposer();
+      requestAnimationFrame(()=&gt;$(&#x27;#mg-comment-text&#x27;)?.focus());
+    }
+    function renderComments(){
+      const list=$(&#x27;#mg-comment-list&#x27;);list.replaceChildren();
+      const comments=state.comments.map(c=&gt;({...c}));
+      if(state.editing&amp;&amp;!state.editing.id)comments.push({id:&#x27;editing&#x27;,segments:state.editing.segments,text:state.editing.text});
+      comments.sort((a,b)=&gt;{const ai=allBlocks().findIndex(p=&gt;p.id===a.segments[0].pid),bi=allBlocks().findIndex(p=&gt;p.id===b.segments[0].pid);return ai-bi||a.segments[0].start-b.segments[0].start;});
+      $(&#x27;#mg-rail-count&#x27;).textContent=state.comments.length?&#x27;(&#x27;+state.comments.length+&#x27;)&#x27;:&#x27;&#x27;;
+      $(&#x27;#mg-toggle-label&#x27;).textContent=state.comments.length?&#x27;Comments &#x27;+state.comments.length:&#x27;Comments&#x27;;
+      if(!comments.length){list.append(make(&#x27;div&#x27;,&#x27;mg-empty mg-small&#x27;,&#x27;Select any passage in the plan, then click Comment. You can also use the comment button beside a paragraph.&#x27;));return;}
+      for(const c of comments){
+        const editing=c.id===&#x27;editing&#x27;||state.editing?.id===c.id;
+        const card=make(&#x27;div&#x27;,&#x27;mg-comment&#x27;+(state.active===c.id?&#x27; mg-active&#x27;:&#x27;&#x27;));card.dataset.cid=c.id;card.dataset.anchor=c.segments[0].pid;
+        const top=make(&#x27;div&#x27;,&#x27;mg-comment-top&#x27;),author=make(&#x27;span&#x27;,&#x27;mg-author&#x27;);author.append(make(&#x27;span&#x27;,&#x27;mg-avatar&#x27;,&#x27;Y&#x27;),make(&#x27;span&#x27;,&#x27;&#x27;,&#x27;You&#x27;));
+        top.append(author,make(&#x27;span&#x27;,&#x27;mg-status&#x27;,c.resolved?&#x27;Resolved&#x27;:c.batchId?&#x27;Sent&#x27;:&#x27;Draft&#x27;));card.append(top,make(&#x27;p&#x27;,&#x27;mg-small mg-muted&#x27;,getBlock(c.segments[0].pid).messageLabel));
+        const quote=make(&#x27;button&#x27;,&#x27;mg-quote&#x27;,quoteFor(c.segments).length&gt;135?quoteFor(c.segments).slice(0,132)+&#x27;…&#x27;:quoteFor(c.segments));quote.type=&#x27;button&#x27;;quote.setAttribute(&#x27;aria-label&#x27;,&#x27;Jump to quoted passage&#x27;);quote.addEventListener(&#x27;click&#x27;,()=&gt;focusAnchor(c.segments,c.id));card.append(quote);
+        if(editing){
+          const area=make(&#x27;textarea&#x27;);area.id=&#x27;mg-comment-text&#x27;;area.rows=3;area.placeholder=&#x27;What would you change?&#x27;;area.setAttribute(&#x27;aria-label&#x27;,&#x27;Comment on selected passage&#x27;);area.value=state.editing.text;
+          const actions=make(&#x27;div&#x27;,&#x27;mg-comment-actions&#x27;),cancel=make(&#x27;button&#x27;,&#x27;&#x27;,&#x27;Cancel&#x27;),save=make(&#x27;button&#x27;,&#x27;mg-primary&#x27;,state.editing.id?&#x27;Save&#x27;:&#x27;Add comment&#x27;);cancel.type=save.type=&#x27;button&#x27;;save.disabled=!area.value.trim();
+          area.addEventListener(&#x27;input&#x27;,()=&gt;{state.editing.text=area.value;save.disabled=!area.value.trim();});
+          const saveEdit=()=&gt;{if(!state.editing.text.trim())return;const old=state.comments.find(x=&gt;x.id===state.editing.id);if(old)old.text=state.editing.text.trim();else{const id=&#x27;c&#x27;+(++state.seq);state.comments.push({id,segments:state.editing.segments,text:state.editing.text.trim(),resolved:false,batchId:null});state.active=id;}state.editing=null;notice(&#x27;&#x27;);renderPlan();renderEvents();renderComments();updateComposer();announce(&#x27;Comment saved to your draft batch.&#x27;);};
+          area.addEventListener(&#x27;keydown&#x27;,e=&gt;{if((e.metaKey||e.ctrlKey)&amp;&amp;e.key===&#x27;Enter&#x27;){e.preventDefault();saveEdit();}if(e.key===&#x27;Escape&#x27;){e.preventDefault();state.editing=null;renderPlan();renderEvents();renderComments();updateComposer();}});
+          save.addEventListener(&#x27;click&#x27;,saveEdit);cancel.addEventListener(&#x27;click&#x27;,()=&gt;{state.editing=null;renderPlan();renderEvents();renderComments();updateComposer();});actions.append(cancel,save);card.append(area,actions);
+        }else{
+          card.append(make(&#x27;p&#x27;,&#x27;mg-comment-body&#x27;,c.text));const actions=make(&#x27;div&#x27;,&#x27;mg-comment-actions&#x27;);
+          if(!c.batchId){
+            const edit=make(&#x27;button&#x27;,&#x27;&#x27;,&#x27;Edit&#x27;),remove=make(&#x27;button&#x27;,&#x27;&#x27;,&#x27;Delete&#x27;);edit.type=remove.type=&#x27;button&#x27;;
+            edit.addEventListener(&#x27;click&#x27;,()=&gt;{if(state.editing){notice(&#x27;Finish or cancel your current comment first.&#x27;);return;}state.editing={id:c.id,segments:c.segments,text:c.text};state.active=c.id;renderComments();updateComposer();$(&#x27;#mg-comment-text&#x27;)?.focus();});
+            remove.addEventListener(&#x27;click&#x27;,()=&gt;{state.comments=state.comments.filter(x=&gt;x.id!==c.id);renderPlan();renderEvents();renderComments();updateComposer();});actions.append(edit,remove);
+          }else{
+            const resolve=make(&#x27;button&#x27;,&#x27;&#x27;,c.resolved?&#x27;Reopen&#x27;:&#x27;Resolve&#x27;);resolve.type=&#x27;button&#x27;;resolve.addEventListener(&#x27;click&#x27;,()=&gt;{const original=state.comments.find(x=&gt;x.id===c.id);original.resolved=!original.resolved;renderPlan();renderEvents();renderComments();announce(original.resolved?&#x27;Comment resolved.&#x27;:&#x27;Comment reopened.&#x27;);});actions.append(resolve);
+          }
+          card.append(actions);
+        }
+        list.append(card);
+      }
+      requestAnimationFrame(alignComments);
+    }
+    function alignComments(){
+      if(!state.rail)return;
+      const list=$(&#x27;#mg-comment-list&#x27;),cards=[...list.children].filter(c=&gt;c.classList.contains(&#x27;mg-comment&#x27;));
+      for(const card of cards)card.style.marginTop=&#x27;12px&#x27;;
+      if(root.getBoundingClientRect().width&lt;660)return;
+      let used=0;const origin=list.getBoundingClientRect().top;
+      for(const card of cards){const p=$(&#x27;[data-pid=&quot;&#x27;+card.dataset.anchor+&#x27;&quot;]&#x27;);if(!p)continue;const desired=p.getBoundingClientRect().top-origin;const gap=Math.max(12,desired-used);card.style.marginTop=gap+&#x27;px&#x27;;used+=gap+card.getBoundingClientRect().height;}
+    }
+    function updateComposer(){
+      const drafts=state.comments.filter(c=&gt;!c.batchId),n=drafts.length;
+      $(&#x27;#mg-batch-chip&#x27;).hidden=!n;$(&#x27;#mg-batch-chip&#x27;).textContent=n+&#x27; draft comment&#x27;+(n===1?&#x27;&#x27;:&#x27;s&#x27;)+&#x27; attached&#x27;;
+      $(&#x27;#mg-send-label&#x27;).textContent=n?&#x27;Send &#x27;+n+&#x27; comment&#x27;+(n===1?&#x27;&#x27;:&#x27;s&#x27;):&#x27;Send&#x27;;
+      $(&#x27;#mg-send&#x27;).disabled=!!state.editing||!!state.question||(!n&amp;&amp;!$(&#x27;#mg-message&#x27;).value.trim());
+      $(&#x27;#mg-message&#x27;).placeholder=n?&#x27;Add an overall note (optional)…&#x27;:&#x27;Message &#x27;+provider+&#x27;, or select text above to comment…&#x27;;
+      $(&#x27;#mg-message&#x27;).disabled=!!state.question;
+      if(state.question)$(&#x27;#mg-message&#x27;).placeholder=&#x27;Answer the question above to continue…&#x27;;
+    }
+    function captureSelection(){
+      const sel=window.getSelection();if(!sel||sel.isCollapsed||!sel.rangeCount){$(&#x27;#mg-selection&#x27;).hidden=true;return;}
+      const range=sel.getRangeAt(0);const startEl=range.startContainer.nodeType===1?range.startContainer:range.startContainer.parentElement;const endEl=range.endContainer.nodeType===1?range.endContainer:range.endContainer.parentElement;const plan=startEl.closest(&#x27;.mg-rich-message&#x27;);if(!plan||endEl.closest(&#x27;.mg-rich-message&#x27;)!==plan){$(&#x27;#mg-selection&#x27;).hidden=true;return;}
+      const segments=[];
+      for(const p of plan.querySelectorAll(&#x27;[data-pid]&#x27;)){
+        if(!range.intersectsNode(p))continue;let start=0,end=p.textContent.length;
+        if(p.contains(range.startContainer)){const pre=range.cloneRange();pre.selectNodeContents(p);pre.setEnd(range.startContainer,range.startOffset);start=pre.toString().length;}
+        if(p.contains(range.endContainer)){const pre=range.cloneRange();pre.selectNodeContents(p);pre.setEnd(range.endContainer,range.endOffset);end=pre.toString().length;}
+        if(end&gt;start)segments.push({pid:p.dataset.pid,start,end});
+      }
+      if(!segments.length||!quoteFor(segments).trim()){$(&#x27;#mg-selection&#x27;).hidden=true;return;}
+      pending=segments;const rect=range.getBoundingClientRect(),base=root.getBoundingClientRect(),button=$(&#x27;#mg-selection&#x27;);button.hidden=false;
+      button.style.left=Math.max(10,Math.min(rect.left-base.left,base.width-130))+&#x27;px&#x27;;button.style.top=Math.max(10,rect.top-base.top-41)+&#x27;px&#x27;;
+    }
+    root.addEventListener(&#x27;mouseup&#x27;,e=&gt;{if(e.target.closest(&#x27;.mg-rich-message&#x27;))setTimeout(captureSelection,0);});
+    root.addEventListener(&#x27;touchend&#x27;,e=&gt;{if(e.target.closest(&#x27;.mg-rich-message&#x27;))setTimeout(captureSelection,100);});
+    root.addEventListener(&#x27;keyup&#x27;,e=&gt;{if(e.key===&#x27;Shift&#x27;||e.key.startsWith(&#x27;Arrow&#x27;))captureSelection();});
+    root.addEventListener(&#x27;keydown&#x27;,e=&gt;{if((e.metaKey||e.ctrlKey)&amp;&amp;e.altKey&amp;&amp;e.key.toLowerCase()===&#x27;m&#x27;){captureSelection();if(pending){e.preventDefault();startComment(pending);}}if(e.key===&#x27;Escape&#x27;)$(&#x27;#mg-selection&#x27;).hidden=true;});
+    $(&#x27;#mg-selection&#x27;).addEventListener(&#x27;mousedown&#x27;,e=&gt;e.preventDefault());
+    $(&#x27;#mg-selection&#x27;).addEventListener(&#x27;click&#x27;,()=&gt;{if(pending)startComment(pending);});
+    $(&#x27;#mg-toggle&#x27;).addEventListener(&#x27;click&#x27;,()=&gt;{setRail(!state.rail);renderComments();});
+    $(&#x27;#mg-close&#x27;).addEventListener(&#x27;click&#x27;,()=&gt;setRail(false));
+    $(&#x27;#mg-message&#x27;).addEventListener(&#x27;input&#x27;,()=&gt;{state.note=$(&#x27;#mg-message&#x27;).value;updateComposer();});
+    function batchNode(batch){
+      const wrapper=make(&#x27;div&#x27;,&#x27;mg-batch-message&#x27;),details=document.createElement(&#x27;details&#x27;);details.append(make(&#x27;summary&#x27;,&#x27;&#x27;,batch.comments.length+&#x27; comments sent together&#x27;));
+      if(batch.note)details.append(make(&#x27;p&#x27;,&#x27;&#x27;,batch.note));
+      batch.comments.forEach((c,i)=&gt;{const item=make(&#x27;div&#x27;,&#x27;mg-batch-item&#x27;),first=getBlock(c.segments[0].pid);item.append(make(&#x27;span&#x27;,&#x27;mg-small mg-muted&#x27;,first.messageLabel),make(&#x27;blockquote&#x27;,&#x27;&#x27;,quoteFor(c.segments)),make(&#x27;p&#x27;,&#x27;&#x27;,(i+1)+&#x27;. &#x27;+c.text));if(first.table){const header=blocks.find(b=&gt;b.table===first.table&amp;&amp;b.row===0&amp;&amp;b.col===first.col),row=blocks.find(b=&gt;b.table===first.table&amp;&amp;b.row===first.row&amp;&amp;b.col===0);item.append(make(&#x27;p&#x27;,&#x27;mg-small mg-muted&#x27;,&#x27;Table context: &#x27;+row.text+&#x27; / &#x27;+header.text));}const links=c.segments.flatMap(s=&gt;getBlock(s.pid).runs.filter(r=&gt;r.kind===&#x27;link&#x27;).map(r=&gt;r.href));if(links.length)item.append(make(&#x27;p&#x27;,&#x27;mg-small mg-muted&#x27;,&#x27;Link context: &#x27;+[...new Set(links)].join(&#x27;, &#x27;)));details.append(item);});wrapper.append(details);return wrapper;
+    }
+    function agentLabel(label){const name=make(&#x27;div&#x27;,&#x27;mg-agent&#x27;);name.append(make(&#x27;span&#x27;,&#x27;&#x27;,provider),make(&#x27;span&#x27;,&#x27;mg-small mg-muted&#x27;,&#x27;· &#x27;+label));return name;}
+    function renderEvents(){
+      const events=$(&#x27;#mg-events&#x27;);events.replaceChildren();
+      for(const entry of state.messages){
+        const section=make(&#x27;section&#x27;,&#x27;mg-event&#x27;);
+        if(entry.type===&#x27;message&#x27;){
+          section.append(make(&#x27;div&#x27;,&#x27;mg-user&#x27;,entry.text),agentLabel(&#x27;Sample response&#x27;),make(&#x27;p&#x27;,&#x27;&#x27;,&#x27;This preview demonstrates the plan-review flow. Select a passage above, add a comment, and send your feedback together.&#x27;));events.append(section);continue;
+        }
+        const batch=state.batches.find(b=&gt;b.id===entry.batchId);section.append(batchNode(batch),agentLabel(&#x27;Example agent question&#x27;));
+        if(batch.answer){
+          section.append(make(&#x27;p&#x27;,&#x27;&#x27;,&#x27;What should I optimize for when revising the plan?&#x27;),make(&#x27;div&#x27;,&#x27;mg-user&#x27;,batch.answer),agentLabel(&#x27;Scripted revision&#x27;));
+          const small=batch.answer===&#x27;Smallest useful prototype&#x27;;
+          section.append(make(&#x27;h3&#x27;,&#x27;&#x27;,small?&#x27;A smaller first version&#x27;:&#x27;A more complete first version&#x27;));
+          const reply=make(&#x27;div&#x27;,&#x27;mg-rich-message&#x27;);
+          if(!state.extraBlocks.some(b=&gt;b.messageId===batch.id)){
+            const texts=small?[&#x27;1. Build the meeting list and plain-text editor first.&#x27;,&#x27;2. Store notes locally; defer accounts, team roles, and synchronization.&#x27;,&#x27;3. Validate creating, editing, and reopening a note before expanding the scope.&#x27;]:[&#x27;1. Keep the note editor, account flow, and synchronized storage in scope.&#x27;,&#x27;2. Define ownership and recovery behavior before adding shared workspaces.&#x27;,&#x27;3. Verify the complete core flow before opening the private beta.&#x27;];
+            texts.forEach((text,i)=&gt;state.extraBlocks.push({id:batch.id+&#x27;-p&#x27;+i,text,runs:[{text}],messageId:batch.id,messageLabel:&#x27;Revision &#x27;+(state.batches.indexOf(batch)+1)}));
+          }
+          state.extraBlocks.filter(b=&gt;b.messageId===batch.id).forEach(b=&gt;reply.append(paragraphNode(b)));
+          section.append(reply,make(&#x27;p&#x27;,&#x27;mg-small mg-muted&#x27;,&#x27;This is a fixed sample revision, not an AI interpretation of your comments. Your exact batch is preserved above.&#x27;));
+        }else{
+          const form=make(&#x27;form&#x27;,&#x27;mg-question&#x27;);form.append(make(&#x27;p&#x27;,&#x27;&#x27;,&#x27;What should I optimize for when revising the plan?&#x27;));
+          [&#x27;Smallest useful prototype&#x27;,&#x27;Production readiness&#x27;].forEach((v,i)=&gt;{const label=make(&#x27;label&#x27;),input=make(&#x27;input&#x27;);input.type=&#x27;radio&#x27;;input.name=&#x27;priority-&#x27;+batch.id;input.value=v;input.checked=batch.choice?batch.choice===v:i===0;input.addEventListener(&#x27;change&#x27;,()=&gt;{batch.choice=v;});label.append(input,make(&#x27;span&#x27;,&#x27;&#x27;,v));form.append(label);});
+          const other=make(&#x27;input&#x27;);other.type=&#x27;text&#x27;;other.placeholder=&#x27;Or describe another priority…&#x27;;other.setAttribute(&#x27;aria-label&#x27;,&#x27;Another priority&#x27;);other.value=batch.custom||&#x27;&#x27;;other.addEventListener(&#x27;input&#x27;,()=&gt;{batch.custom=other.value;});form.append(other);
+          const footer=make(&#x27;div&#x27;,&#x27;mg-question-footer&#x27;);footer.append(make(&#x27;span&#x27;,&#x27;mg-small mg-muted&#x27;,&#x27;Waiting for your answer&#x27;));const submit=make(&#x27;button&#x27;,&#x27;mg-primary&#x27;,&#x27;Answer&#x27;);submit.type=&#x27;submit&#x27;;footer.append(submit);form.append(footer);
+          form.addEventListener(&#x27;submit&#x27;,e=&gt;{e.preventDefault();batch.answer=other.value.trim()||form.querySelector(&#x27;input[type=radio]:checked&#x27;).value;state.question=null;renderEvents();updateComposer();announce(&#x27;Sample revision ready.&#x27;);});section.append(form);
+        }
+        events.append(section);
+      }
+      icons();requestAnimationFrame(alignComments);
+    }
+    $(&#x27;#mg-composer&#x27;).addEventListener(&#x27;submit&#x27;,e=&gt;{
+      e.preventDefault();if($(&#x27;#mg-send&#x27;).disabled)return;
+      const drafts=state.comments.filter(c=&gt;!c.batchId),note=$(&#x27;#mg-message&#x27;).value.trim();
+      if(drafts.length){
+        const id=&#x27;batch&#x27;+(state.batches.length+1);const snapshot=drafts.map(c=&gt;({...c,segments:c.segments.map(s=&gt;({...s}))}));
+        state.batches.push({id,comments:snapshot,note,answer:null,planVersion:1});drafts.forEach(c=&gt;c.batchId=id);state.question=id;state.messages.push({type:&#x27;batch&#x27;,batchId:id});announce(&#x27;All &#x27;+drafts.length+&#x27; comments sent in one sample message.&#x27;);
+      }else state.messages.push({type:&#x27;message&#x27;,text:note});
+      state.note=&#x27;&#x27;;$(&#x27;#mg-message&#x27;).value=&#x27;&#x27;;notice(&#x27;&#x27;);renderComments();renderEvents();updateComposer();
+      requestAnimationFrame(()=&gt;$(&#x27;#mg-events&#x27;).lastElementChild?.scrollIntoView({behavior:matchMedia(&#x27;(prefers-reduced-motion: reduce)&#x27;).matches?&#x27;auto&#x27;:&#x27;smooth&#x27;,block:&#x27;start&#x27;}));
+    });
+    $(&#x27;#mg-provider&#x27;).addEventListener(&#x27;change&#x27;,()=&gt;{
+      state.note=$(&#x27;#mg-message&#x27;).value;provider=$(&#x27;#mg-provider&#x27;).value;if(!states.has(provider))states.set(provider,fresh());state=states.get(provider);pending=null;$(&#x27;#mg-selection&#x27;).hidden=true;
+      root.querySelectorAll(&#x27;.mg-agent-name&#x27;).forEach(el=&gt;el.textContent=provider);$(&#x27;#mg-message&#x27;).value=state.note;notice(&#x27;&#x27;);setRail(state.rail);renderPlan();renderComments();renderEvents();updateComposer();announce(&#x27;Switched to the &#x27;+provider+&#x27; demo conversation.&#x27;);
+    });
+    if(typeof ResizeObserver!==&#x27;undefined&#x27;)new ResizeObserver(()=&gt;requestAnimationFrame(alignComments)).observe(root);
+    renderPlan();renderComments();updateComposer();icons();
+  })();
+  &lt;/script&gt;
+&lt;/div&gt;
+
+&lt;script src=&quot;https://unpkg.com/@floating-ui/core@1.7.3/dist/floating-ui.core.umd.min.js&quot;&gt;&lt;/script&gt;
+&lt;script src=&quot;https://unpkg.com/@floating-ui/dom@1.7.4/dist/floating-ui.dom.umd.min.js&quot;&gt;&lt;/script&gt;
+&lt;script&gt;
+(() =&gt; {
+  if (window.FloatingUIDOM == null) {
+    return;
+  }
+  const { autoUpdate, computePosition, flip, offset, shift, size } =
+    window.FloatingUIDOM;
+  const tooltipPlacements = new Set([&quot;top&quot;, &quot;right&quot;, &quot;bottom&quot;, &quot;left&quot;]);
+  const tooltipId = `codex-visualization-tooltip-${
+    window.crypto?.randomUUID?.() ?? Date.now().toString(36)
+  }`;
+  const tooltipGap = 5;
+  const hoverDelay = 700;
+  const skipDelay = 300;
+  let activeTrigger = null;
+  let pendingTrigger = null;
+  let tooltip = null;
+  let openTimeout = null;
+  let autoUpdateCleanup = null;
+  let positionRequest = 0;
+  let skipDelayUntil = 0;
+  let lastPointerWasTouch = false;
+  let pinnedByTouch = false;
+
+  const getTrigger = (target) =&gt;
+    target?.nodeType === Node.ELEMENT_NODE
+      ? target.closest(&quot;[data-tooltip]&quot;)
+      : null;
+  const containsTarget = (trigger, target) =&gt;
+    target?.nodeType != null &amp;&amp; trigger.contains(target);
+  const getContent = (trigger) =&gt;
+    trigger.getAttribute(&quot;data-tooltip&quot;)?.trim() ?? &quot;&quot;;
+  const getPlacement = (trigger) =&gt; {
+    const placement = trigger.getAttribute(&quot;data-tooltip-placement&quot;);
+    return tooltipPlacements.has(placement) ? placement : &quot;top&quot;;
+  };
+  const getTooltip = () =&gt; {
+    if (tooltip == null) {
+      tooltip = document.createElement(&quot;div&quot;);
+      tooltip.id = tooltipId;
+      tooltip.className = &quot;tooltip&quot;;
+      tooltip.setAttribute(&quot;role&quot;, &quot;tooltip&quot;);
+    }
+    return tooltip;
+  };
+  const setDescribedBy = (trigger, described) =&gt; {
+    const ids = new Set(
+      (trigger.getAttribute(&quot;aria-describedby&quot;) ?? &quot;&quot;)
+        .split(/\s+/)
+        .filter(Boolean),
+    );
+    if (described) {
+      ids.add(tooltipId);
+    } else {
+      ids.delete(tooltipId);
+    }
+    if (ids.size === 0) {
+      trigger.removeAttribute(&quot;aria-describedby&quot;);
+    } else {
+      trigger.setAttribute(&quot;aria-describedby&quot;, [...ids].join(&quot; &quot;));
+    }
+  };
+  const clearOpenTimeout = () =&gt; {
+    if (openTimeout != null) {
+      window.clearTimeout(openTimeout);
+      openTimeout = null;
+    }
+    pendingTrigger = null;
+  };
+  const closeTooltip = (activateSkipDelay = true) =&gt; {
+    clearOpenTimeout();
+    pinnedByTouch = false;
+    positionRequest += 1;
+    autoUpdateCleanup?.();
+    autoUpdateCleanup = null;
+    if (activeTrigger == null) {
+      return;
+    }
+    setDescribedBy(activeTrigger, false);
+    activeTrigger = null;
+    tooltip?.remove();
+    if (activateSkipDelay) {
+      skipDelayUntil = Date.now() + skipDelay;
+    }
+  };
+  const updatePosition = (trigger, floating) =&gt; {
+    const request = ++positionRequest;
+    void computePosition(trigger, floating, {
+      middleware: [
+        offset(tooltipGap),
+        flip({ padding: tooltipGap }),
+        shift({ padding: tooltipGap }),
+        size({
+          padding: tooltipGap,
+          apply({ availableHeight, availableWidth, elements }) {
+            elements.floating.style.setProperty(
+              &quot;--tooltip-available-width&quot;,
+              `${Math.max(0, availableWidth)}px`,
+            );
+            elements.floating.style.setProperty(
+              &quot;--tooltip-available-height&quot;,
+              `${Math.max(0, availableHeight)}px`,
+            );
+          },
+        }),
+      ],
+      placement: getPlacement(trigger),
+      strategy: &quot;fixed&quot;,
+    })
+      .then(({ x, y }) =&gt; {
+        if (activeTrigger !== trigger || request !== positionRequest) {
+          return;
+        }
+        const scale = window.devicePixelRatio || 1;
+        floating.style.transform = `translate(${Math.round(x * scale) / scale}px, ${Math.round(y * scale) / scale}px)`;
+        floating.style.visibility = &quot;visible&quot;;
+      })
+      .catch(() =&gt; {
+        if (activeTrigger === trigger &amp;&amp; request === positionRequest) {
+          closeTooltip(false);
+        }
+      });
+  };
+  const openTooltip = (trigger) =&gt; {
+    const content = getContent(trigger);
+    if (!trigger.isConnected || content.length === 0) {
+      return;
+    }
+    clearOpenTimeout();
+    if (activeTrigger === trigger) {
+      return;
+    }
+    closeTooltip();
+    const floating = getTooltip();
+    floating.textContent = content;
+    floating.style.visibility = &quot;hidden&quot;;
+    floating.style.transform = &quot;translate(0, 0)&quot;;
+    document.body.appendChild(floating);
+    activeTrigger = trigger;
+    setDescribedBy(trigger, true);
+    autoUpdateCleanup = autoUpdate(trigger, floating, () =&gt; {
+      updatePosition(trigger, floating);
+    });
+  };
+  const requestOpen = (trigger, immediate = false) =&gt; {
+    if (
+      getContent(trigger).length === 0 ||
+      activeTrigger === trigger ||
+      pendingTrigger === trigger
+    ) {
+      return;
+    }
+    clearOpenTimeout();
+    pendingTrigger = trigger;
+    const delay =
+      immediate || activeTrigger != null || Date.now() &lt; skipDelayUntil
+        ? 0
+        : hoverDelay;
+    if (delay === 0) {
+      openTooltip(trigger);
+      return;
+    }
+    openTimeout = window.setTimeout(() =&gt; {
+      openTimeout = null;
+      pendingTrigger = null;
+      openTooltip(trigger);
+    }, delay);
+  };
+  const handlePointerOpen = (event) =&gt; {
+    if (event.pointerType === &quot;touch&quot;) {
+      return;
+    }
+    const trigger = getTrigger(event.target);
+    if (trigger == null || containsTarget(trigger, event.relatedTarget)) {
+      return;
+    }
+    requestOpen(trigger);
+  };
+  const handlePointer = (event) =&gt; {
+    lastPointerWasTouch =
+      event.type === &quot;pointerdown&quot; &amp;&amp; event.pointerType === &quot;touch&quot;;
+  };
+  const handleTouchClick = (event) =&gt; {
+    const isTouch = event.pointerType === &quot;touch&quot; || lastPointerWasTouch;
+    lastPointerWasTouch = false;
+    if (!isTouch || event.detail === 0) {
+      return;
+    }
+    const trigger = getTrigger(event.target);
+    if (
+      trigger == null ||
+      !trigger.isConnected ||
+      getContent(trigger).length === 0 ||
+      (pinnedByTouch &amp;&amp; activeTrigger === trigger)
+    ) {
+      if (pinnedByTouch) {
+        closeTooltip();
+      }
+      return;
+    }
+    openTooltip(trigger);
+    pinnedByTouch = activeTrigger === trigger;
+    window.setTimeout(() =&gt; {
+      if (activeTrigger === trigger &amp;&amp; !trigger.isConnected) {
+        closeTooltip(false);
+      }
+    }, 0);
+  };
+  const handleLeave = (event) =&gt; {
+    if (pinnedByTouch) {
+      return;
+    }
+    const trigger = getTrigger(event.target);
+    if (trigger == null || containsTarget(trigger, event.relatedTarget)) {
+      return;
+    }
+    if (activeTrigger === trigger || pendingTrigger === trigger) {
+      closeTooltip();
+    }
+  };
+  const handleFocusIn = (event) =&gt; {
+    const trigger = getTrigger(event.target);
+    if (trigger?.matches(&quot;:focus-visible&quot;)) {
+      requestOpen(trigger, true);
+    }
+  };
+  const handleKeyDown = (event) =&gt; {
+    if (event.key === &quot;Escape&quot;) {
+      closeTooltip();
+    }
+  };
+  const handleContextMenu = (event) =&gt; {
+    lastPointerWasTouch = false;
+    const trigger = getTrigger(event.target);
+    if (activeTrigger === trigger || pendingTrigger === trigger) {
+      closeTooltip();
+    }
+  };
+  const destroy = () =&gt; {
+    closeTooltip(false);
+    lastPointerWasTouch = false;
+    document.removeEventListener(&quot;pointerover&quot;, handlePointerOpen);
+    document.removeEventListener(&quot;pointerdown&quot;, handlePointer);
+    document.removeEventListener(&quot;pointercancel&quot;, handlePointer);
+    document.removeEventListener(&quot;click&quot;, handleTouchClick);
+    document.removeEventListener(&quot;pointerout&quot;, handleLeave);
+    document.removeEventListener(&quot;focusin&quot;, handleFocusIn);
+    document.removeEventListener(&quot;focusout&quot;, handleLeave);
+    document.removeEventListener(&quot;keydown&quot;, handleKeyDown);
+    document.removeEventListener(&quot;contextmenu&quot;, handleContextMenu);
+    tooltip = null;
+  };
+
+  document.addEventListener(&quot;pointerover&quot;, handlePointerOpen);
+  document.addEventListener(&quot;pointerdown&quot;, handlePointer);
+  document.addEventListener(&quot;pointercancel&quot;, handlePointer);
+  document.addEventListener(&quot;click&quot;, handleTouchClick);
+  document.addEventListener(&quot;pointerout&quot;, handleLeave);
+  document.addEventListener(&quot;focusin&quot;, handleFocusIn);
+  document.addEventListener(&quot;focusout&quot;, handleLeave);
+  document.addEventListener(&quot;keydown&quot;, handleKeyDown);
+  document.addEventListener(&quot;contextmenu&quot;, handleContextMenu);
+  window.addEventListener(&quot;pagehide&quot;, destroy, { once: true });
+})();
+&lt;/script&gt;
+&lt;script id=&quot;codex-visualization-tabs&quot;&gt;
+(() =&gt; {
+  const selector = &#x27;.nav[role=&quot;tablist&quot;] [role=&quot;tab&quot;]&#x27;;
+  const disabled = &#x27;:disabled,[aria-disabled=&quot;true&quot;]&#x27;;
+  const selectTab = (selected) =&gt; {
+    const panelId = selected.getAttribute(&quot;aria-controls&quot;);
+    for (const tab of selected.closest(&#x27;[role=&quot;tablist&quot;]&#x27;).querySelectorAll(&#x27;[role=&quot;tab&quot;]&#x27;)) {
+      const active = tab === selected;
+      tab.classList.toggle(&quot;active&quot;, active);
+      tab.setAttribute(&quot;aria-selected&quot;, String(active));
+      const id = tab.getAttribute(&quot;aria-controls&quot;);
+      const panel = id &amp;&amp; document.getElementById(id);
+      if (panel != null) {
+        panel.hidden = id !== panelId;
+        if (!panel.hidden &amp;&amp; selected.id) {
+          panel.setAttribute(&quot;aria-labelledby&quot;, selected.id);
+        }
+      }
+    }
+  };
+  const interact = (event) =&gt; {
+    const tab = event.target?.closest?.(selector);
+    if (event.defaultPrevented || tab == null || tab.matches(disabled)) {
+      return;
+    }
+    if (event.type === &quot;click&quot;) {
+      selectTab(tab);
+      return;
+    }
+    const tabs = Array.from(
+      tab.closest(&#x27;[role=&quot;tablist&quot;]&#x27;).querySelectorAll(&#x27;[role=&quot;tab&quot;]&#x27;),
+    ).filter((candidate) =&gt; !candidate.matches(disabled));
+    const current = tabs.indexOf(tab);
+    let next;
+    if (event.key === &quot;ArrowRight&quot; || event.key === &quot;ArrowDown&quot;) {
+      next = (current + 1) % tabs.length;
+    } else if (event.key === &quot;ArrowLeft&quot; || event.key === &quot;ArrowUp&quot;) {
+      next = (current + tabs.length - 1) % tabs.length;
+    } else if (event.key === &quot;Home&quot;) {
+      next = 0;
+    } else if (event.key === &quot;End&quot;) {
+      next = tabs.length - 1;
+    } else {
+      return;
+    }
+    event.preventDefault();
+    tabs[next].focus();
+    selectTab(tabs[next]);
+  };
+
+  for (const list of document.querySelectorAll(&#x27;.nav[role=&quot;tablist&quot;]&#x27;)) {
+    const selected =
+      list.querySelector(&#x27;[role=&quot;tab&quot;][aria-selected=&quot;true&quot;]&#x27;) ??
+      list.querySelector(&#x27;[role=&quot;tab&quot;].active&#x27;) ??
+      list.querySelector(&#x27;[role=&quot;tab&quot;]&#x27;);
+    if (selected != null) {
+      selectTab(selected);
+    }
+  }
+  document.addEventListener(&quot;click&quot;, interact);
+  document.addEventListener(&quot;keydown&quot;, interact);
+  window.addEventListener(&quot;pagehide&quot;, () =&gt; {
+    document.removeEventListener(&quot;click&quot;, interact);
+    document.removeEventListener(&quot;keydown&quot;, interact);
+  }, { once: true });
+})();
+&lt;/script&gt;
+&lt;script id=&quot;codex-visualization-lucide&quot; async src=&quot;https://unpkg.com/lucide@1.17.0/dist/umd/lucide.js&quot;&gt;&lt;/script&gt;
+&lt;script&gt;
+(() =&gt; {
+  const initialize = () =&gt; {
+    globalThis.lucide?.createIcons({ attrs: { width: 16, height: 16 } });
+  };
+  if (globalThis.lucide != null) {
+    initialize();
+    return;
+  }
+  document
+    .getElementById(&quot;codex-visualization-lucide&quot;)
+    ?.addEventListener(&quot;load&quot;, initialize, { once: true });
+})();
+&lt;/script&gt;
+
+&lt;/body&gt;
+&lt;/html&gt;
+"></iframe>
+</body>
+</html>

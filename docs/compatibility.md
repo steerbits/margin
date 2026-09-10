@@ -1,0 +1,36 @@
+# Pi 0.85.1 compatibility
+
+Default `npm start` now wraps the complete server with cco; `start:native` is the explicit direct launch. This does not change the SDK UI mappings below. See [the selected cco policy](sandboxing-proposal.md) for writable paths, shared scope across sessions, and the normal-Terminal verification requirement.
+
+This matrix is based on the pinned SDK's `ExtensionUIContext`, session events, native tools, and runtime behavior. Margin binds extensions with `mode: "rpc"` and `hasUI` enabled by the supplied UI context. This indicates dialog-capable UI, not terminal-component support.
+
+| Surface                                                               | Support                          | Behavior                                                                                                                           |
+| --------------------------------------------------------------------- | -------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| Markdown replies                                                      | Native                           | Headings, emphasis, links, tables, lists, code highlighting, blockquotes; raw HTML is skipped.                                     |
+| Inline feedback                                                       | Native                           | Exact selected text plus original message ID, offsets, and nearby context; comments batch into one user message.                   |
+| `select`, `confirm`, `input`                                          | Native                           | Typed answers return through a dedicated resolver. Cancel, abort, and supplied timeouts use the SDK's expected values.             |
+| `editor`                                                              | Native                           | Multiline input with prefilled text.                                                                                               |
+| Startup dialogs                                                       | Native                           | Session is registered before awaiting extension startup; the browser can answer before initialization completes.                   |
+| Browser reconnect                                                     | Native                           | Snapshot replays pending dialogs with the same request IDs. Duplicate answers are rejected.                                        |
+| `notify`, `setStatus`, text `setWidget`                               | Native                           | Notifications, keyed statuses, and text widgets.                                                                                   |
+| `setEditorText`, `getEditorText`, `pasteToEditor`                     | Native                           | Server-backed composer text; paste appends text without terminal paste collapsing.                                                 |
+| Tool lifecycle                                                        | Native                           | Correlated by tool-call ID. Streaming partial results replace the previous result instead of duplicating accumulated output.       |
+| Built-in edit diff                                                    | Native                           | Prefer `details.patch`, fall back to `details.diff`. Displays additions/removals and line references supplied by Pi.               |
+| Write and bash                                                        | Data fallback                    | Show arguments and returned content/output. This is not a complete project-wide filesystem change audit.                           |
+| Unknown tool                                                          | Data fallback                    | Readable text, images, and expandable structured result; browser renderers can specialize it.                                      |
+| Custom messages                                                       | Data fallback + renderer hook    | Preserve visible content, `customType`, and `details`; respect hidden messages.                                                    |
+| Tool/custom-message terminal renderers                                | Adapter required                 | TUI `Component` factories cannot render as HTML. Register a browser renderer.                                                      |
+| `custom()` interactive TUI                                            | Explicit unsupported interaction | Shows a compatibility card. Stopping rejects with a clear error; it does not invent an answer or silently claim user cancellation. |
+| Component widgets, custom header/footer/editor, terminal autocomplete | Default browser UI + notice      | Keep browser controls and report the unsupported custom appearance.                                                                |
+| Raw terminal input                                                    | Notice                           | No browser-to-terminal key emulation. An extension requiring it needs adaptation.                                                  |
+| Terminal theme objects                                                | Text compatibility               | Theme formatting helpers preserve the text without ANSI. Switching terminal themes is unsupported.                                 |
+| Working indicator animation/visibility and hidden-thinking labels     | Cosmetic fallback                | Margin uses its own activity indicator; terminal animation settings do not customize it.                                           |
+| Model selection, new/resumed conversations, skill reload, stop        | Native                           | Model selection is explicit. Conversations are scoped to local projects.                                                           |
+| Tree/fork/import/export and terminal-specific slash commands          | Deferred                         | Extension-driven session replacement fails explicitly with guidance, rather than reporting fake success.                           |
+| Server restart during a tool/question                                 | Interrupted                      | Restore saved history/feedback and show interruption information; runtime promises cannot be resumed.                              |
+
+The app intentionally makes no special dependency on the questionnaire example. Standard UI calls work; arbitrary terminal extensions need browser-capable implementations. A custom tool's schema is not enough to infer the meaning or return type of arbitrary UI code.
+
+Current catalogs include built-in providers and Pi `models.json` configuration. Providers registered only by project extensions are not yet integrated into the initial model picker. Provider authentication and model entitlement can differ from catalog availability; failed requests remain visible and do not trigger another billing route.
+
+Sources: [Pi SDK](https://pi.dev/docs/latest/sdk), [extension UI protocol](https://pi.dev/docs/latest/rpc#extension-ui-protocol), and the installed 0.85.1 source/types. Later Pi versions should be checked against this matrix before upgrading the pinned dependency.
