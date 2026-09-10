@@ -1,0 +1,46 @@
+.project-notes {
+  min-width: 0;
+  padding: 12px 4px;
+  font-size: 15px;
+  overflow-wrap: anywhere;
+}
+.project-notes p {
+  margin-bottom: 12px;
+}
+.project-notes-hint {
+  color: var(--muted);
+  font-size: 14px;
+}
+.project-notes label {
+  display: block;
+  margin-bottom: 8px;
+  font-weight: 600;
+}
+.project-notes textarea {
+  display: block;
+  width: 100%;
+  min-height: 260px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--paper);
+}
+.project-notes-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 12px 0;
+}
+.project-notes [role="alert"] {
+  color: #923820;
+}
+.project-notes-conflict {
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+  padding: 12px 0;
+  margin-bottom: 12px;
+}
+.project-notes-conflict textarea {
+  min-height: 120px;
+  background: var(--soft);
+}
