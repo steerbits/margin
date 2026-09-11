@@ -307,6 +307,144 @@ test("reopening a stale session loads project storage instead of its old publish
   await expect(editor(page)).toHaveValue("Refreshed on focus");
 });
 
+test("opening Notes at the end of a desktop conversation keeps the panel in view", async ({
+  page,
+}) => {
+  await page.goto("/");
+  const response = await page.request.post("/api/test/seed", { data: {} });
+  expect(response.ok()).toBeTruthy();
+  await visit(page, (await response.json()).id);
+  await page.getByRole("button", { name: "Close panel", exact: true }).click();
+  const conversation = page.locator(".scroll-area");
+  await conversation.evaluate((el) => {
+    el.scrollTop = el.scrollHeight;
+  });
+  await openNotes(page);
+  // Visibility assertions must happen before fill/click/scrollIntoView can mask the bug.
+  await expect(editor(page)).toBeInViewport();
+  await expect(saveButton(page)).toBeInViewport();
+  await expect(
+    page.getByRole("button", { name: "Close panel", exact: true }),
+  ).toBeInViewport();
+  expect(
+    await conversation.evaluate(
+      (el) => el.scrollHeight - el.scrollTop - el.clientHeight,
+    ),
+  ).toBeLessThan(2);
+  const before = await panel(page).boundingBox();
+  const box = await conversation.boundingBox();
+  await page.mouse.move(box!.x + 30, box!.y + 150);
+  await page.mouse.wheel(0, -700);
+  await expect
+    .poll(() =>
+      conversation.evaluate(
+        (el) => el.scrollHeight - el.scrollTop - el.clientHeight,
+      ),
+    )
+    .toBeGreaterThan(200);
+  await expect(editor(page)).toBeInViewport();
+  expect((await panel(page).boundingBox())!.y).toBeCloseTo(before!.y, 0);
+});
+
+test("opening and closing Notes preserves a mid-conversation reading anchor", async ({
+  page,
+}) => {
+  await page.goto("/");
+  const response = await page.request.post("/api/test/seed", { data: {} });
+  await visit(page, (await response.json()).id);
+  await page.getByRole("button", { name: "Close panel", exact: true }).click();
+  const heading = page.getByRole("heading", {
+    name: "1. Start with the core loop",
+  });
+  await heading.evaluate((el) => {
+    const container = el.closest(".scroll-area")!;
+    container.scrollTop +=
+      el.getBoundingClientRect().top -
+      container.getBoundingClientRect().top -
+      1;
+  });
+  const before = (await heading.boundingBox())!.y;
+  await openNotes(page);
+  expect((await heading.boundingBox())!.y).toBeCloseTo(before, 0);
+  await page.getByRole("button", { name: "Close panel", exact: true }).click();
+  expect((await heading.boundingBox())!.y).toBeCloseTo(before, 0);
+});
+
+test("short desktop panels scroll independently and keep their close control visible", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1200, height: 520 });
+  await setup(page);
+  const conversation = page.locator(".scroll-area");
+  const before = await conversation.evaluate((el) => el.scrollTop);
+  const content = page.locator(".plugin-panel-content");
+  const box = (await content.boundingBox())!;
+  await page.mouse.move(box.x + 8, box.y + box.height - 12);
+  await page.mouse.wheel(0, 1500);
+  await expect
+    .poll(() => content.evaluate((el) => el.scrollTop))
+    .toBeGreaterThan(0);
+  await expect(saveButton(page)).toBeInViewport();
+  await expect(
+    page.getByRole("button", { name: "Close panel", exact: true }),
+  ).toBeInViewport();
+  expect(await conversation.evaluate((el) => el.scrollTop)).toBe(before);
+});
+
+test("narrow Notes overlays the current position, blocks background focus, and dismisses without losing the draft", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/");
+  const response = await page.request.post("/api/test/seed", { data: {} });
+  await visit(page, (await response.json()).id);
+  await page.getByRole("button", { name: "Close panel", exact: true }).click();
+  const conversation = page.locator(".scroll-area");
+  await conversation.evaluate((el) => {
+    el.scrollTop = el.scrollHeight;
+  });
+  const before = await conversation.evaluate((el) => el.scrollTop);
+  await openNotes(page);
+  const dialog = page.getByRole("dialog", { name: "Notes", exact: true });
+  await expect(dialog).toHaveAttribute("aria-modal", "true");
+  await expect(editor(page)).toBeInViewport();
+  expect(await conversation.evaluate((el) => el.scrollTop)).toBe(before);
+  await editor(page).fill("Keep this overlay draft");
+  for (let i = 0; i < 6; i++) {
+    await page.keyboard.press("Tab");
+    expect(
+      // Native dialogs allow Tab to visit browser chrome (activeElement=body),
+      // but must never let it reach the inert conversation or toolbar.
+      await dialog.evaluate(
+        (el) =>
+          document.activeElement === document.body ||
+          el.contains(document.activeElement),
+      ),
+    ).toBe(true);
+  }
+  expect(
+    await page.locator(".composer textarea").evaluate((el) => {
+      (el as HTMLElement).focus();
+      return document.activeElement === el;
+    }),
+  ).toBe(false);
+  await page.keyboard.press("Escape");
+  await expect(dialog).toHaveCount(0);
+  await expect(
+    page.getByRole("button", { name: "Notes", exact: true }),
+  ).toBeFocused();
+  expect(await conversation.evaluate((el) => el.scrollTop)).toBe(before);
+  await openNotes(page);
+  await expect(editor(page)).toHaveValue("Keep this overlay draft");
+  await page.mouse.click(2, 400);
+  await expect(dialog).toHaveCount(0);
+  expect(await conversation.evaluate((el) => el.scrollTop)).toBe(before);
+  await openNotes(page);
+  await expect(editor(page)).toHaveValue("Keep this overlay draft");
+  await saveButton(page).click();
+  await expect(status(page)).toHaveText("Saved");
+});
+
 test("Notes is reachable on a narrow screen with a long conversation and no horizontal overflow", async ({
   page,
 }) => {
@@ -329,7 +467,11 @@ test("Notes is reachable on a narrow screen with a long conversation and no hori
     fullPage: true,
   });
   await page.setViewportSize({ width: 1440, height: 1000 });
-  await panel(page).scrollIntoViewIfNeeded();
+  await expect(
+    page.getByRole("dialog", { name: "Notes", exact: true }),
+  ).not.toHaveAttribute("aria-modal", "true");
+  await expect(editor(page)).toBeInViewport();
+  await expect(saveButton(page)).toBeInViewport();
   await page.screenshot({
     path: ".margin-data/project-notes-desktop.png",
     fullPage: true,

@@ -1,6 +1,6 @@
 # Project notes
 
-A local version 1 plugin with one manually edited notepad per project. It uses only the existing browser panel and server action/storage/publish APIs; no host changes, agent tools, message actions, or model calls are added.
+A local version 1 plugin with one manually edited notepad per project. It uses only the existing browser panel and server action/storage/publish APIs; no agent tools, message actions, or model calls are added. The host keeps plugin panels outside the conversation's scrolling area.
 
 ## Use
 
@@ -24,7 +24,8 @@ Unsaved drafts survive panel closure and session/project switches **within this 
 - Text is preserved without trimming or categorizing, up to 100,000 JavaScript string characters (UTF-16 code units), validated on both sides.
 - Revisions prevent stale overwrites within the app's single server process: the check and synchronous write contain no `await`. Running multiple independent servers against the same database is not supported by this concurrency scheme.
 - Users maintain their own notes through the panel. Back up the app data directory using the app's normal database backup precautions. Keep this plugin ID/storage key stable; future record format changes need a migration.
-- The current panel API requires an open conversation. On narrow screens, Notes uses the host's stacked panel layout and scrolls the editor into view.
+- The current panel API requires an open conversation. On desktop, Notes remains beside the conversation with independent scrolling and an always-reachable close control. Opening/closing it preserves the bottom position or the first visible content block and its offset.
+- At widths of 900px or less, Notes is a native modal overlay. Close it with the X, Escape, or a backdrop click; the underlying conversation stays in place and drafts remain intact. The browser prevents focus on background controls while it is open.
 
 ## Activate / reload
 
@@ -37,6 +38,8 @@ After the current agent work finishes:
 3. Refresh the browser with Cmd/Ctrl+R and open **Notes** in a conversation.
 
 The implementation/test run does not restart the existing app or server.
+
+**Visibility-fix update:** if `project-notes` is already activated, this follow-up changes only browser layout. After the build, save any unsaved drafts and refresh the browser; no server restart is needed.
 
 ## Verification
 
@@ -51,8 +54,9 @@ The dedicated browser configuration refuses to reuse port **4328**, builds a tem
 Observed checks for this implementation:
 
 - **22 Node tests passed**, including 10 notes-specific checks: plugin discovery, exact Unicode/whitespace storage and clearing, reopening SQLite, cross-project/session isolation, stale revision rejection, input/corruption validation, storage failure, retained drafts, delayed-save edits, and conflict/retry behavior.
-- **17 Chromium browser tests passed**, including all 10 existing workflows and 7 notes workflows: save/reload/isolation, hidden drafts and the real beforeunload dialog, delayed replies, load/save failures, both conflict choices, stale published state/focus refresh, and narrow-screen usability.
-- TypeScript checking and the production Vite build passed. The pre-existing large-bundle advisory remains (approximately 602 KB uncompressed).
-- Desktop (1440×1000) and narrow (390×844) screenshots were inspected in self-review. The editor and controls were usable without page overflow. This was not an independent reviewer or evidence of the user's UI preference; Firefox/Safari and browser-crash recovery were not tested.
+- **21 Chromium browser tests passed**, including all 10 existing workflows and 11 notes workflows. In addition to persistence, drafts, errors, and conflicts, the visibility regression checks opening Notes from the end of a long desktop conversation, scrolling the conversation without moving Notes, preserving a mid-conversation reading anchor, independently scrolling a short panel, and modal dismissal/background-focus protection without losing drafts.
+- TypeScript checking and the production Vite build passed. The pre-existing large-bundle advisory remains (approximately 603 KB uncompressed).
+- Desktop (1440×1000) and narrow (390×844) screenshots were inspected in self-review, and a short desktop window (1200×520) was exercised. The editor and controls were usable without page overflow. This was not an independent reviewer or evidence of the user's UI preference; Firefox/Safari, mobile virtual keyboards, and browser-crash recovery were not tested.
+- The original visibility defect was reproduced before the fix: the new desktop test observed the editor's viewport intersection ratio as **0**. The same test passes after separating the panel from conversation scrolling. Visibility is asserted before any editor action or `scrollIntoView` could hide the defect.
 
 The first browser attempt exposed a shared Vite HMR-port collision and a test that clicked before a project switch finished rendering. The isolated production-copy harness and a state-based assertion fixed those test issues; the existing host was left unchanged.

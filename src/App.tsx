@@ -45,6 +45,11 @@ import { DialogCard } from "./DialogCard.tsx";
 import { browserPlugins } from "./plugins.ts";
 import type { BrowserPluginContext } from "./plugin-api.ts";
 import { PluginBoundary } from "./PluginBoundary.tsx";
+import {
+  PluginPanel,
+  ConversationWorkspace,
+  captureConversationPosition,
+} from "./PluginPanel.tsx";
 import { CustomMessage } from "./CustomMessage.tsx";
 
 interface Bootstrap {
@@ -96,6 +101,18 @@ export function App() {
     saveTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined),
     scrollRef = useRef<HTMLDivElement>(null),
     railList = useRef<HTMLDivElement>(null);
+  const restoreConversation = useRef<(() => void) | undefined>(undefined);
+  function changePanel(next: string | null) {
+    if (next === panel) return;
+    restoreConversation.current = captureConversationPosition(
+      scrollRef.current,
+    );
+    setPanel(next);
+  }
+  useLayoutEffect(() => {
+    restoreConversation.current?.();
+    restoreConversation.current = undefined;
+  }, [panel]);
   const stickyBottom = useRef(true),
     selectedId = useRef(sessionId),
     lastAccepted = useRef<string>("");
@@ -619,11 +636,14 @@ export function App() {
                   p.panels?.map((x) => (
                     <button
                       key={`${p.id}:${x.id}`}
+                      disabled={!snapshot}
+                      aria-controls="plugin-panel"
+                      aria-expanded={panel === `${p.id}:${x.id}`}
                       className={
                         panel === `${p.id}:${x.id}` ? "active-button" : ""
                       }
                       onClick={() => {
-                        setPanel(
+                        changePanel(
                           panel === `${p.id}:${x.id}`
                             ? null
                             : `${p.id}:${x.id}`,
@@ -676,9 +696,31 @@ export function App() {
               </button>
             </div>
           ))}
-          <div
-            className="scroll-area"
-            ref={scrollRef}
+          <ConversationWorkspace
+            scrollRef={scrollRef}
+            panel={
+              snapshot &&
+              panel &&
+              browserPlugins.flatMap(
+                (p) =>
+                  p.panels
+                    ?.filter((x) => `${p.id}:${x.id}` === panel)
+                    .map((x) => {
+                      const Component = x.component;
+                      return (
+                        <PluginPanel
+                          key={`${p.id}:${x.id}`}
+                          title={x.title}
+                          onClose={() => changePanel(null)}
+                        >
+                          <PluginBoundary name={p.id}>
+                            <Component {...pluginContext(p.id)} />
+                          </PluginBoundary>
+                        </PluginPanel>
+                      );
+                    }) ?? [],
+              )
+            }
             onScroll={() => {
               const e = scrollRef.current!;
               stickyBottom.current =
@@ -756,7 +798,7 @@ export function App() {
                 </div>
               </div>
             ) : (
-              <div className={`review ${rail || panel ? "with-rail" : ""}`}>
+              <div className={`review ${rail ? "with-rail" : ""}`}>
                 <div className="thread">
                   <div className="conversation-date">
                     {new Date(snapshot.session.createdAt).toLocaleDateString(
@@ -1283,41 +1325,9 @@ export function App() {
                     </div>
                   </aside>
                 )}
-                {panel && (
-                  <aside className="comment-rail">
-                    <div className="rail-heading">
-                      <strong>
-                        {
-                          browserPlugins
-                            .flatMap((p) => p.panels ?? [])
-                            .find((p) => panel.endsWith(`:${p.id}`))?.title
-                        }
-                      </strong>
-                      <button
-                        aria-label="Close panel"
-                        onClick={() => setPanel(null)}
-                      >
-                        <X size={16} />
-                      </button>
-                    </div>
-                    {browserPlugins.flatMap(
-                      (p) =>
-                        p.panels
-                          ?.filter((x) => `${p.id}:${x.id}` === panel)
-                          .map((x) => {
-                            const Component = x.component;
-                            return (
-                              <PluginBoundary key={x.id} name={p.id}>
-                                <Component {...pluginContext(p.id)} />
-                              </PluginBoundary>
-                            );
-                          }) ?? [],
-                    )}
-                  </aside>
-                )}
               </div>
             )}
-          </div>
+          </ConversationWorkspace>
         </main>
       </div>
       {selection && (

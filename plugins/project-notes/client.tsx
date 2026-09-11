@@ -25,13 +25,10 @@ function Editor({ snapshot, action }: BrowserPluginContext) {
   const state = useSyncExternalStore(draft.subscribe, draft.getSnapshot);
   const actionRef = useRef(action);
   actionRef.current = action;
-  const root = useRef<HTMLElement>(null);
   useEffect(() => {
     const refresh = () => void draft.refresh(actionRef.current);
     refresh();
     window.addEventListener("focus", refresh);
-    if (window.matchMedia("(max-width: 900px)").matches)
-      root.current?.scrollIntoView({ block: "nearest" });
     return () => window.removeEventListener("focus", refresh);
   }, [draft, snapshot.session.id]);
 
@@ -53,7 +50,7 @@ function Editor({ snapshot, action }: BrowserPluginContext) {
               : "No saved note yet";
 
   return (
-    <section className="project-notes" aria-label="Project notepad" ref={root}>
+    <section className="project-notes" aria-label="Project notepad">
       <p className="project-notes-hint">
         One notepad shared by all conversations in this project. Only Save
         writes to storage.
