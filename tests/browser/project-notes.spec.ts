@@ -9,6 +9,7 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 
 const folders: string[] = [];
+const projectsBySession = new Map<string, string>();
 test.afterAll(() => {
   for (const folder of folders)
     rmSync(folder, { recursive: true, force: true });
@@ -23,6 +24,9 @@ const saveButton = (page: Page) =>
 const endpoint = (id: string, action: string) =>
   `/api/sessions/${id}/plugins/project-notes/${action}`;
 
+const workspaceEndpoint = (id: string, action: string) =>
+  `/api/projects/${projectsBySession.get(id)}/plugins/project-notes/${action}`;
+
 async function createProject(request: APIRequestContext) {
   const path = mkdtempSync(join(tmpdir(), "margin-notes-browser-"));
   folders.push(path);
@@ -34,6 +38,7 @@ async function createSession(request: APIRequestContext, projectId: string) {
   const response = await request.post("/api/sessions", { data: { projectId } });
   expect(response.ok()).toBeTruthy();
   const id = (await response.json()).session.id as string;
+  projectsBySession.set(id, projectId);
   await expect
     .poll(async () => {
       const snapshot = await (await request.get(`/api/sessions/${id}`)).json();
@@ -49,7 +54,9 @@ async function visit(page: Page, id: string) {
   await openNotes(page);
 }
 async function openNotes(page: Page) {
-  await page.getByRole("button", { name: "Notes", exact: true }).click();
+  const button = page.getByRole("button", { name: "Notes", exact: true });
+  if ((await button.getAttribute("aria-expanded")) !== "true")
+    await button.click();
   await expect(editor(page)).toBeEnabled();
   await expect(status(page)).not.toHaveText("Loading notes…");
 }
@@ -197,7 +204,7 @@ test("a delayed save preserves newer edits even if the panel is closed before th
   const gate = new Promise<void>((resolve) => {
     release = resolve;
   });
-  await page.route(`**${endpoint(id, "save")}`, async (route) => {
+  await page.route(`**${workspaceEndpoint(id, "save")}`, async (route) => {
     const response = await route.fetch();
     await gate;
     await route.fulfill({ response });
@@ -225,7 +232,7 @@ test("load/save failures show errors and permit retry without losing edits", asy
     page.request,
     await createProject(page.request),
   );
-  await page.route(`**${endpoint(id, "load")}`, (route) =>
+  await page.route(`**${workspaceEndpoint(id, "load")}`, (route) =>
     route.fulfill({
       status: 503,
       json: { error: "Notes storage unavailable" },
@@ -233,23 +240,24 @@ test("load/save failures show errors and permit retry without losing edits", asy
   );
   await page.evaluate((id) => localStorage.setItem("margin.session", id), id);
   await page.reload();
+  await expect(page.getByLabel("Starting skill")).toBeEnabled();
   await page.getByRole("button", { name: "Notes", exact: true }).click();
   await expect(panel(page).getByRole("alert")).toContainText(
     "Notes storage unavailable",
   );
   await expect(editor(page)).toBeDisabled();
-  await page.unroute(`**${endpoint(id, "load")}`);
+  await page.unroute(`**${workspaceEndpoint(id, "load")}`);
   await page.getByRole("button", { name: "Refresh notes" }).click();
   await expect(editor(page)).toBeEnabled();
   await editor(page).fill("Do not lose this");
-  await page.route(`**${endpoint(id, "save")}`, (route) =>
+  await page.route(`**${workspaceEndpoint(id, "save")}`, (route) =>
     route.fulfill({ status: 503, json: { error: "Disk full" } }),
   );
   await saveButton(page).click();
   await expect(panel(page).getByRole("alert")).toContainText("Disk full");
   await expect(editor(page)).toHaveValue("Do not lose this");
   expect((await load(page, id)).text).toBe("");
-  await page.unroute(`**${endpoint(id, "save")}`);
+  await page.unroute(`**${workspaceEndpoint(id, "save")}`);
   await saveButton(page).click();
   await expect(status(page)).toHaveText("Saved");
   await expect(panel(page).getByRole("alert")).toHaveCount(0);
@@ -476,4 +484,79 @@ test("Notes is reachable on a narrow screen with a long conversation and no hori
     path: ".margin-data/project-notes-desktop.png",
     fullPage: true,
   });
+});
+
+test("workspace Notes works before any chat and stays shared across chat and workspace changes", async ({
+  page,
+}) => {
+  await page.goto("/");
+  const project = await createProject(page.request);
+  const otherProject = await createProject(page.request);
+  await page.reload();
+  const selector = page.getByRole("combobox", { name: "Project", exact: true });
+  await selector.selectOption(project);
+  const before = await (await page.request.get("/api/bootstrap")).json();
+  expect(
+    before.sessions.filter((s: any) => s.projectId === project),
+  ).toHaveLength(0);
+  await openNotes(page);
+  await save(page, "Workspace decisions before the first chat");
+  await expect(panel(page)).toContainText(
+    "Shared by every chat in this workspace",
+  );
+  const saved = await (
+    await page.request.post(
+      `/api/projects/${project}/plugins/project-notes/load`,
+      { data: {} },
+    )
+  ).json();
+  expect(saved.result.note.text).toBe(
+    "Workspace decisions before the first chat",
+  );
+  expect(
+    (await (await page.request.get("/api/bootstrap")).json()).sessions.filter(
+      (s: any) => s.projectId === project,
+    ),
+  ).toHaveLength(0);
+  await page.reload();
+  await expect(selector).toHaveValue(project);
+  await openNotes(page);
+  await expect(editor(page)).toHaveValue(
+    "Workspace decisions before the first chat",
+  );
+  await page.locator("button.new-chat").click();
+  await expect(page.getByLabel("Starting skill")).toBeEnabled();
+  await expect(editor(page)).toBeVisible();
+  await expect(editor(page)).toHaveValue(
+    "Workspace decisions before the first chat",
+  );
+  const first = await page.evaluate(() =>
+    localStorage.getItem("margin.session"),
+  );
+  await editor(page).fill("Unsaved workspace decision");
+  await page.locator("button.new-chat").click();
+  await expect
+    .poll(() => page.evaluate(() => localStorage.getItem("margin.session")))
+    .not.toBe(first);
+  await expect(editor(page)).toHaveValue("Unsaved workspace decision");
+  await saveButton(page).click();
+  await expect(status(page)).toHaveText("Saved");
+  const sessionNote = await (
+    await page.request.post(
+      `/api/sessions/${first}/plugins/project-notes/load`,
+      { data: {} },
+    )
+  ).json();
+  expect(sessionNote.result.note.text).toBe("Unsaved workspace decision");
+  await selector.selectOption(otherProject);
+  await expect(editor(page)).toBeVisible();
+  await expect(editor(page)).toHaveValue("");
+  await save(page, "Other workspace");
+  await selector.selectOption(project);
+  await expect(editor(page)).toHaveValue("Unsaved workspace decision");
+  const invalid = await page.request.post(
+    "/api/projects/missing/plugins/project-notes/save",
+    { data: { text: "wrong", revision: 0 } },
+  );
+  expect(invalid.ok()).toBe(false);
 });

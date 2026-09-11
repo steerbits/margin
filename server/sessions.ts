@@ -1,3 +1,4 @@
+import { pluginStorage } from "./plugin-storage.ts";
 import { randomUUID } from "node:crypto";
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -48,6 +49,8 @@ export class LiveSession implements AgentBackend {
   ready: Promise<void>;
   private timer?: ReturnType<typeof setTimeout>;
   private children = new Set<BackgroundAgent>();
+  private childOperations = 0;
+  private pluginOperations = 0;
   private disposing = false;
   private submitting?: { comments: Comment[]; note: string };
   constructor(
@@ -365,7 +368,12 @@ export class LiveSession implements AgentBackend {
   async pluginAction(pluginId: string, action: string, input: unknown) {
     const p = this.plugins.find((p) => p.id === pluginId);
     if (!p?.action) throw new Error("Plugin action not found.");
-    return p.action(action, input, this.pluginContext(p.id));
+    this.pluginOperations++;
+    try {
+      return await p.action(action, input, this.pluginContext(p.id));
+    } finally {
+      this.pluginOperations--;
+    }
   }
   snapshot(): Snapshot {
     const messages = this.messages.map((m) =>
@@ -613,14 +621,10 @@ export class LiveSession implements AgentBackend {
     this.changed();
   }
   pluginContext(id: string): PluginContext {
-    const ns = `plugin:${id}:${this.project.id}`;
     return {
       project: this.project,
       sessionId: this.info.id,
-      storage: {
-        get: <T>(key: string) => this.store.get<T>(ns, key),
-        set: (key, v) => this.store.put(ns, key, v),
-      },
+      storage: pluginStorage(this.store, id, this.project.id),
       publish: (state) => {
         if (state === undefined) delete this.pluginState[id];
         else {
@@ -657,7 +661,14 @@ export class LiveSession implements AgentBackend {
           ),
         });
         const child: BackgroundAgent = {
-          prompt: (text) => session.prompt(text),
+          prompt: async (text) => {
+            this.childOperations++;
+            try {
+              await session.prompt(text);
+            } finally {
+              this.childOperations--;
+            }
+          },
           subscribe: (listener) =>
             session.subscribe((e) =>
               listener({
@@ -686,6 +697,14 @@ export class LiveSession implements AgentBackend {
     for (const c of this.children) await c.dispose();
     this.agent?.dispose();
     this.events.removeAllListeners();
+  }
+  hasActiveWork() {
+    return (
+      this.busy ||
+      this.ui.dialogs.size > 0 ||
+      this.childOperations > 0 ||
+      this.pluginOperations > 0
+    );
   }
 }
 export function errorText(e: unknown) {

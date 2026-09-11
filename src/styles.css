@@ -512,7 +512,7 @@ p {
   margin-bottom: 36px;
 }
 .user-bubble {
-  max-width: 92%;
+  max-width: 100%;
   background: #f3f3f3;
   border: 1px solid #e0e0e0;
   border-radius: 13px 13px 3px 13px;
@@ -521,6 +521,10 @@ p {
   line-height: 1.8;
   overflow-wrap: anywhere;
   color: #373737;
+}
+.user-message-content {
+  max-width: 92%;
+  min-width: 0;
 }
 .user-bubble p:last-child {
   margin-bottom: 0;
@@ -1078,6 +1082,11 @@ p {
   flex: 1;
   font-family: monospace;
   font-size: 12px;
+}
+.tool-outcome {
+  flex-shrink: 0;
+  font-size: 12px;
+  white-space: nowrap;
 }
 .tool-card.error > summary {
   color: #a32724;

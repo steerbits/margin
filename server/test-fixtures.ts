@@ -1,5 +1,8 @@
 import type express from "express";
 import { randomUUID } from "node:crypto";
+import { writeFileSync, existsSync, rmSync } from "node:fs";
+import { join, dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import type { Store } from "./store.ts";
 import type { LiveSession } from "./sessions.ts";
 import { transcript } from "./transcript.ts";
@@ -49,11 +52,33 @@ export function installFixtures(
   app: express.Express,
   { store, getLive }: { store: Store; getLive: (id: string) => LiveSession },
 ) {
+  app.post("/api/test/customization-file", (req, res) => {
+    if (process.env.MARGIN_DISPOSABLE_TEST_APP !== "1") {
+      res
+        .status(400)
+        .json({ error: "This fixture requires the disposable test app." });
+      return;
+    }
+    const path = join(
+      resolve(dirname(fileURLToPath(import.meta.url)), ".."),
+      "checkpoint-example.txt",
+    );
+    if (req.body.remove) {
+      if (existsSync(path)) rmSync(path);
+    } else writeFileSync(path, String(req.body.text ?? "example"));
+    res.json({ ok: true });
+  });
   app.post("/api/test/seed", async (req, res, next) => {
     try {
       const info: SessionInfo = {
         id: randomUUID(),
-        projectId: store.projects()[0].id,
+        projectId: store
+          .projects()
+          .find(
+            (p) =>
+              resolve(p.path) ===
+              resolve(dirname(fileURLToPath(import.meta.url)), ".."),
+          )!.id,
         title: "Meeting notes app",
         createdAt: Date.now(),
         updatedAt: Date.now(),
@@ -76,6 +101,17 @@ export function installFixtures(
                 timestamp: Date.now(),
               },
         );
+      const historyCount = Math.min(
+        12,
+        Math.max(0, Number(req.body.historyCount) || 0),
+      );
+      for (let i = 0; i < historyCount; i++) {
+        append("user", `Earlier request ${i + 1}`);
+        append(
+          "assistant",
+          `## Earlier reply ${i + 1}\n\n${Array.from({ length: 8 }, (_, n) => `Earlier paragraph ${n + 1}. This is prior conversation context to exercise reading and commenting near the end of a long thread.`).join("\n\n")}`,
+        );
+      }
       append(
         "user",
         "Help me plan a small meeting-notes app. Start with a proposal before writing code.",
@@ -183,6 +219,32 @@ export function installFixtures(
   app.post("/api/test/:id/tools", (req, res) => {
     const l = getLive(String(req.params.id));
     l.messages.push(
+      {
+        id: "bash-failed",
+        role: "tool",
+        text: "",
+        tool: {
+          id: "bash-failed",
+          name: "bash",
+          args: { command: "rg missing-pattern notes.txt" },
+          status: "error",
+          result: {
+            content: [{ type: "text", text: "Command exited with code 1" }],
+          },
+        },
+      },
+      {
+        id: "bash-done",
+        role: "tool",
+        text: "",
+        tool: {
+          id: "bash-done",
+          name: "bash",
+          args: { command: "printf done" },
+          status: "success",
+          result: { content: [{ type: "text", text: "done" }] },
+        },
+      },
       {
         id: "tool:edit-fixture",
         role: "tool",

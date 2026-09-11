@@ -31,6 +31,7 @@ export interface AgentBackend {
     input: unknown,
   ): Promise<unknown>;
   dispose(): Promise<void>;
+  hasActiveWork?(): boolean;
 }
 export interface BackendHost {
   store: Store;

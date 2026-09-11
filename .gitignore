@@ -6,4 +6,6 @@ playwright-report/
 .env*
 !.env.example
 .DS_Store
+workspaces/
+.margin-restore-*
 *.log

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useSyncExternalStore } from "react";
 import type {
   BrowserPlugin,
-  BrowserPluginContext,
+  WorkspacePluginContext,
 } from "../../src/plugin-api.ts";
 import { isDirty, ProjectDrafts } from "./drafts.ts";
 import { MAX_NOTE_LENGTH } from "./model.ts";
@@ -20,8 +20,8 @@ import.meta.hot?.dispose(() =>
   window.removeEventListener("beforeunload", warnBeforeLeaving),
 );
 
-function Editor({ snapshot, action }: BrowserPluginContext) {
-  const draft = drafts.get(snapshot.session.projectId);
+function Editor({ project, sessionId, action }: WorkspacePluginContext) {
+  const draft = drafts.get(project.id);
   const state = useSyncExternalStore(draft.subscribe, draft.getSnapshot);
   const actionRef = useRef(action);
   actionRef.current = action;
@@ -30,7 +30,7 @@ function Editor({ snapshot, action }: BrowserPluginContext) {
     refresh();
     window.addEventListener("focus", refresh);
     return () => window.removeEventListener("focus", refresh);
-  }, [draft, snapshot.session.id]);
+  }, [draft, sessionId]);
 
   const dirty = isDirty(state);
   const pending = state.loading || state.saving;
@@ -52,8 +52,8 @@ function Editor({ snapshot, action }: BrowserPluginContext) {
   return (
     <section className="project-notes" aria-label="Project notepad">
       <p className="project-notes-hint">
-        One notepad shared by all conversations in this project. Only Save
-        writes to storage.
+        Notes for <strong>{project.name}</strong> · Shared by every chat in this
+        workspace. Only Save writes to storage.
       </p>
       <label htmlFor="project-notes-text">Project notes</label>
       <textarea
@@ -145,17 +145,14 @@ function Editor({ snapshot, action }: BrowserPluginContext) {
   );
 }
 
-function Panel(context: BrowserPluginContext) {
-  return (
-    <Editor
-      key={`${context.snapshot.session.projectId}:${context.snapshot.session.id}`}
-      {...context}
-    />
-  );
+function Panel(context: WorkspacePluginContext) {
+  return <Editor key={context.project.id} {...context} />;
 }
 const plugin: BrowserPlugin = {
   id: "project-notes",
   apiVersion: 1,
-  panels: [{ id: "notes", title: "Notes", component: Panel }],
+  panels: [
+    { id: "notes", title: "Notes", scope: "workspace", component: Panel },
+  ],
 };
 export default plugin;

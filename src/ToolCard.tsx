@@ -30,6 +30,19 @@ export function ToolCard({
   const args = tool.args as { command?: string; path?: string };
   const label = args?.path ?? args?.command ?? tool.name;
   const content = output(tool.result);
+  const exit = content.match(/(?:^|\n)Command exited with code (\d+)\s*$/)?.[1];
+  const outcome =
+    tool.status === "running"
+      ? "Running"
+      : tool.status === "success"
+        ? "Done"
+        : exit
+          ? `Exit ${exit}`
+          : /Command aborted\s*$/.test(content)
+            ? "Stopped"
+            : /Command timed out after [^\n]+$/.test(content)
+              ? "Timed out"
+              : "Failed";
   const images = (
     tool.result as {
       content?: { type: string; data?: string; mimeType?: string }[];
@@ -116,6 +129,16 @@ export function ToolCard({
         )}
         <span className="tool-name">{tool.name}</span>
         <span className="tool-summary">{label}</span>
+        <span
+          className="tool-outcome"
+          title={
+            tool.status === "error"
+              ? "Pi reported a tool error. Open the row for the command output."
+              : undefined
+          }
+        >
+          {outcome}
+        </span>
         {tool.status === "running" ? (
           <LoaderCircle size={14} className="spin" />
         ) : tool.status === "error" ? (

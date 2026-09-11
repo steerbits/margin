@@ -8,6 +8,7 @@ export class Store {
   constructor(file: string) {
     mkdirSync(dirname(file), { recursive: true });
     this.db = new DatabaseSync(file);
+    this.db.exec("PRAGMA busy_timeout=5000");
     this.db.exec(`PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON;
       CREATE TABLE IF NOT EXISTS records (kind TEXT NOT NULL, id TEXT NOT NULL, value TEXT NOT NULL, PRIMARY KEY(kind,id));
       CREATE TABLE IF NOT EXISTS batches (session_id TEXT NOT NULL, id TEXT NOT NULL, status TEXT NOT NULL, PRIMARY KEY(session_id,id));`);

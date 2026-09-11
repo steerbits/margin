@@ -22,9 +22,11 @@ export interface Project {
   name: string;
   path: string;
   launchWritable?: boolean;
+  kind?: "margin" | "project";
 }
 export type ExecutionInfo =
   | { mode: "native" }
+  | { mode: "cco-workspaces" }
   | { mode: "cco"; projectRoot: string; writablePaths: string[] };
 export interface SessionInfo {
   id: string;

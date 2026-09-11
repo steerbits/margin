@@ -17,6 +17,7 @@ import {
 import type { PluginContext } from "../server/plugin-api.ts";
 import { Store } from "../server/store.ts";
 import { loadPlugins } from "../server/plugins.ts";
+import { pluginStorage } from "../server/plugin-storage.ts";
 
 function fixture() {
   const directory = mkdtempSync(join(tmpdir(), "project-notes-unit-"));
@@ -31,9 +32,9 @@ function fixture() {
     sessionId,
     storage: {
       get: <T>(key: string) =>
-        store.get<T>(`plugin:project-notes:${projectId}`, key),
+        pluginStorage(store, "project-notes", projectId).get<T>(key),
       set: (key, value) =>
-        store.put(`plugin:project-notes:${projectId}`, key, value),
+        pluginStorage(store, "project-notes", projectId).set(key, value),
     },
     publish: (state) => {
       published.set(sessionId, structuredClone(state));
@@ -109,6 +110,43 @@ test("notes preserve exact text across sessions and storage reopen, isolate proj
     await run(a, "save", { text: "", revision: 1 });
     f.reopen();
     assert.deepEqual(await run(a, "load"), { note: { text: "", revision: 2 } });
+  } finally {
+    f.close();
+  }
+});
+
+test("workspace actions need no agent session and share the existing notes with legacy session actions", async () => {
+  const f = fixture();
+  try {
+    const session = f.context("workspace", "chat-a");
+    const workspace = { project: session.project, storage: session.storage };
+    assert.deepEqual(
+      await plugin.workspaceAction!(
+        "save",
+        { text: "Before any chat", revision: 0 },
+        workspace,
+      ),
+      {
+        saved: true,
+        note: { text: "Before any chat", revision: 1 },
+      },
+    );
+    assert.deepEqual(await run(f.context("workspace", "chat-b"), "load"), {
+      note: { text: "Before any chat", revision: 1 },
+    });
+    await run(session, "save", { text: "From another chat", revision: 1 });
+    f.reopen();
+    const fresh = f.context("workspace");
+    assert.deepEqual(
+      await plugin.workspaceAction!(
+        "load",
+        {},
+        { project: fresh.project, storage: fresh.storage },
+      ),
+      {
+        note: { text: "From another chat", revision: 2 },
+      },
+    );
   } finally {
     f.close();
   }

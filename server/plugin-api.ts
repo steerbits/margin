@@ -15,13 +15,15 @@ export interface BackgroundAgent {
   stop(): Promise<void>;
   dispose(): Promise<void>;
 }
-export interface PluginContext {
+export interface WorkspacePluginContext {
   project: Project;
-  sessionId: string;
   storage: {
     get<T>(key: string): T | undefined;
     set(key: string, value: unknown): void;
   };
+}
+export interface PluginContext extends WorkspacePluginContext {
+  sessionId: string;
   publish(state: unknown): void;
   notify(message: string): void;
   getMessages(): Message[];
@@ -44,6 +46,11 @@ export interface ServerPlugin {
     name: string,
     input: unknown,
     context: PluginContext,
+  ) => unknown | Promise<unknown>;
+  workspaceAction?: (
+    name: string,
+    input: unknown,
+    context: WorkspacePluginContext,
   ) => unknown | Promise<unknown>;
   dispose?: () => void | Promise<void>;
 }

@@ -4,20 +4,20 @@ A personal, local browser interface for Pi. Read Markdown, select a passage, col
 
 Feature ideas and priorities are maintained in [BACKLOG.md](BACKLOG.md).
 
+Use the pinned **Customize Margin** area for example prompts, installed plugin controls, and named code checkpoints with preview, restore, and a return path. See [the customization workspace guide](docs/customization-workspace.md). The **New workspace** folder button opens the macOS system folder dialog.
+
 ## Projects and the workspace picker
 
 The workspace sidebar currently lists **local project folders**. A conversation runs with its selected folder as Pi's working directory. These entries are not containers or isolated worktrees.
 
-- `inline-commenting-pi-codex-grill-frame-explore` is **Margin's source code**. Select it in the project dropdown, then start a new conversation to work on Margin.
+- The source folder `inline-commenting-pi-codex-grill-frame-explore` is displayed as **Margin**. Use **Customize Margin** or select **Margin** in the project dropdown to work on the app.
 - `tool-smoke` is a scratch folder created for the original live edit test. Existing conversations there are retained; do not delete the folder merely to clean up the picker.
 
-If the source project is missing, click the folder-plus button beside **WORKSPACE**, paste the following path, and click **Open project**:
+Click **New workspace** to open the macOS folder dialog. Select an existing folder or use the dialog's **New Folder** button, then choose **Open workspace**. There is no separate creation form or Margin shortcut in the chooser; **Customize Margin** opens the app source. Cancel keeps your current workspace. Folder creation and location selection happen in the native dialog.
 
-```text
-/Users/paraschopra/Documents/Code/steerbits-prototypes/test-projects-to-test-prototypes/inline-commenting-pi-codex-grill-frame-explore
-```
+The chooser starts near your previous selection, or `~/Projects` if it exists, otherwise your home folder. `MARGIN_WORKSPACE_PARENT` can supply the initial location. This native chooser currently targets macOS; other platforms can pre-register folders with `npm start -- --project /path/to/project`.
 
-Then select it and create a conversation. This is the folder containing `package.json`, `src/`, `server/`, and `docs/extensions.md`.
+Unavailable registered folders are omitted from the picker and sidebar. Their saved chats and notes remain stored and return when their folders are available again.
 
 The selected cco-default policy and launch commands are described in [cco integration](docs/sandboxing-proposal.md).
 
@@ -31,7 +31,7 @@ npm run build
 npm start
 ```
 
-Open **http://127.0.0.1:4317**. `npm start` now wraps the whole server with cco defaults. Run it from a normal Terminal; a process already inside a restrictive sandbox may be unable to apply Seatbelt. For development, `npm run dev` uses the same wrapper with automatic reloading. Explicit direct-launch commands are `npm run start:native` and `npm run dev:native`.
+Click the connection link printed in Terminal. It opens **http://127.0.0.1:4317** and connects this browser; later refreshes and restarts retain the connection. `npm start` launches a local gateway and starts one cco-wrapped Pi server per active workspace. Run it from a normal Terminal; a process already inside a restrictive sandbox cannot expand its inherited permissions. For development, `npm run dev` provides Vite browser updates; restart after backend/plugin changes. Explicit legacy direct-launch commands remain `npm run start:native` and `npm run dev:native`; `npm run start:single-sandbox` retains the former single cco server launcher.
 
 1. Open a project using the folder button, or select an existing project.
 2. Start a conversation. The default prefers your OpenAI Codex subscription model.
@@ -42,6 +42,8 @@ Open **http://127.0.0.1:4317**. `npm start` now wraps the whole server with cco 
 The **Thinking** dropdown beside the model selects effort for this conversation. It shows only levels supported by the current model, persists with the session, and is disabled while Pi is working. It does not change your global Pi defaults.
 
 Inline comments are sent as a normal user message: a short instruction followed by JSON with `inlineComments` (original `messageId`, `quotedPassage`, and `comment`) and `overallReply`. Visual highlighting and offsets stay in Margin; the model receives the quotations and feedback.
+
+Tool rows show their outcome as text as well as color. Gray is normal running/success styling; red means Pi reported a tool error. For bash this may be a nonzero exit code (including a search returning no matches), a timeout, a stopped command, or a permission failure. Open the row for the actual output. Red is not a separate command-approval or danger classification.
 
 ## Skills and authentication
 
@@ -57,13 +59,13 @@ An optional `MARGIN_AUTH_READ_ONLY=1` mode reads existing Pi credentials without
 
 See [the compatibility matrix](docs/compatibility.md) for native UI, generic fallbacks, and deferred terminal features. Common dialogs have HTML controls. Tool calls show progress, output, errors, and edit diffs. Unknown tools retain readable results and structured details. Unsupported interactive terminal components produce an explicit compatibility card and can be stopped.
 
-The interface does not impose a plan/execute mode: your selected skill and instructions determine when Pi proceeds. Adding a project loads its local Pi resources. Under cco, write access is fixed at server launch: use `npm start -- --project /path/to/project` or repeatable `--add-dir /path` options. Opening a folder in the browser does not expand that scope. All sessions share the same server sandbox. Margin runs only on loopback and assumes your local projects and installed extensions are trusted.
+The interface does not impose a plan/execute mode: your selected skill and instructions determine when Pi proceeds. Adding a project loads its local Pi resources. Choose any existing writable folder in the picker; the launcher starts a cco worker for that workspace when it is used. Chats within a workspace share that worker. `--project /path` chooses the initial workspace and repeated `--add-dir /path` pre-register additional workspaces; these flags no longer grant every worker access to all listed projects. Margin runs only on loopback and assumes your local projects and installed extensions are trusted.
 
 ## Persistence and customization
 
-App data is stored in `.margin-data/` by default: SQLite for projects, comments, drafts, and plugin data; native Pi JSONL for conversations. Set `MARGIN_DATA_DIR` to use another directory and `PORT` to choose a different local port. Browser disconnects leave agents and pending dialogs running on the server. A server restart restores saved conversations and drafts, but cannot resume an in-progress tool or its waiting promise.
+App data is stored in `.margin-data/` by default. The original SQLite database keeps the workspace registry and Margin-source conversations/history; external workspace workers use `workspace-data/<workspace ID>/` for their SQLite data and native Pi JSONL files. Existing external-workspace chats, comments, drafts and notes are copied on first use, preserving IDs and originals. Notes is available before creating a chat and remains shared across all chats in its workspace. Set `MARGIN_DATA_DIR` to use another directory and `PORT` to choose a different local port. Browser disconnects leave agents and pending dialogs running on the server. A server restart restores saved conversations and drafts, but cannot resume an in-progress tool or its waiting promise.
 
-[Architecture and plugin documentation](docs/extensions.md) describe browser panels, message actions, tool/custom-message renderers, project storage, event subscriptions, background Pi sessions, and the backend boundary. Full customization features and a plugin marketplace are deferred. Plugin code is trusted local code and needs a reload/restart, or a rebuild in production.
+[Architecture and plugin documentation](docs/extensions.md) describe browser panels, message actions, tool/custom-message renderers, project storage, event subscriptions, background Pi sessions, and the backend boundary. Customize Margin provides examples, plugin controls, and checkpoints; a plugin marketplace and separately running version previews remain deferred. Plugin code is trusted local code and needs a reload/restart, or a rebuild in production.
 
 To try customization through prompting, select **Margin's source folder** as the project, then use this prompt:
 
@@ -75,7 +77,7 @@ Background-agent primitives exist in the plugin API, but the default main agent 
 
 For a new skill, add `~/.pi/agent/skills/my-skill/SKILL.md` for global use, or `<project>/.pi/skills/my-skill/SKILL.md` for one project, then use **Reload skills**. Give the file `name` and `description` frontmatter followed by its instructions.
 
-Margin runs the Pi SDK inside its Node process, and `npm start` wraps that whole process with cco. Native cco defaults allow reading the host filesystem and directly modifying the primary project, explicitly added folders, and normal state/temp paths; network behavior remains unchanged. There are no extra command approvals or Apply/Discard steps. A direct `start:native` launch only has inherited OS restrictions. Skill instructions to wait remain behavioral instructions, separate from cco's enforced boundary.
+Margin runs Pi and server plugins inside each workspace's cco-wrapped Node process. The small local gateway handles browser authentication, folder selection, storage registration, and worker lifecycle; it does not execute agent sessions or server plugins. Native cco defaults allow reading the host filesystem and directly modifying the primary project, explicitly added folders, and normal state/temp paths; network behavior remains unchanged. There are no extra command approvals or Apply/Discard steps. A direct `start:native` launch only has inherited OS restrictions. Skill instructions to wait remain behavioral instructions, separate from cco's enforced boundary.
 
 ## Verification
 
@@ -84,6 +86,7 @@ npm test
 npm run build
 npx playwright install chromium
 npm run test:e2e
+npm run test:gateway
 # From a normal Terminal, verify actual cco isolation:
 npm run test:sandbox
 ```

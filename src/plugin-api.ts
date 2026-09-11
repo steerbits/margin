@@ -1,5 +1,16 @@
 import type { ComponentType } from "react";
-import type { Anchor, Message, Snapshot, ToolView } from "../shared/types.ts";
+import type {
+  Anchor,
+  Message,
+  Project,
+  Snapshot,
+  ToolView,
+} from "../shared/types.ts";
+export interface WorkspacePluginContext {
+  project: Project;
+  sessionId?: string;
+  action(name: string, input: unknown): Promise<unknown>;
+}
 export interface BrowserPluginContext {
   snapshot: Snapshot;
   state: unknown;
@@ -9,11 +20,13 @@ export interface BrowserPluginContext {
 export interface BrowserPlugin {
   id: string;
   apiVersion: 1;
-  panels?: {
+  panels?: ({
     id: string;
     title: string;
-    component: ComponentType<BrowserPluginContext>;
-  }[];
+  } & (
+    | { scope?: "session"; component: ComponentType<BrowserPluginContext> }
+    | { scope: "workspace"; component: ComponentType<WorkspacePluginContext> }
+  ))[];
   toolRenderers?: {
     matches: (tool: ToolView) => boolean;
     component: ComponentType<{ tool: ToolView; context: BrowserPluginContext }>;

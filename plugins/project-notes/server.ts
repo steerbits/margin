@@ -1,5 +1,8 @@
 import { z } from "zod";
-import type { PluginContext, ServerPlugin } from "../../server/plugin-api.ts";
+import type {
+  WorkspacePluginContext,
+  ServerPlugin,
+} from "../../server/plugin-api.ts";
 import {
   isNote,
   MAX_NOTE_LENGTH,
@@ -18,7 +21,7 @@ const saveInput = z
   })
   .strict();
 
-function load(context: PluginContext): Note {
+function load(context: WorkspacePluginContext): Note {
   const note = context.storage.get<unknown>("note");
   if (note === undefined) return { text: "", revision: 0 };
   if (!isNote(note))
@@ -26,6 +29,27 @@ function load(context: PluginContext): Note {
   return note;
 }
 
+function noteAction(
+  name: string,
+  input: unknown,
+  context: WorkspacePluginContext,
+) {
+  if (name === "load") {
+    const note = load(context);
+    return { note };
+  }
+  if (name !== "save") throw new Error("Unknown project-notes action.");
+  const proposed = saveInput.parse(input);
+  const current = load(context);
+  if (proposed.revision !== current.revision) {
+    return { saved: false, note: current } satisfies SaveResult;
+  }
+  // No await between revision check and write: actions are serialized by the
+  // single host's event loop. Storage is already scoped to this plugin/project.
+  const note = { text: proposed.text, revision: current.revision + 1 };
+  context.storage.set("note", note);
+  return { saved: true, note } satisfies SaveResult;
+}
 const plugin: ServerPlugin = {
   id: "project-notes",
   apiVersion: 1,
@@ -33,25 +57,12 @@ const plugin: ServerPlugin = {
     if (event.type === "session.ready")
       context.publish({ note: load(context) });
   },
+  workspaceAction: noteAction,
+  // Keep session actions compatible with existing clients and integrations.
   action(name, input, context) {
-    if (name === "load") {
-      const note = load(context);
-      context.publish({ note });
-      return { note };
-    }
-    if (name !== "save") throw new Error("Unknown project-notes action.");
-    const proposed = saveInput.parse(input);
-    const current = load(context);
-    if (proposed.revision !== current.revision) {
-      context.publish({ note: current });
-      return { saved: false, note: current } satisfies SaveResult;
-    }
-    // No await between revision check and write: actions are serialized by the
-    // single host's event loop. Storage is already scoped to this plugin/project.
-    const note = { text: proposed.text, revision: current.revision + 1 };
-    context.storage.set("note", note);
-    context.publish({ note });
-    return { saved: true, note } satisfies SaveResult;
+    const result = noteAction(name, input, context);
+    context.publish({ note: result.note });
+    return result;
   },
 };
 export default plugin;

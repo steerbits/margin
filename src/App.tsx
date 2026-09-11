@@ -27,6 +27,7 @@ import {
   Pencil,
   Plug,
   CornerDownRight,
+  SlidersHorizontal,
 } from "lucide-react";
 import type {
   Anchor,
@@ -42,7 +43,8 @@ import { anchorFromRange, rangeForAnchor } from "./anchors.ts";
 import { Markdown } from "./Markdown.tsx";
 import { ToolCard } from "./ToolCard.tsx";
 import { DialogCard } from "./DialogCard.tsx";
-import { browserPlugins } from "./plugins.ts";
+import { browserPlugins, loadBrowserPlugins } from "./plugins.ts";
+import { CustomizeMargin } from "./CustomizeMargin.tsx";
 import type { BrowserPluginContext } from "./plugin-api.ts";
 import { PluginBoundary } from "./PluginBoundary.tsx";
 import {
@@ -51,14 +53,19 @@ import {
   captureConversationPosition,
 } from "./PluginPanel.tsx";
 import { CustomMessage } from "./CustomMessage.tsx";
+import { captureCommentPosition, focusCommentEditor } from "./comment-focus.ts";
 
 interface Bootstrap {
   projects: Project[];
   sessions: SessionInfo[];
   models: ModelInfo[];
   modelError?: string;
+  workspaceErrors?: string[];
   readOnlyAuth: boolean;
   execution?: ExecutionInfo;
+  activePluginFolders?: string[];
+  marginProjectId?: string;
+  workspaceParent?: string;
 }
 interface DraftComment {
   id?: string;
@@ -72,7 +79,9 @@ export function App() {
     models: [],
     readOnlyAuth: false,
   });
-  const [projectId, setProjectId] = useState(""),
+  const [projectId, setProjectId] = useState(
+      () => localStorage.getItem("margin.project") ?? "",
+    ),
     [sessionId, setSessionId] = useState<string | null>(
       localStorage.getItem("margin.session"),
     );
@@ -91,9 +100,10 @@ export function App() {
     [error, setError] = useState(""),
     [connected, setConnected] = useState(false),
     [sending, setSending] = useState(false);
-  const [projectForm, setProjectForm] = useState(false),
-    [folderPath, setFolderPath] = useState(""),
+  const [choosingWorkspace, setChoosingWorkspace] = useState(false),
     [newModel, setNewModel] = useState("");
+  const [hubOpen, setHubOpen] = useState(false);
+  const choosingWorkspaceRef = useRef(false);
   const [panel, setPanel] = useState<string | null>(null),
     [commentGaps, setCommentGaps] = useState<Record<string, number>>({});
   const draftRef = useRef(""),
@@ -101,6 +111,11 @@ export function App() {
     saveTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined),
     scrollRef = useRef<HTMLDivElement>(null),
     railList = useRef<HTMLDivElement>(null);
+  const commentEditor = useRef<HTMLTextAreaElement>(null);
+  const pendingCommentFocus = useRef<{
+    id: string;
+    restore: () => void;
+  } | null>(null);
   const restoreConversation = useRef<(() => void) | undefined>(undefined);
   function changePanel(next: string | null) {
     if (next === panel) return;
@@ -118,15 +133,29 @@ export function App() {
     lastAccepted = useRef<string>("");
   const draftVersion = useRef(0),
     saveChain = useRef<Promise<unknown>>(Promise.resolve());
-  const currentProject = boot.projects.find(
-    (p) => p.id === (snapshot?.session.projectId ?? projectId),
-  );
+  const currentProject = boot.projects.find((p) => p.id === projectId);
   const fail = (e: unknown) =>
     setError(e instanceof Error ? e.message : String(e));
   const refresh = useCallback(async () => {
-    const b = await api<Bootstrap>("/bootstrap");
+    const b = await api<Bootstrap>(
+      `/bootstrap?projectId=${encodeURIComponent(localStorage.getItem("margin.project") ?? "")}`,
+    );
+    const pluginErrors = await loadBrowserPlugins(b.activePluginFolders);
+    if (pluginErrors.length)
+      setError(
+        `Some browser plugins could not load: ${pluginErrors.join("; ")}`,
+      );
     setBoot(b);
-    setProjectId((p) => p || b.projects[0]?.id || "");
+    setProjectId((p) =>
+      b.projects.some((project) => project.id === p)
+        ? p
+        : b.projects[0]?.id || "",
+    );
+    setSessionId((id) => {
+      if (!id || b.sessions.some((session) => session.id === id)) return id;
+      localStorage.removeItem("margin.session");
+      return null;
+    });
     setNewModel(
       (v) =>
         v ||
@@ -143,6 +172,9 @@ export function App() {
     void refresh().catch(fail);
   }, [refresh]);
   useEffect(() => {
+    if (projectId) localStorage.setItem("margin.project", projectId);
+  }, [projectId]);
+  useEffect(() => {
     selectedId.current = sessionId;
     setSnapshot(null);
     setConnected(false);
@@ -151,11 +183,20 @@ export function App() {
     setActive(null);
     setSkill("");
     setRail(false);
-    setPanel(null);
+    setPanel((current) =>
+      browserPlugins.some((p) =>
+        p.panels?.some(
+          (x) => `${p.id}:${x.id}` === current && x.scope === "workspace",
+        ),
+      )
+        ? current
+        : null,
+    );
     dirty.current = false;
     stickyBottom.current = true;
     if (saveTimer.current) clearTimeout(saveTimer.current);
     if (!sessionId) {
+      localStorage.removeItem("margin.session");
       setDraft("");
       draftRef.current = "";
       return;
@@ -230,6 +271,7 @@ export function App() {
     }
     try {
       await flushDraft();
+      setHubOpen(false);
       setSessionId(id);
       setError("");
     } catch (e) {
@@ -258,23 +300,65 @@ export function App() {
       setSending(false);
     }
   }
-  async function addProject() {
+  async function openCustomization() {
+    if (editing) {
+      setError("Finish or cancel your comment first.");
+      return;
+    }
+    await flushDraft();
+    setPanel(null);
+    setRail(false);
+    if (window.innerWidth <= 650) setSidebar(false);
+    setHubOpen(true);
+  }
+  async function customizationPrompt(project: Project, prompt: string) {
+    await flushDraft();
+    const s = await api<Snapshot>("/sessions", {
+      projectId: project.id,
+      model: boot.models.find((m) => modelKey(m) === newModel),
+    });
+    if (prompt)
+      await api(`/sessions/${s.session.id}/composer`, { text: prompt }, "PUT");
+    setProjectId(project.id);
+    setSessionId(s.session.id);
+    setHubOpen(false);
+  }
+  async function chooseWorkspace() {
+    if (choosingWorkspaceRef.current) return;
+    if (editing) {
+      setError("Finish or cancel your comment before changing workspaces.");
+      return;
+    }
+    choosingWorkspaceRef.current = true;
+    setChoosingWorkspace(true);
+    setError("");
     try {
-      const p = await api<Project>("/projects", { path: folderPath });
       await flushDraft();
-      setBoot((b) => ({
-        ...b,
-        projects: b.projects.some((x) => x.id === p.id)
-          ? b.projects
-          : [...b.projects, p],
-      }));
-      setProjectId(p.id);
-      setSessionId(null);
-      setProjectForm(false);
-      setFolderPath("");
+      const { project } = await api<{ project: Project | null }>(
+        "/workspaces/choose",
+        {},
+      );
+      if (project) await openProject(project);
     } catch (e) {
       fail(e);
+    } finally {
+      choosingWorkspaceRef.current = false;
+      setChoosingWorkspace(false);
     }
+  }
+  async function openProject(p: Project) {
+    await flushDraft();
+    setBoot((b) => ({
+      ...b,
+      projects: b.projects.some((x) => x.id === p.id)
+        ? b.projects
+        : [...b.projects, p],
+    }));
+    setProjectId(p.id);
+    setSessionId(null);
+    localStorage.removeItem("margin.session");
+    setHubOpen(false);
+    setError("");
   }
   async function saveComments(comments: Comment[]) {
     await api(`/sessions/${sessionId}/comments`, comments, "PUT");
@@ -351,6 +435,10 @@ export function App() {
       setError("Finish or cancel your current comment first.");
       return;
     }
+    pendingCommentFocus.current = {
+      id: "editing",
+      restore: captureCommentPosition(scrollRef.current, anchor),
+    };
     setEditing({ anchor, text: "" });
     setActive("editing");
     setRail(true);
@@ -488,6 +576,29 @@ export function App() {
       JSON.stringify(prev) === JSON.stringify(gaps) ? prev : gaps,
     );
   }, [snapshot?.messages, snapshot?.comments, editing, active, rail, sidebar]);
+  const editingId = editing ? (editing.id ?? "editing") : null;
+  useLayoutEffect(() => {
+    if (!editingId) {
+      pendingCommentFocus.current = null;
+      return;
+    }
+    const request = pendingCommentFocus.current;
+    if (!request || request.id !== editingId) return;
+    // The margin positions are applied in a second render. Focus in the next frame,
+    // cancelling/rescheduling if those positions changed before the frame runs.
+    const frame = requestAnimationFrame(() => {
+      if (
+        pendingCommentFocus.current !== request ||
+        !commentEditor.current ||
+        !scrollRef.current
+      )
+        return;
+      request.restore();
+      focusCommentEditor(scrollRef.current, commentEditor.current);
+      pendingCommentFocus.current = null;
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [editingId, commentGaps, rail, panel]);
   const pluginContext = (id: string): BrowserPluginContext => ({
     snapshot: snapshot!,
     state: snapshot?.pluginState[id],
@@ -515,12 +626,18 @@ export function App() {
           <span
             className="execution-mode"
             title={
-              boot.execution?.mode === "cco"
-                ? `Whole server launched through cco defaults. Writable application paths: ${boot.execution.writablePaths.join(", ")}. cco also permits its normal state and temporary paths.`
-                : "This server was started directly, without the cco wrapper."
+              boot.execution?.mode === "cco-workspaces"
+                ? "Each workspace runs its own Pi server inside cco defaults."
+                : boot.execution?.mode === "cco"
+                  ? `Whole server launched through cco defaults. Writable application paths: ${boot.execution.writablePaths.join(", ")}. cco also permits its normal state and temporary paths.`
+                  : "This server was started directly, without the cco wrapper."
             }
           >
-            {boot.execution?.mode === "cco" ? "cco sandbox" : "Native"}
+            {boot.execution?.mode === "cco-workspaces"
+              ? "cco · per workspace"
+              : boot.execution?.mode === "cco"
+                ? "cco sandbox"
+                : "Native"}
           </span>
           <span className="powered">Powered by Pi</span>
           <span className={`connection ${connected ? "connected" : ""}`}>
@@ -531,6 +648,14 @@ export function App() {
       </header>
       <div className="workspace">
         <aside className="sidebar">
+          <button
+            className="customize-entry"
+            aria-pressed={hubOpen}
+            onClick={() => void openCustomization().catch(fail)}
+          >
+            <SlidersHorizontal size={17} />
+            Customize Margin
+          </button>
           <div className="sidebar-heading">
             <span>WORKSPACE</span>
             <button
@@ -541,9 +666,11 @@ export function App() {
               <X size={16} />
             </button>
             <button
-              aria-label="Add project"
-              title="Add project"
-              onClick={() => setProjectForm(true)}
+              aria-label="New workspace"
+              title="Open or create a workspace"
+              disabled={choosingWorkspace}
+              aria-busy={choosingWorkspace}
+              onClick={() => void chooseWorkspace()}
             >
               <FolderPlus size={16} />
             </button>
@@ -567,14 +694,6 @@ export function App() {
               </option>
             ))}
           </select>
-          {boot.execution?.mode === "cco" &&
-            currentProject?.launchWritable === false && (
-              <p className="scope-hint">
-                This folder is outside the writable project paths for this
-                launch. To allow edits here, restart with <code>--add-dir</code>{" "}
-                and this folder.
-              </p>
-            )}
           <button
             className="new-chat"
             onClick={() => void createSession()}
@@ -609,66 +728,6 @@ export function App() {
           </div>
         </aside>
         <main className="main">
-          <div className="toolbar">
-            <div className="toolbar-left">
-              <button
-                aria-label={sidebar ? "Hide sidebar" : "Show sidebar"}
-                onClick={() => setSidebar(!sidebar)}
-              >
-                {sidebar ? (
-                  <PanelLeftClose size={18} />
-                ) : (
-                  <PanelLeftOpen size={18} />
-                )}
-              </button>
-              <Folder size={15} />
-              <span className="project-breadcrumb" title={currentProject?.path}>
-                {currentProject?.name ?? "Workspace"}
-              </span>
-              <span className="crumb-separator">/</span>
-              <span className="conversation-title">
-                {snapshot?.session.title ?? "New conversation"}
-              </span>
-            </div>
-            <div className="toolbar-actions">
-              {browserPlugins.flatMap(
-                (p) =>
-                  p.panels?.map((x) => (
-                    <button
-                      key={`${p.id}:${x.id}`}
-                      disabled={!snapshot}
-                      aria-controls="plugin-panel"
-                      aria-expanded={panel === `${p.id}:${x.id}`}
-                      className={
-                        panel === `${p.id}:${x.id}` ? "active-button" : ""
-                      }
-                      onClick={() => {
-                        changePanel(
-                          panel === `${p.id}:${x.id}`
-                            ? null
-                            : `${p.id}:${x.id}`,
-                        );
-                        setRail(false);
-                      }}
-                    >
-                      <Plug size={15} />
-                      {x.title}
-                    </button>
-                  )) ?? [],
-              )}
-              <button
-                className={rail ? "active-button" : ""}
-                disabled={!snapshot}
-                onClick={() => showComments(!rail)}
-              >
-                <MessageSquare size={16} />
-                Comments
-                {snapshot?.comments.length ? (
-                  <span className="count">{snapshot.comments.length}</span>
-                ) : null}
-              </button>
-            </div>
-          </div>
           {error && (
             <div className="notice error" role="alert">
               <span>{error}</span>
@@ -677,657 +736,800 @@ export function App() {
               </button>
             </div>
           )}
-          {boot.modelError && !sessionId && (
-            <div className="notice error">{boot.modelError}</div>
-          )}
-          {snapshot?.notices.map((n) => (
-            <div className={`notice ${n.level}`} key={n.id}>
-              <span>{n.text}</span>
-              <button
-                aria-label="Dismiss notification"
-                onClick={() =>
-                  void api(
-                    `/sessions/${sessionId}/notices/${n.id}/dismiss`,
-                    {},
-                  ).catch(fail)
-                }
-              >
-                <X size={15} />
-              </button>
+          {choosingWorkspace && (
+            <div className="notice" role="status">
+              Choose or create a folder in the system dialog.
             </div>
-          ))}
-          <ConversationWorkspace
-            scrollRef={scrollRef}
-            panel={
-              snapshot &&
-              panel &&
-              browserPlugins.flatMap(
-                (p) =>
-                  p.panels
-                    ?.filter((x) => `${p.id}:${x.id}` === panel)
-                    .map((x) => {
-                      const Component = x.component;
-                      return (
-                        <PluginPanel
-                          key={`${p.id}:${x.id}`}
-                          title={x.title}
-                          onClose={() => changePanel(null)}
-                        >
-                          <PluginBoundary name={p.id}>
-                            <Component {...pluginContext(p.id)} />
-                          </PluginBoundary>
-                        </PluginPanel>
-                      );
-                    }) ?? [],
-              )
-            }
-            onScroll={() => {
-              const e = scrollRef.current!;
-              stickyBottom.current =
-                e.scrollHeight - e.scrollTop - e.clientHeight < 90;
-              if (window.getSelection()?.isCollapsed) setSelection(null);
-              else captureSelection();
-            }}
-          >
-            {!snapshot ? (
-              <div className="welcome">
-                <div className="welcome-icon">
-                  <PanelRight size={32} />
-                </div>
-                <p className="eyebrow">A LITTLE SPACE TO THINK</p>
-                <h1>
-                  Good ideas deserve
-                  <br />a conversation.
-                </h1>
-                <p className="welcome-copy">
-                  Work with Pi. Read closely, leave comments in the margin,
-                  <br className="desktop-break" /> and shape the next step
-                  together.
-                </p>
-                <div className="start-card">
-                  <label htmlFor="start-model">Start with a model</label>
-                  <select
-                    id="start-model"
-                    value={newModel}
-                    onChange={(e) => setNewModel(e.target.value)}
-                  >
-                    {boot.models.map((m) => (
-                      <option key={modelKey(m)} value={modelKey(m)}>
-                        {m.name} · {m.provider}
-                      </option>
-                    ))}
-                  </select>
+          )}
+          {hubOpen ? (
+            <CustomizeMargin
+              onClose={() => setHubOpen(false)}
+              onPrompt={customizationPrompt}
+            />
+          ) : (
+            <>
+              <div className="toolbar">
+                <div className="toolbar-left">
                   <button
-                    className="primary"
-                    onClick={() => void createSession()}
-                    disabled={sending || !boot.models.length || !projectId}
+                    aria-label={sidebar ? "Hide sidebar" : "Show sidebar"}
+                    onClick={() => setSidebar(!sidebar)}
                   >
-                    <Plus size={16} />
-                    Start a conversation
+                    {sidebar ? (
+                      <PanelLeftClose size={18} />
+                    ) : (
+                      <PanelLeftOpen size={18} />
+                    )}
+                  </button>
+                  <Folder size={15} />
+                  <span
+                    className="project-breadcrumb"
+                    title={currentProject?.path}
+                  >
+                    {currentProject?.name ?? "Workspace"}
+                  </span>
+                  <span className="crumb-separator">/</span>
+                  <span className="conversation-title">
+                    {snapshot?.session.title ?? "New conversation"}
+                  </span>
+                </div>
+                <div className="toolbar-actions">
+                  {browserPlugins.flatMap(
+                    (p) =>
+                      p.panels?.map((x) => (
+                        <button
+                          key={`${p.id}:${x.id}`}
+                          disabled={
+                            x.scope === "workspace"
+                              ? !currentProject
+                              : !snapshot
+                          }
+                          aria-controls="plugin-panel"
+                          aria-expanded={panel === `${p.id}:${x.id}`}
+                          className={
+                            panel === `${p.id}:${x.id}` ? "active-button" : ""
+                          }
+                          onClick={() => {
+                            changePanel(
+                              panel === `${p.id}:${x.id}`
+                                ? null
+                                : `${p.id}:${x.id}`,
+                            );
+                            setRail(false);
+                          }}
+                        >
+                          <Plug size={15} />
+                          {x.title}
+                        </button>
+                      )) ?? [],
+                  )}
+                  <button
+                    className={rail ? "active-button" : ""}
+                    disabled={!snapshot}
+                    onClick={() => showComments(!rail)}
+                  >
+                    <MessageSquare size={16} />
+                    Comments
+                    {snapshot?.comments.length ? (
+                      <span className="count">{snapshot.comments.length}</span>
+                    ) : null}
                   </button>
                 </div>
-                {!boot.models.length && (
-                  <p className="setup-hint">
-                    Sign in through <code>pi</code> → <code>/login</code>, then{" "}
-                    <button
-                      className="text-link"
-                      onClick={() =>
-                        void api("/models/refresh", {})
-                          .then(refresh)
-                          .catch(fail)
-                      }
-                    >
-                      refresh models
-                    </button>
-                    .
-                  </p>
-                )}
-                <div className="welcome-steps">
-                  <span>
-                    <BookOpen size={17} />
-                    Choose a skill, or just talk
-                  </span>
-                  <span>
-                    <MessageSquarePlus size={17} />
-                    Select any passage to comment
-                  </span>
-                  <span>
-                    <CornerDownRight size={17} />
-                    Send your thoughts together
-                  </span>
-                </div>
               </div>
-            ) : (
-              <div className={`review ${rail ? "with-rail" : ""}`}>
-                <div className="thread">
-                  <div className="conversation-date">
-                    {new Date(snapshot.session.createdAt).toLocaleDateString(
-                      undefined,
-                      { month: "long", day: "numeric" },
-                    )}
-                  </div>
-                  {!snapshot.messages.length && (
-                    <div className="empty-conversation">
-                      <div className="agent-avatar">
-                        <Terminal size={18} />
-                      </div>
-                      <h2>What would you like to work on?</h2>
-                      <p>
-                        Choose a skill below to guide the conversation,
-                        <br />
-                        or start with whatever is on your mind.
-                      </p>
-                    </div>
-                  )}
-                  {snapshot.messages.map((m) =>
-                    m.role === "tool" && m.tool ? (
-                      <ToolCard
-                        key={m.id}
-                        tool={m.tool}
-                        context={pluginContext}
-                      />
-                    ) : m.role === "custom" ? (
-                      <CustomMessage
-                        key={m.id}
-                        message={m}
-                        context={pluginContext}
-                      />
-                    ) : (
-                      <article
-                        key={m.id}
-                        className={`message ${m.role}`}
-                        aria-label={
-                          m.role === "assistant"
-                            ? "Assistant reply"
-                            : "Your message"
-                        }
-                      >
-                        {m.role === "assistant" ? (
-                          <>
-                            <div className="agent-label">
-                              <div className="agent-avatar">
-                                <Terminal size={15} />
-                              </div>
-                              <span>{agentName}</span>
-                              <span className="agent-model">{model?.name}</span>
-                              {m.streaming && (
-                                <span className="streaming-dot" />
-                              )}
-                            </div>
-                            {m.thinking && (
-                              <details className="thinking">
-                                <summary>Thinking</summary>
-                                <Markdown text={m.thinking} />
-                              </details>
-                            )}
-                            <div
-                              className="markdown"
-                              data-annotation-root={
-                                m.streaming ? undefined : ""
-                              }
-                              data-message-id={m.id}
-                              onMouseUp={() => setTimeout(captureSelection, 0)}
-                              onKeyUp={captureSelection}
-                              onClick={(e) => {
-                                if (window.getSelection()?.toString()) return;
-                                for (const c of snapshot.comments.filter(
-                                  (c) =>
-                                    c.anchor.messageId === m.id &&
-                                    c.status !== "resolved",
-                                )) {
-                                  const r = rangeForAnchor(
-                                    e.currentTarget,
-                                    c.anchor,
-                                  );
-                                  if (
-                                    r &&
-                                    [...r.getClientRects()].some(
-                                      (rect) =>
-                                        e.clientX >= rect.left &&
-                                        e.clientX <= rect.right &&
-                                        e.clientY >= rect.top &&
-                                        e.clientY <= rect.bottom,
-                                    )
-                                  ) {
-                                    e.preventDefault();
-                                    setActive(c.id);
-                                    setRail(true);
-                                    break;
-                                  }
-                                }
-                              }}
-                            >
-                              <Markdown text={m.text} />
-                            </div>
-                            {m.error && (
-                              <p className="error-text" role="alert">
-                                {m.error}
-                              </p>
-                            )}
-                            {!m.streaming && m.text && (
-                              <div className="message-actions">
-                                <button
-                                  className="small muted"
-                                  onClick={() => {
-                                    const root =
-                                      document.querySelector<HTMLElement>(
-                                        `[data-message-id="${CSS.escape(m.id)}"]`,
-                                      );
-                                    if (root) {
-                                      const r = document.createRange();
-                                      r.selectNodeContents(root);
-                                      const a = anchorFromRange(root, r, m.id);
-                                      if (a) startComment(a);
-                                    }
-                                  }}
-                                >
-                                  <MessageSquarePlus size={14} />
-                                  Comment on reply
-                                </button>
-                                {browserPlugins.flatMap(
-                                  (p) =>
-                                    p.messageActions?.map((a) => (
-                                      <button
-                                        className="small muted"
-                                        key={`${p.id}:${a.id}`}
-                                        onClick={() =>
-                                          void Promise.resolve()
-                                            .then(() =>
-                                              a.run(m, pluginContext(p.id)),
-                                            )
-                                            .catch(fail)
-                                        }
-                                      >
-                                        {a.label}
-                                      </button>
-                                    )) ?? [],
-                                )}
-                              </div>
-                            )}
-                          </>
-                        ) : (
-                          <div>
-                            {m.skill && (
-                              <div className="skill-used">
-                                <BookOpen size={12} />
-                                {m.skill}
-                              </div>
-                            )}
-                            <UserMessage text={m.text} />
-                          </div>
-                        )}
-                      </article>
-                    ),
-                  )}
-                  {busy && (
-                    <div className="working">
-                      <span className="streaming-dot" />
-                      {Object.values(snapshot.statuses).at(-1) ??
-                        (snapshot.dialogs.length
-                          ? "Waiting for you"
-                          : `${agentName} is working…`)}
-                    </div>
-                  )}
-                  {Object.entries(snapshot.widgets).map(([key, lines]) => (
-                    <div className="widget" key={key}>
-                      {lines.map((line, i) => (
-                        <div key={i}>{line}</div>
-                      ))}
-                    </div>
-                  ))}
-                  {snapshot.dialogs.map((d) => (
-                    <DialogCard
-                      key={d.id}
-                      dialog={d}
-                      onAnswer={async (id, value, cancelled) => {
-                        await api(`/sessions/${sessionId}/dialogs/${id}`, {
-                          value,
-                          cancelled,
-                        });
-                      }}
-                    />
-                  ))}
-                  <form
-                    className="composer"
-                    onSubmit={(e) => {
-                      e.preventDefault();
-                      void send();
-                    }}
+              {!!boot.workspaceErrors?.length && (
+                <div className="notice error" role="alert">
+                  <span>
+                    Some workspace data is unavailable:{" "}
+                    {boot.workspaceErrors.join("; ")}
+                  </span>
+                  <button onClick={() => void refresh().catch(fail)}>
+                    Retry
+                  </button>
+                </div>
+              )}
+              {boot.modelError && !sessionId && (
+                <div className="notice error">{boot.modelError}</div>
+              )}
+              {snapshot?.notices.map((n) => (
+                <div className={`notice ${n.level}`} key={n.id}>
+                  <span>{n.text}</span>
+                  <button
+                    aria-label="Dismiss notification"
+                    onClick={() =>
+                      void api(
+                        `/sessions/${sessionId}/notices/${n.id}/dismiss`,
+                        {},
+                      ).catch(fail)
+                    }
                   >
-                    {draftCount > 0 && (
-                      <button
-                        type="button"
-                        className="batch-chip"
-                        onClick={() => showComments(true)}
-                      >
-                        <MessageSquare size={13} />
-                        {draftCount} draft comment{draftCount === 1 ? "" : "s"}{" "}
-                        attached
-                      </button>
-                    )}
-                    <textarea
-                      aria-label={`Message ${agentName}`}
-                      placeholder={
-                        draftCount
-                          ? "Add an overall reply (optional)…"
-                          : `Message ${agentName}, or select a passage above to comment…`
-                      }
-                      value={draft}
-                      onChange={(e) => updateDraft(e.target.value)}
-                      rows={3}
-                      onKeyDown={(e) => {
-                        if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
-                          e.preventDefault();
-                          if (!busy && !editing) void send();
-                        }
-                      }}
-                    />
-                    <div className="composer-footer">
-                      <div className="composer-options">
-                        <label className="skill-choice">
-                          <BookOpen size={14} />
-                          <select
-                            aria-label="Starting skill"
-                            value={skill}
-                            onChange={(e) => setSkill(e.target.value)}
-                            disabled={busy}
-                          >
-                            <option value="">No skill</option>
-                            {snapshot.skills.map((s) => (
-                              <option key={s.filePath} value={s.name}>
-                                {s.name}
-                              </option>
-                            ))}
-                          </select>
-                        </label>
-                        <button
-                          type="button"
-                          aria-label="Reload skills"
-                          title="Reload Pi skills and extensions"
-                          disabled={busy}
-                          onClick={() =>
-                            void api(`/sessions/${sessionId}/reload`, {}).catch(
-                              fail,
-                            )
-                          }
-                        >
-                          <RefreshCw size={13} />
-                        </button>
-                      </div>
-                      {busy ? (
-                        <button
-                          type="button"
-                          className="stop-button"
-                          onClick={() =>
-                            void api(`/sessions/${sessionId}/stop`, {}).catch(
-                              fail,
-                            )
-                          }
-                        >
-                          <Square size={12} fill="currentColor" />
-                          Stop
-                        </button>
-                      ) : (
-                        <button
-                          className="send-button"
-                          aria-label={
-                            draftCount
-                              ? `Send ${draftCount} comment${draftCount === 1 ? "" : "s"}`
-                              : "Send message"
-                          }
-                          type="submit"
-                          disabled={
-                            sending ||
-                            !!editing ||
-                            (!draft.trim() && !draftCount) ||
-                            !connected
-                          }
-                        >
-                          <ArrowUp size={19} />
-                        </button>
-                      )}
-                    </div>
-                  </form>
-                  <div className="composer-hint">
-                    <span>
-                      {editing
-                        ? "Finish or cancel your draft comment before sending."
-                        : skill
-                          ? `${skill} will guide your next message`
-                          : "Your skill sets the pace. Your comments shape the work."}
-                    </span>
-                    <kbd>⌘ ↵</kbd>
-                  </div>
-                  {model && (
-                    <div className="model-footer">
-                      <span className="model-dot" />
-                      <select
-                        aria-label="Model"
-                        disabled={busy}
-                        value={modelKey(model)}
-                        onChange={(e) => {
-                          const m = boot.models.find(
-                            (m) => modelKey(m) === e.target.value,
+                    <X size={15} />
+                  </button>
+                </div>
+              ))}
+              <ConversationWorkspace
+                scrollRef={scrollRef}
+                panel={
+                  panel &&
+                  browserPlugins.flatMap(
+                    (p) =>
+                      p.panels
+                        ?.filter(
+                          (x) =>
+                            `${p.id}:${x.id}` === panel &&
+                            (x.scope === "workspace"
+                              ? !!currentProject
+                              : !!snapshot),
+                        )
+                        .map((x) => {
+                          const content =
+                            x.scope === "workspace"
+                              ? (() => {
+                                  const Component = x.component;
+                                  const project = currentProject!;
+                                  return (
+                                    <Component
+                                      project={project}
+                                      sessionId={sessionId ?? undefined}
+                                      action={(name, input) =>
+                                        api(
+                                          `/projects/${project.id}/plugins/${p.id}/${name}`,
+                                          input,
+                                        )
+                                      }
+                                    />
+                                  );
+                                })()
+                              : (() => {
+                                  const Component = x.component;
+                                  return <Component {...pluginContext(p.id)} />;
+                                })();
+                          return (
+                            <PluginPanel
+                              key={`${p.id}:${x.id}`}
+                              title={x.title}
+                              onClose={() => changePanel(null)}
+                            >
+                              <PluginBoundary name={p.id}>
+                                {content}
+                              </PluginBoundary>
+                            </PluginPanel>
                           );
-                          if (m)
-                            void api(`/sessions/${sessionId}/model`, {
-                              provider: m.provider,
-                              id: m.id,
-                            }).catch(fail);
-                        }}
+                        }) ?? [],
+                  )
+                }
+                onScroll={() => {
+                  const e = scrollRef.current!;
+                  stickyBottom.current =
+                    e.scrollHeight - e.scrollTop - e.clientHeight < 90;
+                  if (window.getSelection()?.isCollapsed) setSelection(null);
+                  else captureSelection();
+                }}
+              >
+                {!snapshot ? (
+                  <div className="welcome">
+                    <div className="welcome-icon">
+                      <PanelRight size={32} />
+                    </div>
+                    <p className="eyebrow">A LITTLE SPACE TO THINK</p>
+                    <h1>
+                      Good ideas deserve
+                      <br />a conversation.
+                    </h1>
+                    <p className="welcome-copy">
+                      Work with Pi. Read closely, leave comments in the margin,
+                      <br className="desktop-break" /> and shape the next step
+                      together.
+                    </p>
+                    <div className="start-card">
+                      <label htmlFor="start-model">Start with a model</label>
+                      <select
+                        id="start-model"
+                        value={newModel}
+                        onChange={(e) => setNewModel(e.target.value)}
                       >
                         {boot.models.map((m) => (
                           <option key={modelKey(m)} value={modelKey(m)}>
-                            {m.name}
+                            {m.name} · {m.provider}
                           </option>
                         ))}
                       </select>
-                      {snapshot.thinking && (
-                        <label className="thinking-choice">
-                          <span>Thinking</span>
-                          <select
-                            aria-label="Thinking effort"
-                            disabled={
-                              busy || snapshot.thinking.available.length < 2
-                            }
-                            value={snapshot.thinking.level}
-                            onChange={(event) =>
-                              void api(`/sessions/${sessionId}/thinking`, {
-                                level: event.target.value,
-                              }).catch(fail)
+                      <button
+                        className="primary"
+                        onClick={() => void createSession()}
+                        disabled={sending || !boot.models.length || !projectId}
+                      >
+                        <Plus size={16} />
+                        Start a conversation
+                      </button>
+                    </div>
+                    {!boot.models.length && (
+                      <p className="setup-hint">
+                        Sign in through <code>pi</code> → <code>/login</code>,
+                        then{" "}
+                        <button
+                          className="text-link"
+                          onClick={() =>
+                            void api("/models/refresh", {})
+                              .then(refresh)
+                              .catch(fail)
+                          }
+                        >
+                          refresh models
+                        </button>
+                        .
+                      </p>
+                    )}
+                    <div className="welcome-steps">
+                      <span>
+                        <BookOpen size={17} />
+                        Choose a skill, or just talk
+                      </span>
+                      <span>
+                        <MessageSquarePlus size={17} />
+                        Select any passage to comment
+                      </span>
+                      <span>
+                        <CornerDownRight size={17} />
+                        Send your thoughts together
+                      </span>
+                    </div>
+                  </div>
+                ) : (
+                  <div className={`review ${rail ? "with-rail" : ""}`}>
+                    <div className="thread">
+                      <div className="conversation-date">
+                        {new Date(
+                          snapshot.session.createdAt,
+                        ).toLocaleDateString(undefined, {
+                          month: "long",
+                          day: "numeric",
+                        })}
+                      </div>
+                      {!snapshot.messages.length && (
+                        <div className="empty-conversation">
+                          <div className="agent-avatar">
+                            <Terminal size={18} />
+                          </div>
+                          <h2>What would you like to work on?</h2>
+                          <p>
+                            Choose a skill below to guide the conversation,
+                            <br />
+                            or start with whatever is on your mind.
+                          </p>
+                        </div>
+                      )}
+                      {snapshot.messages.map((m) =>
+                        m.role === "tool" && m.tool ? (
+                          <ToolCard
+                            key={m.id}
+                            tool={m.tool}
+                            context={pluginContext}
+                          />
+                        ) : m.role === "custom" ? (
+                          <CustomMessage
+                            key={m.id}
+                            message={m}
+                            context={pluginContext}
+                          />
+                        ) : (
+                          <article
+                            key={m.id}
+                            className={`message ${m.role}`}
+                            aria-label={
+                              m.role === "assistant"
+                                ? "Assistant reply"
+                                : "Your message"
                             }
                           >
-                            {snapshot.thinking.available.map((level) => (
-                              <option key={level} value={level}>
-                                {level === "xhigh"
-                                  ? "Extra high"
-                                  : level.charAt(0).toUpperCase() +
-                                    level.slice(1)}
+                            {m.role === "assistant" ? (
+                              <>
+                                <div className="agent-label">
+                                  <div className="agent-avatar">
+                                    <Terminal size={15} />
+                                  </div>
+                                  <span>{agentName}</span>
+                                  <span className="agent-model">
+                                    {model?.name}
+                                  </span>
+                                  {m.streaming && (
+                                    <span className="streaming-dot" />
+                                  )}
+                                </div>
+                                {m.thinking && (
+                                  <details className="thinking">
+                                    <summary>Thinking</summary>
+                                    <Markdown text={m.thinking} />
+                                  </details>
+                                )}
+                                <div
+                                  className="markdown"
+                                  data-annotation-root={
+                                    m.streaming ? undefined : ""
+                                  }
+                                  data-message-id={m.id}
+                                  onMouseUp={() =>
+                                    setTimeout(captureSelection, 0)
+                                  }
+                                  onKeyUp={captureSelection}
+                                  onClick={(e) => {
+                                    if (window.getSelection()?.toString())
+                                      return;
+                                    for (const c of snapshot.comments.filter(
+                                      (c) =>
+                                        c.anchor.messageId === m.id &&
+                                        c.status !== "resolved",
+                                    )) {
+                                      const r = rangeForAnchor(
+                                        e.currentTarget,
+                                        c.anchor,
+                                      );
+                                      if (
+                                        r &&
+                                        [...r.getClientRects()].some(
+                                          (rect) =>
+                                            e.clientX >= rect.left &&
+                                            e.clientX <= rect.right &&
+                                            e.clientY >= rect.top &&
+                                            e.clientY <= rect.bottom,
+                                        )
+                                      ) {
+                                        e.preventDefault();
+                                        setActive(c.id);
+                                        setRail(true);
+                                        break;
+                                      }
+                                    }
+                                  }}
+                                >
+                                  <Markdown text={m.text} />
+                                </div>
+                                {m.error && (
+                                  <p className="error-text" role="alert">
+                                    {m.error}
+                                  </p>
+                                )}
+                                {!m.streaming && m.text && (
+                                  <div className="message-actions">
+                                    <button
+                                      className="small muted"
+                                      onClick={() => {
+                                        const root =
+                                          document.querySelector<HTMLElement>(
+                                            `[data-message-id="${CSS.escape(m.id)}"]`,
+                                          );
+                                        if (root) {
+                                          const r = document.createRange();
+                                          r.selectNodeContents(root);
+                                          const a = anchorFromRange(
+                                            root,
+                                            r,
+                                            m.id,
+                                          );
+                                          if (a) startComment(a);
+                                        }
+                                      }}
+                                    >
+                                      <MessageSquarePlus size={14} />
+                                      Comment on reply
+                                    </button>
+                                    {browserPlugins.flatMap(
+                                      (p) =>
+                                        p.messageActions?.map((a) => (
+                                          <button
+                                            className="small muted"
+                                            key={`${p.id}:${a.id}`}
+                                            onClick={() =>
+                                              void Promise.resolve()
+                                                .then(() =>
+                                                  a.run(m, pluginContext(p.id)),
+                                                )
+                                                .catch(fail)
+                                            }
+                                          >
+                                            {a.label}
+                                          </button>
+                                        )) ?? [],
+                                    )}
+                                  </div>
+                                )}
+                              </>
+                            ) : (
+                              <div className="user-message-content">
+                                {m.skill && (
+                                  <div className="skill-used">
+                                    <BookOpen size={12} />
+                                    {m.skill}
+                                  </div>
+                                )}
+                                <UserMessage text={m.text} />
+                              </div>
+                            )}
+                          </article>
+                        ),
+                      )}
+                      {busy && (
+                        <div className="working">
+                          <span className="streaming-dot" />
+                          {Object.values(snapshot.statuses).at(-1) ??
+                            (snapshot.dialogs.length
+                              ? "Waiting for you"
+                              : `${agentName} is working…`)}
+                        </div>
+                      )}
+                      {Object.entries(snapshot.widgets).map(([key, lines]) => (
+                        <div className="widget" key={key}>
+                          {lines.map((line, i) => (
+                            <div key={i}>{line}</div>
+                          ))}
+                        </div>
+                      ))}
+                      {snapshot.dialogs.map((d) => (
+                        <DialogCard
+                          key={d.id}
+                          dialog={d}
+                          onAnswer={async (id, value, cancelled) => {
+                            await api(`/sessions/${sessionId}/dialogs/${id}`, {
+                              value,
+                              cancelled,
+                            });
+                          }}
+                        />
+                      ))}
+                      <form
+                        className="composer"
+                        onSubmit={(e) => {
+                          e.preventDefault();
+                          void send();
+                        }}
+                      >
+                        {draftCount > 0 && (
+                          <button
+                            type="button"
+                            className="batch-chip"
+                            onClick={() => showComments(true)}
+                          >
+                            <MessageSquare size={13} />
+                            {draftCount} draft comment
+                            {draftCount === 1 ? "" : "s"} attached
+                          </button>
+                        )}
+                        <textarea
+                          aria-label={`Message ${agentName}`}
+                          placeholder={
+                            draftCount
+                              ? "Add an overall reply (optional)…"
+                              : `Message ${agentName}, or select a passage above to comment…`
+                          }
+                          value={draft}
+                          onChange={(e) => updateDraft(e.target.value)}
+                          rows={3}
+                          onKeyDown={(e) => {
+                            if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
+                              e.preventDefault();
+                              if (!busy && !editing) void send();
+                            }
+                          }}
+                        />
+                        <div className="composer-footer">
+                          <div className="composer-options">
+                            <label className="skill-choice">
+                              <BookOpen size={14} />
+                              <select
+                                aria-label="Starting skill"
+                                value={skill}
+                                onChange={(e) => setSkill(e.target.value)}
+                                disabled={busy}
+                              >
+                                <option value="">No skill</option>
+                                {snapshot.skills.map((s) => (
+                                  <option key={s.filePath} value={s.name}>
+                                    {s.name}
+                                  </option>
+                                ))}
+                              </select>
+                            </label>
+                            <button
+                              type="button"
+                              aria-label="Reload skills"
+                              title="Reload Pi skills and extensions"
+                              disabled={busy}
+                              onClick={() =>
+                                void api(
+                                  `/sessions/${sessionId}/reload`,
+                                  {},
+                                ).catch(fail)
+                              }
+                            >
+                              <RefreshCw size={13} />
+                            </button>
+                          </div>
+                          {busy ? (
+                            <button
+                              type="button"
+                              className="stop-button"
+                              onClick={() =>
+                                void api(
+                                  `/sessions/${sessionId}/stop`,
+                                  {},
+                                ).catch(fail)
+                              }
+                            >
+                              <Square size={12} fill="currentColor" />
+                              Stop
+                            </button>
+                          ) : (
+                            <button
+                              className="send-button"
+                              aria-label={
+                                draftCount
+                                  ? `Send ${draftCount} comment${draftCount === 1 ? "" : "s"}`
+                                  : "Send message"
+                              }
+                              type="submit"
+                              disabled={
+                                sending ||
+                                !!editing ||
+                                (!draft.trim() && !draftCount) ||
+                                !connected
+                              }
+                            >
+                              <ArrowUp size={19} />
+                            </button>
+                          )}
+                        </div>
+                      </form>
+                      <div className="composer-hint">
+                        <span>
+                          {editing
+                            ? "Finish or cancel your draft comment before sending."
+                            : skill
+                              ? `${skill} will guide your next message`
+                              : "Your skill sets the pace. Your comments shape the work."}
+                        </span>
+                        <kbd>⌘ ↵</kbd>
+                      </div>
+                      {model && (
+                        <div className="model-footer">
+                          <span className="model-dot" />
+                          <select
+                            aria-label="Model"
+                            disabled={busy}
+                            value={modelKey(model)}
+                            onChange={(e) => {
+                              const m = boot.models.find(
+                                (m) => modelKey(m) === e.target.value,
+                              );
+                              if (m)
+                                void api(`/sessions/${sessionId}/model`, {
+                                  provider: m.provider,
+                                  id: m.id,
+                                }).catch(fail);
+                            }}
+                          >
+                            {boot.models.map((m) => (
+                              <option key={modelKey(m)} value={modelKey(m)}>
+                                {m.name}
                               </option>
                             ))}
                           </select>
-                        </label>
-                      )}
-                      <span>
-                        {model.provider === "openai-codex" && model.subscription
-                          ? "ChatGPT subscription"
-                          : model.provider === "anthropic" && model.subscription
-                            ? "Claude · extra usage"
-                            : model.provider}
-                      </span>
-                    </div>
-                  )}
-                </div>
-                {rail && (
-                  <aside className="comment-rail" aria-label="Comments">
-                    <div className="rail-heading">
-                      <div>
-                        <MessageSquare size={16} />
-                        <strong>Comments</strong>
-                        <span className="count">
-                          {snapshot.comments.length}
-                        </span>
-                      </div>
-                      <button
-                        aria-label="Close comments"
-                        onClick={() => showComments(false)}
-                      >
-                        <X size={17} />
-                      </button>
-                    </div>
-                    <p className="rail-hint">
-                      A thought here. A question there.
-                      <br />
-                      Send them together when you’re ready.
-                    </p>
-                    <div ref={railList} className="comment-list">
-                      {!allComments.length && (
-                        <div className="comment-empty">
-                          <MessageSquarePlus size={25} />
-                          <p>
-                            Select a passage in a reply, then choose{" "}
-                            <strong>Comment</strong>.
-                          </p>
-                          <span>Or use “Comment on reply” below it.</span>
+                          {snapshot.thinking && (
+                            <label className="thinking-choice">
+                              <span>Thinking</span>
+                              <select
+                                aria-label="Thinking effort"
+                                disabled={
+                                  busy || snapshot.thinking.available.length < 2
+                                }
+                                value={snapshot.thinking.level}
+                                onChange={(event) =>
+                                  void api(`/sessions/${sessionId}/thinking`, {
+                                    level: event.target.value,
+                                  }).catch(fail)
+                                }
+                              >
+                                {snapshot.thinking.available.map((level) => (
+                                  <option key={level} value={level}>
+                                    {level === "xhigh"
+                                      ? "Extra high"
+                                      : level.charAt(0).toUpperCase() +
+                                        level.slice(1)}
+                                  </option>
+                                ))}
+                              </select>
+                            </label>
+                          )}
+                          <span>
+                            {model.provider === "openai-codex" &&
+                            model.subscription
+                              ? "ChatGPT subscription"
+                              : model.provider === "anthropic" &&
+                                  model.subscription
+                                ? "Claude · extra usage"
+                                : model.provider}
+                          </span>
                         </div>
                       )}
-                      {allComments.map((c) => {
-                        const isEditing =
-                          c.id === "editing" || editing?.id === c.id;
-                        return (
-                          <div
-                            className={`comment-card ${active === c.id ? "active" : ""} ${c.status === "resolved" ? "resolved" : ""}`}
-                            key={c.id}
-                            data-comment-id={c.id}
-                            style={{ marginTop: commentGaps[c.id] ?? 12 }}
-                          >
-                            <div className="comment-meta">
-                              <span className="avatar">Y</span>
-                              <strong>You</strong>
-                              <span className="comment-state">
-                                {isEditing
-                                  ? "Draft"
-                                  : c.status === "sent"
-                                    ? "Sent"
-                                    : c.status === "resolved"
-                                      ? "Resolved"
-                                      : "Draft"}
-                              </span>
-                            </div>
-                            <button
-                              className="comment-quote"
-                              title="Jump to original passage"
-                              onClick={() => jump(c)}
-                            >
-                              {c.anchor.quote}
-                            </button>
-                            {isEditing ? (
-                              <>
-                                <textarea
-                                  aria-label="Inline comment"
-                                  autoFocus
-                                  rows={3}
-                                  placeholder="What’s your thought?"
-                                  value={editing?.text ?? ""}
-                                  onChange={(e) =>
-                                    setEditing((prev) =>
-                                      prev
-                                        ? { ...prev, text: e.target.value }
-                                        : prev,
-                                    )
-                                  }
-                                  onKeyDown={(e) => {
-                                    if (
-                                      (e.metaKey || e.ctrlKey) &&
-                                      e.key === "Enter"
-                                    ) {
-                                      e.preventDefault();
-                                      void saveComment();
-                                    }
-                                    if (e.key === "Escape") setEditing(null);
-                                  }}
-                                />
-                                <div className="comment-actions">
-                                  <button onClick={() => setEditing(null)}>
-                                    Cancel
-                                  </button>
-                                  <button
-                                    className="primary"
-                                    disabled={!editing?.text.trim()}
-                                    onClick={() => void saveComment()}
-                                  >
-                                    {editing?.id ? "Save" : "Add comment"}
-                                  </button>
-                                </div>
-                              </>
-                            ) : (
-                              <>
-                                <p className="comment-text">{c.text}</p>
-                                <div className="comment-actions">
-                                  {c.status === "draft" ? (
-                                    <>
-                                      <button
-                                        aria-label="Edit comment"
-                                        onClick={() => {
-                                          if (editing) return;
-                                          setEditing({
-                                            id: c.id,
-                                            anchor: c.anchor,
-                                            text: c.text,
-                                          });
-                                        }}
-                                      >
-                                        <Pencil size={13} />
-                                      </button>
-                                      <button
-                                        aria-label="Delete comment"
-                                        onClick={() =>
-                                          void saveComments(
-                                            snapshot.comments.filter(
-                                              (x) => x.id !== c.id,
-                                            ),
-                                          ).catch(fail)
-                                        }
-                                      >
-                                        <Trash2 size={13} />
-                                      </button>
-                                    </>
-                                  ) : (
-                                    <button
-                                      onClick={() =>
-                                        void saveComments(
-                                          snapshot.comments.map((x) =>
-                                            x.id === c.id
-                                              ? {
-                                                  ...x,
-                                                  status:
-                                                    c.status === "resolved"
-                                                      ? "sent"
-                                                      : "resolved",
-                                                }
-                                              : x,
-                                          ),
-                                        ).catch(fail)
-                                      }
-                                    >
-                                      <Check size={13} />
-                                      {c.status === "resolved"
-                                        ? "Reopen"
-                                        : "Resolve"}
-                                    </button>
-                                  )}
-                                </div>
-                              </>
-                            )}
-                          </div>
-                        );
-                      })}
                     </div>
-                  </aside>
+                    {rail && (
+                      <aside className="comment-rail" aria-label="Comments">
+                        <div className="rail-heading">
+                          <div>
+                            <MessageSquare size={16} />
+                            <strong>Comments</strong>
+                            <span className="count">
+                              {snapshot.comments.length}
+                            </span>
+                          </div>
+                          <button
+                            aria-label="Close comments"
+                            onClick={() => showComments(false)}
+                          >
+                            <X size={17} />
+                          </button>
+                        </div>
+                        <p className="rail-hint">
+                          A thought here. A question there.
+                          <br />
+                          Send them together when you’re ready.
+                        </p>
+                        <div ref={railList} className="comment-list">
+                          {!allComments.length && (
+                            <div className="comment-empty">
+                              <MessageSquarePlus size={25} />
+                              <p>
+                                Select a passage in a reply, then choose{" "}
+                                <strong>Comment</strong>.
+                              </p>
+                              <span>Or use “Comment on reply” below it.</span>
+                            </div>
+                          )}
+                          {allComments.map((c) => {
+                            const isEditing =
+                              c.id === "editing" || editing?.id === c.id;
+                            return (
+                              <div
+                                className={`comment-card ${active === c.id ? "active" : ""} ${c.status === "resolved" ? "resolved" : ""}`}
+                                key={c.id}
+                                data-comment-id={c.id}
+                                style={{ marginTop: commentGaps[c.id] ?? 12 }}
+                              >
+                                <div className="comment-meta">
+                                  <span className="avatar">Y</span>
+                                  <strong>You</strong>
+                                  <span className="comment-state">
+                                    {isEditing
+                                      ? "Draft"
+                                      : c.status === "sent"
+                                        ? "Sent"
+                                        : c.status === "resolved"
+                                          ? "Resolved"
+                                          : "Draft"}
+                                  </span>
+                                </div>
+                                <button
+                                  className="comment-quote"
+                                  title="Jump to original passage"
+                                  onClick={() => jump(c)}
+                                >
+                                  {c.anchor.quote}
+                                </button>
+                                {isEditing ? (
+                                  <>
+                                    <textarea
+                                      aria-label="Inline comment"
+                                      ref={commentEditor}
+                                      rows={3}
+                                      placeholder="What’s your thought?"
+                                      value={editing?.text ?? ""}
+                                      onChange={(e) =>
+                                        setEditing((prev) =>
+                                          prev
+                                            ? { ...prev, text: e.target.value }
+                                            : prev,
+                                        )
+                                      }
+                                      onKeyDown={(e) => {
+                                        if (
+                                          (e.metaKey || e.ctrlKey) &&
+                                          e.key === "Enter"
+                                        ) {
+                                          e.preventDefault();
+                                          void saveComment();
+                                        }
+                                        if (e.key === "Escape")
+                                          setEditing(null);
+                                      }}
+                                    />
+                                    <div className="comment-actions">
+                                      <button onClick={() => setEditing(null)}>
+                                        Cancel
+                                      </button>
+                                      <button
+                                        className="primary"
+                                        disabled={!editing?.text.trim()}
+                                        onClick={() => void saveComment()}
+                                      >
+                                        {editing?.id ? "Save" : "Add comment"}
+                                      </button>
+                                    </div>
+                                  </>
+                                ) : (
+                                  <>
+                                    <p className="comment-text">{c.text}</p>
+                                    <div className="comment-actions">
+                                      {c.status === "draft" ? (
+                                        <>
+                                          <button
+                                            aria-label="Edit comment"
+                                            onClick={() => {
+                                              if (editing) return;
+                                              pendingCommentFocus.current = {
+                                                id: c.id,
+                                                restore: captureCommentPosition(
+                                                  scrollRef.current,
+                                                  c.anchor,
+                                                ),
+                                              };
+                                              stickyBottom.current = false;
+                                              setEditing({
+                                                id: c.id,
+                                                anchor: c.anchor,
+                                                text: c.text,
+                                              });
+                                            }}
+                                          >
+                                            <Pencil size={13} />
+                                          </button>
+                                          <button
+                                            aria-label="Delete comment"
+                                            onClick={() =>
+                                              void saveComments(
+                                                snapshot.comments.filter(
+                                                  (x) => x.id !== c.id,
+                                                ),
+                                              ).catch(fail)
+                                            }
+                                          >
+                                            <Trash2 size={13} />
+                                          </button>
+                                        </>
+                                      ) : (
+                                        <button
+                                          onClick={() =>
+                                            void saveComments(
+                                              snapshot.comments.map((x) =>
+                                                x.id === c.id
+                                                  ? {
+                                                      ...x,
+                                                      status:
+                                                        c.status === "resolved"
+                                                          ? "sent"
+                                                          : "resolved",
+                                                    }
+                                                  : x,
+                                              ),
+                                            ).catch(fail)
+                                          }
+                                        >
+                                          <Check size={13} />
+                                          {c.status === "resolved"
+                                            ? "Reopen"
+                                            : "Resolve"}
+                                        </button>
+                                      )}
+                                    </div>
+                                  </>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </aside>
+                    )}
+                  </div>
                 )}
-              </div>
-            )}
-          </ConversationWorkspace>
+              </ConversationWorkspace>
+            </>
+          )}
         </main>
       </div>
       {selection && (
@@ -1340,56 +1542,6 @@ export function App() {
           <MessageSquarePlus size={15} />
           Comment
         </button>
-      )}
-      {projectForm && (
-        <div className="modal-backdrop" onClick={() => setProjectForm(false)}>
-          <form
-            className="modal"
-            onClick={(e) => e.stopPropagation()}
-            onSubmit={(e) => {
-              e.preventDefault();
-              void addProject();
-            }}
-          >
-            <div className="rail-heading">
-              <h2>Open a project</h2>
-              <button
-                type="button"
-                aria-label="Close"
-                onClick={() => setProjectForm(false)}
-              >
-                <X size={18} />
-              </button>
-            </div>
-            <p>
-              Choose a local folder. Pi will use its files, skills, and project
-              extensions.
-            </p>
-            {boot.execution?.mode === "cco" && (
-              <p>
-                Opening a folder here does not expand cco's write permissions.
-                Add writable folders when starting the server with{" "}
-                <code>--add-dir</code>.
-              </p>
-            )}
-            <label htmlFor="folder-path">Folder path</label>
-            <input
-              id="folder-path"
-              autoFocus
-              placeholder="/Users/you/projects/my-project"
-              value={folderPath}
-              onChange={(e) => setFolderPath(e.target.value)}
-            />
-            <button
-              className="primary"
-              disabled={!folderPath.trim()}
-              type="submit"
-            >
-              <FolderPlus size={15} />
-              Open project
-            </button>
-          </form>
-        </div>
       )}
     </div>
   );

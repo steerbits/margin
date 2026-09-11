@@ -3,7 +3,14 @@ import { pathToFileURL } from "node:url";
 import { join } from "node:path";
 import type { ServerPlugin, PluginContext, PluginEvent } from "./plugin-api.ts";
 
-export async function loadPlugins(root: string): Promise<ServerPlugin[]> {
+export async function loadPlugins(
+  root: string,
+  options: {
+    disabled?: Set<string>;
+    onError?: (id: string, error: unknown) => void;
+    onLoaded?: (folder: string, id: string) => void;
+  } = {},
+): Promise<ServerPlugin[]> {
   const plugins: ServerPlugin[] = [];
   let dirs;
   try {
@@ -12,20 +19,28 @@ export async function loadPlugins(root: string): Promise<ServerPlugin[]> {
     return plugins;
   }
   for (const d of dirs.filter((x) => x.isDirectory())) {
+    if (options.disabled?.has(d.name)) continue;
     const entry = join(root, d.name, "server.ts");
     try {
       await access(entry);
     } catch {
       continue;
     }
-    const p = (await import(pathToFileURL(entry).href)).default as ServerPlugin;
-    if (
-      p.apiVersion !== 1 ||
-      !/^[a-z][a-z0-9-]*$/.test(p.id) ||
-      plugins.some((x) => x.id === p.id)
-    )
-      throw new Error(`Invalid or duplicate plugin: ${d.name}`);
-    plugins.push(p);
+    try {
+      const p = (await import(pathToFileURL(entry).href))
+        .default as ServerPlugin;
+      if (
+        p.apiVersion !== 1 ||
+        !/^[a-z][a-z0-9-]*$/.test(p.id) ||
+        plugins.some((x) => x.id === p.id)
+      )
+        throw new Error(`Invalid or duplicate plugin: ${d.name}`);
+      plugins.push(p);
+      options.onLoaded?.(d.name, p.id);
+    } catch (error) {
+      if (options.onError) options.onError(d.name, error);
+      else throw error;
+    }
   }
   return plugins;
 }

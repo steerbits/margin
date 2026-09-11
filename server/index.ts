@@ -1,6 +1,6 @@
 import express from "express";
 import { randomBytes, randomUUID } from "node:crypto";
-import { realpath, stat, mkdir } from "node:fs/promises";
+import { mkdir } from "node:fs/promises";
 import { dirname, join, basename, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { z } from "zod";
@@ -9,7 +9,16 @@ import { LiveSession, errorText } from "./sessions.ts";
 import { createModels, listModels } from "./models.ts";
 import { loadPlugins } from "./plugins.ts";
 import type { Project, SessionInfo } from "../shared/types.ts";
-import { executionInfo, withinPath } from "./execution.ts";
+import { executionInfo } from "./execution.ts";
+import { CheckpointHistory } from "./checkpoints.ts";
+import {
+  pluginCatalog,
+  pluginPreferences,
+  setPluginEnabled,
+} from "./plugin-management.ts";
+import { WorkspaceAccess } from "./workspace-access.ts";
+import { NativeDirectoryPicker } from "./native-directory-picker.ts";
+import { pluginStorage } from "./plugin-storage.ts";
 import {
   backendRegistry,
   type AgentBackend,
@@ -18,25 +27,71 @@ import {
 
 const appRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const execution = executionInfo();
+const workerToken = process.env.MARGIN_WORKER_TOKEN;
+const boundProjectId = process.env.MARGIN_WORKSPACE_ID;
+if (workerToken) {
+  process.chdir(process.env.MARGIN_WORKSPACE_PATH!);
+  delete process.env.GIT_CEILING_DIRECTORIES;
+}
+if (workerToken && (!boundProjectId || execution.mode !== "cco"))
+  throw new Error("Invalid workspace worker configuration.");
+function requireWorkspace(id: string) {
+  if (boundProjectId && id !== boundProjectId)
+    throw new Error("This worker belongs to a different workspace.");
+}
+
 const projectView = (project: Project): Project => ({
   ...project,
+  name: resolve(project.path) === appRoot ? "Margin" : project.name,
+  kind: resolve(project.path) === appRoot ? "margin" : "project",
   launchWritable:
     execution.mode === "cco"
-      ? execution.writablePaths.some((path) => withinPath(project.path, path))
+      ? workspaceAccess.canOpen(project.path)
       : undefined,
 });
 const dataDir = resolve(
   process.env.MARGIN_DATA_DIR ?? join(appRoot, ".margin-data"),
 );
 await mkdir(dataDir, { recursive: true });
+const workspaceAccess = new WorkspaceAccess(execution, appRoot, dataDir);
 const store = new Store(join(dataDir, "margin.sqlite"));
+const history = new CheckpointHistory(appRoot, dataDir);
+let loadedSourceTree: string | undefined;
+try {
+  if (
+    !boundProjectId ||
+    resolve(process.env.MARGIN_WORKSPACE_PATH ?? "") === appRoot
+  )
+    history.acknowledgeStartup();
+  if (
+    (!boundProjectId ||
+      resolve(process.env.MARGIN_WORKSPACE_PATH ?? "") === appRoot) &&
+    history.state().available
+  )
+    loadedSourceTree = history.currentTree();
+} catch (error) {
+  console.error(`History status: ${errorText(error)}`);
+}
+const initialCatalog = pluginCatalog(appRoot),
+  loadedFolders = new Set<string>(),
+  pluginErrors = new Map<string, string>();
 const plugins = [
-  ...(await loadPlugins(join(appRoot, "plugins"))),
+  ...(await loadPlugins(join(appRoot, "plugins"), {
+    disabled: new Set(pluginPreferences(appRoot).disabled),
+    onLoaded: (folder) => loadedFolders.add(folder),
+    onError: (folder, error) => pluginErrors.set(folder, errorText(error)),
+  })),
   ...(process.env.MARGIN_TEST_MODE === "1"
     ? await loadPlugins(join(appRoot, "tests", "plugins"))
     : []),
 ];
 const live = new Map<string, AgentBackend>();
+for (const p of initialCatalog)
+  if (p.enabled && !p.server) loadedFolders.add(p.id);
+const activePluginFolders = [
+  ...loadedFolders,
+  ...(process.env.MARGIN_TEST_MODE === "1" ? ["lab"] : []),
+];
 const host: BackendHost = { store, dataDir, appRoot, plugins };
 const backends = backendRegistry([
   {
@@ -51,9 +106,14 @@ const backends = backendRegistry([
 const port = Number(process.env.PORT ?? 4317);
 const app = express(),
   secret = randomBytes(32).toString("hex");
-const hosts = new Set([`127.0.0.1:${port}`, `localhost:${port}`]);
+let listeningPort = port;
+app.set("case sensitive routing", true);
 app.disable("x-powered-by");
 app.use((req, res, next) => {
+  const hosts = new Set([
+    `127.0.0.1:${listeningPort}`,
+    `localhost:${listeningPort}`,
+  ]);
   if (!hosts.has(req.headers.host ?? ""))
     return res
       .status(403)
@@ -68,7 +128,7 @@ app.use((req, res, next) => {
     "Content-Security-Policy",
     `default-src 'self'; script-src 'self'${process.env.NODE_ENV === "production" ? "" : " 'unsafe-inline'"}; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self' ws://127.0.0.1:* ws://localhost:*; frame-ancestors 'none'; base-uri 'none'; object-src 'none'`,
   );
-  if (req.path === "/")
+  if (req.path === "/" && !workerToken)
     res.cookie("margin_session", secret, {
       httpOnly: true,
       sameSite: "strict",
@@ -80,7 +140,11 @@ app.use((req, res, next) => {
       .map((v) => v.trim())
       .find((v) => v.startsWith("margin_session="))
       ?.slice("margin_session=".length);
-    if (cookie !== secret)
+    if (
+      workerToken
+        ? req.headers.authorization !== `Bearer ${workerToken}`
+        : cookie !== secret
+    )
       return res
         .status(401)
         .json({ error: "Open Margin in your browser to connect." });
@@ -104,21 +168,40 @@ const asyncRoute =
       .catch(next);
   };
 
-if (!store.projects().length) {
+if (boundProjectId) {
+  const project = {
+    id: boundProjectId,
+    name: process.env.MARGIN_WORKSPACE_NAME ?? "Workspace",
+    path: process.env.MARGIN_WORKSPACE_PATH!,
+  };
+  if (
+    !project.path ||
+    execution.mode !== "cco" ||
+    project.path !== execution.projectRoot
+  )
+    throw new Error("Workspace path does not match cco launch.");
+  store.put("project", project.id, project);
+}
+if (
+  !boundProjectId &&
+  !store.projects().some((p) => resolve(p.path) === appRoot)
+) {
   const p: Project = {
     id: randomUUID(),
-    name: basename(appRoot),
+    name: "Margin",
     path: appRoot,
   };
   store.put("project", p.id, p);
 }
 function getLive(id: string) {
   let l = live.get(id);
-  if (l) return l;
   const info = store.get<SessionInfo>("session", id);
   if (!info) throw new Error("Conversation not found.");
   const project = store.get<Project>("project", info.projectId);
   if (!project) throw new Error("Project not found.");
+  requireWorkspace(project.id);
+  workspaceAccess.requireDirectory(project.path);
+  if (l) return l;
   const backend = backends.get(info.backend ?? "pi");
   if (!backend)
     throw new Error(
@@ -128,6 +211,33 @@ function getLive(id: string) {
   live.set(id, l);
   return l;
 }
+const marginProject = () =>
+  projectView(
+    store.projects().find((p) => resolve(p.path) === appRoot) ?? {
+      id: "unavailable",
+      name: "Margin",
+      path: appRoot,
+    },
+  );
+let maintenance = false,
+  sourceNeedsRestart = false,
+  workspacePluginOperations = 0;
+function requireIdle() {
+  if (
+    maintenance ||
+    workspacePluginOperations > 0 ||
+    [...live.values()].some((s) => s.hasActiveWork?.() ?? s.snapshot().busy)
+  )
+    throw new Error(
+      "Finish or stop active agent work before changing code history or plugin settings.",
+    );
+}
+const catalogView = () =>
+  pluginCatalog(appRoot).map((p) => ({
+    ...p,
+    active: loadedFolders.has(p.id),
+    error: pluginErrors.get(p.id),
+  }));
 async function availableModels() {
   const results = await Promise.all(
     [...backends.values()].map(async (b) =>
@@ -135,6 +245,36 @@ async function availableModels() {
     ),
   );
   return results.flat();
+}
+if (workerToken) {
+  app.get("/api/worker/status", (_req, res) =>
+    res.json({
+      busy:
+        maintenance ||
+        workspacePluginOperations > 0 ||
+        [...live.values()].some(
+          (s) => s.hasActiveWork?.() ?? s.snapshot().busy,
+        ),
+    }),
+  );
+  app.use((req, res, next) => {
+    if (
+      ["/api/projects", "/api/workspaces", "/api/workspace-folders"].includes(
+        req.path,
+      )
+    )
+      return res
+        .status(403)
+        .json({ error: "Open workspaces through the Margin launcher." });
+    if (
+      req.path.startsWith("/api/customize") &&
+      boundProjectId !== marginProject().id
+    )
+      return res.status(403).json({
+        error: "Customize Margin belongs to Margin's source workspace.",
+      });
+    next();
+  });
 }
 app.get(
   "/api/bootstrap",
@@ -146,16 +286,141 @@ app.get(
     } catch (e) {
       modelError = errorText(e);
     }
+    const projects = store
+      .projects()
+      .filter(
+        (p) =>
+          (!boundProjectId || p.id === boundProjectId) &&
+          workspaceAccess.canOpen(p.path),
+      )
+      .map(projectView);
+    const projectIds = new Set(projects.map((p) => p.id));
     res.json({
-      projects: store.projects().map(projectView),
-      sessions: store.sessions(),
+      projects,
+      sessions: store.sessions().filter((s) => projectIds.has(s.projectId)),
       models,
       modelError,
       piVersion: "0.85.1",
       readOnlyAuth: process.env.MARGIN_AUTH_READ_ONLY === "1",
       plugins: plugins.map((p) => p.id),
+      activePluginFolders,
+      marginProjectId: marginProject().id,
+      workspaceParent: workspaceAccess.workspaceParent,
+      capabilities: { customization: true, workspacePicker: true },
       execution,
     });
+  }),
+);
+app.get(
+  "/api/customize",
+  asyncRoute((_req, res) =>
+    res.json({
+      project: marginProject(),
+      plugins: catalogView(),
+      history: history.state(),
+    }),
+  ),
+);
+app.post(
+  "/api/customize/checkpoints",
+  asyncRoute((req, res) => {
+    requireIdle();
+    const { name } = z
+      .object({ name: z.string().trim().min(1).max(100) })
+      .parse(req.body);
+    res.json(history.save(name));
+  }),
+);
+app.get(
+  "/api/customize/checkpoints/:id/preview",
+  asyncRoute((req, res) => res.json(history.preview(String(req.params.id)))),
+);
+app.post(
+  "/api/customize/checkpoints/:id/restore",
+  asyncRoute((req, res) => {
+    requireIdle();
+    const { token } = z
+      .object({ token: z.string().regex(/^[a-f0-9]{64}$/) })
+      .parse(req.body);
+    maintenance = true;
+    try {
+      const result = history.restore(String(req.params.id), token);
+      if (result.restored) {
+        sourceNeedsRestart = result.checkpoint.tree !== loadedSourceTree;
+        history.setActivationPending(sourceNeedsRestart);
+      }
+      res.json(result);
+    } finally {
+      maintenance = false;
+    }
+  }),
+);
+app.post(
+  "/api/customize/plugins/:id",
+  asyncRoute((req, res) => {
+    requireIdle();
+    const { enabled } = z.object({ enabled: z.boolean() }).parse(req.body);
+    history.withSavedState("Before changing plugin settings", () =>
+      setPluginEnabled(appRoot, String(req.params.id), enabled),
+    );
+    res.json({ plugins: catalogView() });
+  }),
+);
+const nativeDirectoryPicker = new NativeDirectoryPicker(appRoot);
+if (!workerToken)
+  app.post(
+    "/api/workspaces/choose",
+    asyncRoute(async (req, res) => {
+      z.object({}).strict().parse(req.body);
+      if (execution.mode !== "native")
+        throw new Error(
+          "Restart with npm start to use the native workspace dialog through Margin's launcher.",
+        );
+      const abort = new AbortController();
+      res.once("close", () => {
+        if (!res.writableEnded) abort.abort();
+      });
+      const last = store.get<string>("preference", "workspace-directory");
+      const home = process.env.HOME ?? appRoot;
+      const path = await nativeDirectoryPicker.choose(
+        last && workspaceAccess.canOpen(last) ? last : home,
+        abort.signal,
+      );
+      if (res.destroyed) return;
+      if (path === null) return res.json({ project: null });
+      const canonical = workspaceAccess.requireDirectory(path);
+      const project = store.projects().find((p) => p.path === canonical) ?? {
+        id: randomUUID(),
+        name: basename(canonical),
+        path: canonical,
+      };
+      store.put("project", project.id, project);
+      store.put("preference", "workspace-directory", dirname(canonical));
+      res.json({ project: projectView(project) });
+    }),
+  );
+app.get(
+  "/api/workspace-folders",
+  asyncRoute(async (req, res) => {
+    const { path, hidden } = z
+      .object({
+        path: z.string().min(1).optional(),
+        hidden: z.enum(["true", "false"]).optional(),
+      })
+      .parse(req.query);
+    res.json(await workspaceAccess.browse(path, hidden === "true"));
+  }),
+);
+app.post(
+  "/api/workspaces",
+  asyncRoute(async (req, res) => {
+    const { name } = z
+      .object({ name: z.string().trim().min(1).max(100) })
+      .strict()
+      .parse(req.body);
+    const project = await workspaceAccess.create(name);
+    store.put("project", project.id, project);
+    res.json(projectView(project));
   }),
 );
 app.post(
@@ -168,10 +433,9 @@ app.post(
   "/api/projects",
   asyncRoute(async (req, res) => {
     const input = z.object({ path: z.string().min(1) }).parse(req.body);
-    const path = await realpath(
+    const path = workspaceAccess.requireDirectory(
       input.path.replace(/^~(?=\/)/, process.env.HOME ?? ""),
     );
-    if (!(await stat(path)).isDirectory()) throw new Error("Choose a folder.");
     const existing = store.projects().find((p) => p.path === path);
     if (existing) return res.json(projectView(existing));
     const project = { id: randomUUID(), name: basename(path), path };
@@ -182,9 +446,14 @@ app.post(
 app.post(
   "/api/sessions",
   asyncRoute(async (req, res) => {
+    if (maintenance || sourceNeedsRestart)
+      throw new Error(
+        "Source files were restored. Rebuild and restart Margin before starting agent work. History controls remain available.",
+      );
     const input = z
       .object({
         projectId: z.string(),
+        gatewaySessionId: z.string().uuid().optional(),
         model: z
           .object({
             id: z.string(),
@@ -196,10 +465,17 @@ app.post(
           .optional(),
       })
       .parse(req.body);
-    if (!store.get("project", input.projectId))
-      throw new Error("Project not found.");
+    const project = store.get<Project>("project", input.projectId);
+    if (!project) throw new Error("Project not found.");
+    requireWorkspace(project.id);
+    workspaceAccess.requireDirectory(project.path);
     const info: SessionInfo = {
-      id: randomUUID(),
+      id: workerToken
+        ? (input.gatewaySessionId ??
+          (() => {
+            throw new Error("A launcher session ID is required.");
+          })())
+        : randomUUID(),
       projectId: input.projectId,
       title: "New conversation",
       model: input.model,
@@ -208,6 +484,8 @@ app.post(
       createdAt: Date.now(),
       updatedAt: Date.now(),
     };
+    if (store.get("session", info.id))
+      throw new Error("Conversation already exists.");
     store.put("session", info.id, info);
     const l = getLive(info.id);
     res.json(l.snapshot());
@@ -246,11 +524,22 @@ const batchSchema = z.object({
 });
 app.post(
   "/api/sessions/:id/send",
-  asyncRoute(async (req, res) =>
-    res.json(
-      await getLive(String(req.params.id)).send(batchSchema.parse(req.body)),
-    ),
-  ),
+  asyncRoute(async (req, res) => {
+    if (maintenance || sourceNeedsRestart)
+      throw new Error(
+        "Rebuild and restart Margin to activate the restored source before sending more work.",
+      );
+    const l = getLive(String(req.params.id)),
+      batch = batchSchema.parse(req.body);
+    if (
+      l.info.projectId === marginProject().id &&
+      process.env.MARGIN_TEST_MODE !== "1"
+    ) {
+      requireIdle();
+      history.save("Before customization", "automatic", true);
+    }
+    res.json(await l.send(batch));
+  }),
 );
 app.post(
   "/api/sessions/:id/stop",
@@ -349,6 +638,33 @@ app.post(
   }),
 );
 app.post(
+  "/api/projects/:projectId/plugins/:pluginId/:action",
+  asyncRoute(async (req, res) => {
+    const project = store.get<Project>("project", String(req.params.projectId));
+    if (!project) throw new Error("Workspace not found.");
+    requireWorkspace(project.id);
+    workspaceAccess.requireDirectory(project.path);
+    const plugin = plugins.find((p) => p.id === req.params.pluginId);
+    if (!plugin?.workspaceAction)
+      throw new Error("Workspace plugin action not found.");
+    workspacePluginOperations++;
+    try {
+      res.json({
+        result: await plugin.workspaceAction(
+          String(req.params.action),
+          req.body,
+          {
+            project: projectView(project),
+            storage: pluginStorage(store, plugin.id, project.id),
+          },
+        ),
+      });
+    } finally {
+      workspacePluginOperations--;
+    }
+  }),
+);
+app.post(
   "/api/sessions/:id/plugins/:pluginId/:action",
   asyncRoute(async (req, res) => {
     res.json({
@@ -377,7 +693,9 @@ if (process.env.MARGIN_TEST_MODE === "1") {
 app.use("/api", (_req, res) =>
   res.status(404).json({ error: "Unknown API route." }),
 );
-if (process.env.NODE_ENV === "production")
+if (workerToken) {
+  /* Worker APIs are only reached through the local launcher. */
+} else if (process.env.NODE_ENV === "production")
   app.use(express.static(join(appRoot, "dist")));
 else {
   const { createServer } = await import("vite");
@@ -403,11 +721,17 @@ app.use(
     });
   },
 );
-const server = app.listen(port, "127.0.0.1", () =>
-  console.log(`Margin is running at http://127.0.0.1:${port}`),
-);
+const server = app.listen(port, "127.0.0.1", () => {
+  listeningPort = (server.address() as import("node:net").AddressInfo).port;
+  console.log(
+    workerToken
+      ? `MARGIN_WORKER_READY ${JSON.stringify({ port: listeningPort, projectId: boundProjectId })}`
+      : `Margin is running at http://127.0.0.1:${listeningPort}`,
+  );
+});
 async function shutdown() {
   server.close();
+  nativeDirectoryPicker.close();
   for (const l of live.values()) await l.dispose();
   for (const p of plugins) await p.dispose?.();
   store.close();
