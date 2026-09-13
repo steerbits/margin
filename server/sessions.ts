@@ -62,6 +62,7 @@ export class LiveSession implements AgentBackend {
     private plugins: ServerPlugin[],
   ) {
     this.ui = new UiBridge(() => {
+      if (this.disposing) return;
       this.store.put("composer", this.info.id, this.ui.editorText);
       this.changed();
     });
@@ -178,6 +179,7 @@ export class LiveSession implements AgentBackend {
     });
     this.agent = result.session;
     this.info.sessionFile = manager.getSessionFile();
+    if (this.disposing) return;
     this.info.model = modelInfo(this.models, model);
     this.persist();
     this.agent.subscribe((e) => this.onEvent(e));
@@ -390,6 +392,8 @@ export class LiveSession implements AgentBackend {
       messages,
       comments: this.store.comments(this.info.id),
       composer: this.ui.editorText,
+      composerRevision:
+        this.store.get<number>("composer-revision", this.info.id) ?? 0,
       busy: this.busy,
       dialogs: [...this.ui.dialogs.values()],
       notices: this.ui.notices,
@@ -692,7 +696,11 @@ export class LiveSession implements AgentBackend {
   }
   async dispose() {
     this.disposing = true;
+    this.ui.dispose();
     if (this.timer) clearTimeout(this.timer);
+    await this.stop();
+    // Startup must finish before deletion can remove the final native file and records.
+    await this.ready.catch(() => {});
     await this.stop();
     for (const c of this.children) await c.dispose();
     this.agent?.dispose();

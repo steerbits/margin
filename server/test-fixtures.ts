@@ -79,7 +79,7 @@ export function installFixtures(
               resolve(p.path) ===
               resolve(dirname(fileURLToPath(import.meta.url)), ".."),
           )!.id,
-        title: "Meeting notes app",
+        title: String(req.body.title ?? "Meeting notes app").slice(0, 64),
         createdAt: Date.now(),
         updatedAt: Date.now(),
       };
@@ -125,7 +125,12 @@ export function installFixtures(
         l.busy = true;
         l.messages = transcript(l.agent.sessionManager.getBranch());
         l.changed();
-        await new Promise((r) => setTimeout(r, 80));
+        await new Promise((r) =>
+          setTimeout(
+            r,
+            Math.min(3000, Math.max(0, Number(req.body.responseDelay) || 80)),
+          ),
+        );
         append(
           "assistant",
           "## Revised direction\n\nI received your inline comments and overall reply. I will use **local SQLite**, keep accounts out of the first version, and wait for your remaining decisions.\n\nWhat would you like to adjust next?",

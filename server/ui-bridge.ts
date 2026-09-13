@@ -16,6 +16,7 @@ export class UiBridge {
   notices: Notice[] = [];
   editorText = "";
   expanded = false;
+  private disposed = false;
   constructor(private changed: () => void) {}
   notify(text: string, level: Notice["level"] = "info") {
     if (this.notices.some((x) => x.text === text)) return;
@@ -34,6 +35,10 @@ export class UiBridge {
     extra: Partial<Dialog> = {},
     opts?: ExtensionUIDialogOptions,
   ): Promise<unknown> {
+    if (this.disposed)
+      return kind === "unsupported"
+        ? Promise.reject(new Error("Terminal-only interaction stopped."))
+        : Promise.resolve(kind === "confirm" ? false : undefined);
     if (opts?.signal?.aborted)
       return Promise.resolve(kind === "confirm" ? false : undefined);
     const id = randomUUID();
@@ -103,6 +108,10 @@ export class UiBridge {
   }
   cancelAll() {
     for (const [id, d] of this.dialogs) this.answer(id, undefined, true);
+  }
+  dispose() {
+    this.disposed = true;
+    this.cancelAll();
   }
   context(): ExtensionUIContext {
     // Extensions may format status strings with a TUI theme. Keep their text, without ANSI.

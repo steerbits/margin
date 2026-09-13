@@ -21,6 +21,18 @@ Unavailable registered folders are omitted from the picker and sidebar. Their sa
 
 The selected cco-default policy and launch commands are described in [cco integration](docs/sandboxing-proposal.md).
 
+## Navigation and chat management
+
+Selecting or creating a conversation updates the address to `/chats/<session UUID>`. Workspaces use `/workspaces/<workspace UUID>` and Customize uses `/customize/examples`, `/customize/plugins`, or `/customize/history`. Panels are encoded as `?panel=project-notes%3Anotes` (or `?panel=comments`). Refresh, bookmarks, and Back/Forward preserve the destination. Explicit URLs take precedence over the last selection in browser storage. These local links use the same browser connection as the rest of Margin.
+
+**Rename workspace**, beside the New workspace icon, changes its saved display name; the folder path and UUID stay the same. The dropdown shows five recent workspaces and **All workspaces…** as its final item, after a separator. All workspaces searches by name or path. Recents are stored in this browser.
+
+Right-click a conversation in the sidebar and choose **Delete conversation** to delete its messages, comments, composer draft, and native Pi transcript permanently after confirmation. The same menu is available with Shift+F10 when a chat row has keyboard focus. Stop running work and answer or cancel pending dialogs first. Deleting a chat keeps workspace files and shared plugin notes. Bookmarks to deleted chats show an unavailable destination.
+
+Chat rows stay on one line without a chat icon or status text. A small spinner appears while the main agent is running, and a blue dot marks unread replies. The current chat’s header provides its detailed agent state. Summaries update approximately every 1.5 seconds across workspaces. Finished replies remain unread until the end of the latest reply is visible in the focused browser tab. Read markers persist in this browser across reloads; other browsers maintain their own read state. Restarted or exited workers report interrupted activity as stopped. Individual plugin background agents are not listed.
+
+Recently opened chats render immediately from an in-memory cache while their live connection refreshes. The app prefetches saved history for the five newest chats in the current workspace without starting agents; a first uncached visit can briefly show a history placeholder. Switching preserves the reading position and keeps draft saves independent for each chat. Failed saves retain their text in the current browser tab and warn before leaving it.
+
 ## Run
 
 Requires Node 22.13+, cco, and a Pi login. This prototype pins `@earendil-works/pi-coding-agent` to **0.85.1**; it does not replace your global Pi installation.
@@ -35,7 +47,7 @@ Click the connection link printed in Terminal. It opens **http://127.0.0.1:4317*
 
 1. Open a project using the folder button, or select an existing project.
 2. Start a conversation. The default prefers your OpenAI Codex subscription model.
-3. Choose a skill, or leave **No skill** selected, then send your prompt.
+3. **Think with me** is selected for the first message of a new chat when available. Choose another skill or **No skill** if you prefer, then send your prompt.
 4. Select text in a completed reply and choose **Comment**. Selections can cross formatting, table cells, or code. The button beneath a reply comments on the whole reply.
 5. Save several draft comments, add an optional overall reply, and send them together. Sent comments remain anchored to the original reply when Pi produces a revision.
 
@@ -47,7 +59,9 @@ Tool rows show their outcome as text as well as color. Gray is normal running/su
 
 ## Skills and authentication
 
-Margin uses Pi's own skill discovery, including `~/.pi/agent/skills/`, project `.pi/skills/`, and configured sources. The picker applies the selected skill to the **next message**; its instructions then remain in Pi's conversation. Reload skills with the refresh icon next to the picker. A copy of the supplied `grill-frame-explore` skill is included under `skills/` as a starter; your own Pi skills can be added without changing the app.
+Margin uses Pi's own skill discovery, including `~/.pi/agent/skills/`, project `.pi/skills/`, and configured sources. The picker applies the selected skill to the **next message**; its instructions then remain in Pi's conversation. Reload skills with the refresh icon next to the picker. The bundled `think-with-me` skill lives in `skills/think-with-me/SKILL.md`. It is the default for a new chat’s first message; adding or choosing another skill does not change that default. If it is deleted or unavailable, new chats select **No skill**. Sending a message clears the picker, while the invoked instructions remain in the conversation. As before, your own Pi skills can be added without changing the app.
+
+The optional **`shape-with-me`** sibling lives in `skills/shape-with-me/SKILL.md`. It retains clarification questions and automated evaluation, but replaces contract approval with a compact default approach, concrete previews and alternatives, and an invitation to bring a real case that might reveal missing assumptions. It also summarizes what feedback actually changed in chat. Use **Reload skills**, then select **`shape-with-me`** to experiment, preferably in a new chat so earlier skill instructions do not overlap. The default remains **Think with me**; no UI changes or influence score are included.
 
 Sign in with `pi` → `/login`, then refresh models or restart Margin. Credentials stay in Pi's server-side authentication storage. `openai-codex` uses your ChatGPT/Codex subscription; `openai` is a separate API-key provider. The UI does not silently switch providers when a request fails.
 

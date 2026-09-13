@@ -41,6 +41,28 @@ export class WorkspaceWorkers {
     });
     return pending;
   }
+  isStarted(projectId: string) {
+    return this.workers.has(projectId);
+  }
+  async rename(project: Project) {
+    const pending = this.workers.get(project.id);
+    if (!pending) return;
+    const worker = await pending;
+    const response = await fetch(
+      `http://127.0.0.1:${worker.port}/api/projects/${project.id}`,
+      {
+        method: "PATCH",
+        headers: {
+          Authorization: `Bearer ${worker.token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ name: project.name }),
+        signal: AbortSignal.timeout(5000),
+      },
+    );
+    if (!response.ok)
+      throw new Error(((await response.json()) as { error: string }).error);
+  }
   private async start(
     project: Project,
     exited: () => void,
@@ -72,6 +94,7 @@ export class WorkspaceWorkers {
       token,
       project.id,
       project.name,
+      project.renamed,
     );
     if (
       process.env.MARGIN_TEST_MODE === "1" &&
@@ -255,6 +278,7 @@ export function workspaceWorkerPlan(
   token: string,
   id: string,
   name: string,
+  renamed = false,
 ) {
   const gitDirs = gitMetadata(project);
   const plan = ccoLaunchPlan(
@@ -285,6 +309,7 @@ export function workspaceWorkerPlan(
     MARGIN_WORKSPACE_ID: id,
     MARGIN_WORKSPACE_PATH: project,
     MARGIN_WORKSPACE_NAME: name,
+    MARGIN_WORKSPACE_RENAMED: renamed ? "1" : "0",
     MARGIN_CCO_INFO: JSON.stringify({
       mode: "cco",
       projectRoot: project,

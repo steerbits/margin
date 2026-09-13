@@ -7,8 +7,7 @@ async function seed(page: Page, historyCount = 0) {
   });
   expect(response.ok()).toBeTruthy();
   const { id } = await response.json();
-  await page.evaluate((id) => localStorage.setItem("margin.session", id), id);
-  await page.reload();
+  await page.goto(`/chats/${id}`);
   await expect(page.getByLabel("Starting skill")).toBeEnabled();
   return id as string;
 }

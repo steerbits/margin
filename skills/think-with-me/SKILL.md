@@ -1,9 +1,9 @@
 ---
-name: grill-frame-explore
+name: think-with-me
 description: Interview the user through consequential decisions, prefill an outcome and evaluation contract, then execute with task-specific checks, simulated reviews, and contrastive feedback. Use for substantial creation, analysis, decisions, or reviews where scope or success remains uncertain.
 ---
 
-# Grill, Frame, Explore
+# Think with me
 
 Develop shared understanding before committing to a solution. Then improve both the output and the evidence for its quality. Spend human attention on consequential choices, especially those that tests alone cannot settle.
 

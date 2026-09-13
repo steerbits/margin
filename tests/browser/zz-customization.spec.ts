@@ -39,6 +39,38 @@ test("Margin has a special workspace and examples prepare source-workspace promp
   const snapshot = await (await page.request.get(`/api/sessions/${id}`)).json();
   expect(snapshot.session.projectId).toBe(boot.marginProjectId);
 });
+test("Customize Margin switches an ordinary workspace back to Margin", async ({
+  page,
+}) => {
+  const boot = await (await page.request.get("/api/bootstrap")).json();
+  const external = {
+    id: "external-workspace",
+    name: "External workspace",
+    path: "/tmp/external-workspace",
+    kind: "project",
+  };
+  await page.route("**/api/workspaces/choose", (route) =>
+    route.fulfill({ json: { project: external } }),
+  );
+  await page.getByRole("button", { name: "New workspace" }).click();
+  await expect(
+    page.getByRole("combobox", { name: "Project", exact: true }),
+  ).toHaveValue(external.id);
+
+  await page
+    .getByRole("button", { name: "Customize Margin", exact: true })
+    .click();
+
+  await expect(
+    page.getByRole("combobox", { name: "Project", exact: true }),
+  ).toHaveValue(boot.marginProjectId);
+  await expect(
+    page
+      .getByRole("combobox", { name: "Project", exact: true })
+      .locator("option:checked"),
+  ).toHaveText("Margin");
+});
+
 test("New workspace directly invokes the native chooser and selects its result", async ({
   page,
 }) => {
@@ -200,6 +232,7 @@ test("opening Customize Margin on a narrow screen closes the covering sidebar", 
 }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.reload();
+  await page.getByRole("button", { name: "Back to conversation" }).click();
   await page.getByRole("button", { name: "Show sidebar" }).click();
   await page
     .getByRole("button", { name: "Customize Margin", exact: true })

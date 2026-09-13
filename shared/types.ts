@@ -23,11 +23,17 @@ export interface Project {
   path: string;
   launchWritable?: boolean;
   kind?: "margin" | "project";
+  renamed?: boolean;
 }
 export type ExecutionInfo =
   | { mode: "native" }
   | { mode: "cco-workspaces" }
   | { mode: "cco"; projectRoot: string; writablePaths: string[] };
+export interface SessionActivity {
+  status: "idle" | "running" | "waiting" | "finished" | "failed" | "stopped";
+  replyId?: string;
+  completionId?: string;
+}
 export interface SessionInfo {
   id: string;
   projectId: string;
@@ -38,6 +44,7 @@ export interface SessionInfo {
   backendLabel?: string;
   createdAt: number;
   updatedAt: number;
+  activity?: SessionActivity;
 }
 export interface Message {
   id: string;
@@ -95,6 +102,7 @@ export interface Snapshot {
   messages: Message[];
   comments: Comment[];
   composer: string;
+  composerRevision?: number;
   busy: boolean;
   dialogs: Dialog[];
   notices: Notice[];

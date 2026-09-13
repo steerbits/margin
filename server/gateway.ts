@@ -8,6 +8,8 @@ import { fileURLToPath } from "node:url";
 import { Readable } from "node:stream";
 import { z } from "zod";
 import { Store } from "./store.ts";
+import { readSessionPreview } from "./session-preview.ts";
+import { deleteSavedSession } from "./delete-session.ts";
 import { WorkspaceAccess } from "./workspace-access.ts";
 import { createWorkspace } from "./workspaces.ts";
 import { workspaceDataDir, assertDataPath } from "./workspace-data.ts";
@@ -37,7 +39,8 @@ const directoryPicker = new NativeDirectoryPicker(appRoot);
 function projectView(project: Project): Project {
   return {
     ...project,
-    name: project.path === appRoot ? "Margin" : project.name,
+    name:
+      project.path === appRoot && !project.renamed ? "Margin" : project.name,
     kind: project.path === appRoot ? "margin" : "project",
     launchWritable: access.canOpen(project.path),
   };
@@ -102,7 +105,16 @@ function sessionsFor(project: Project): SessionInfo[] {
         value: string;
       }[]
     )
-      .map((row) => JSON.parse(row.value) as SessionInfo)
+      .map((row) => {
+        const session = JSON.parse(row.value) as SessionInfo;
+        const activity = db
+          .prepare("SELECT value FROM records WHERE kind='activity' AND id=?")
+          .get(session.id) as { value: string } | undefined;
+        return {
+          ...session,
+          activity: activity ? JSON.parse(activity.value) : undefined,
+        } as SessionInfo;
+      })
       .filter(
         (s) =>
           s.projectId === project.id &&
@@ -234,7 +246,13 @@ async function proxy(
 app.get("/api/bootstrap", async (req, res) => {
   const available = projects();
   const selected =
-    available.find((p) => p.id === req.query.projectId) ?? initial;
+    available.find(
+      (p) =>
+        p.id ===
+        (typeof req.query.sessionId === "string"
+          ? registry.get("session-owner", req.query.sessionId)
+          : req.query.projectId),
+    ) ?? projectById(initial.id);
   let metadata: Record<string, unknown> = {},
     modelError: string | undefined;
   try {
@@ -275,6 +293,40 @@ app.get("/api/bootstrap", async (req, res) => {
     execution: { mode: "cco-workspaces" },
     capabilities: { customization: true, workspacePicker: true },
   });
+});
+app.get("/api/sessions", (_req, res) => {
+  const workspaceErrors: string[] = [];
+  const sessions = projects().flatMap((project) => {
+    try {
+      return sessionsFor(project).map((session) => ({
+        ...session,
+        activity:
+          session.activity &&
+          !workers.isStarted(project.id) &&
+          ["running", "waiting"].includes(session.activity.status)
+            ? { ...session.activity, status: "stopped" as const }
+            : session.activity,
+      }));
+    } catch (error) {
+      workspaceErrors.push(`${project.name}: ${String(error)}`);
+      return [];
+    }
+  });
+  res.json({
+    sessions: sessions.sort((a, b) => b.updatedAt - a.updatedAt),
+    workspaceErrors,
+  });
+});
+app.patch("/api/projects/:id", async (req, res) => {
+  const project = projectById(String(req.params.id));
+  const { name } = z
+    .object({ name: z.string().trim().min(1).max(100) })
+    .strict()
+    .parse(req.body);
+  const renamed = { ...project, name, renamed: true };
+  await workers.rename(renamed);
+  registry.put("project", project.id, renamed);
+  res.json(projectView(renamed));
 });
 app.post("/api/workspaces/choose", async (req, res) => {
   z.object({}).strict().parse(req.body);
@@ -324,6 +376,51 @@ app.post("/api/sessions", async (req, res) => {
   req.body.gatewaySessionId = id;
   await proxy(project, req, res);
 });
+app.delete("/api/sessions/:id", async (req, res) => {
+  const id = String(req.params.id);
+  const project = sessionProject(id);
+  const original = registry.get<SessionInfo>("session", id);
+  const response = await workerFetch(
+    project,
+    `/api/sessions/${id}`,
+    "DELETE",
+    {},
+  );
+  const result = await response.json();
+  if (response.ok) {
+    if (original) deleteSavedSession(registry, original, dataDir);
+    else registry.deleteSession(id);
+  }
+  res.status(response.status).json(result);
+});
+app.get("/api/sessions/:id/preview", (req, res) => {
+  const id = String(req.params.id);
+  const project = sessionProject(id);
+  const directory = workspaceDataDir(dataDir, appRoot, project);
+  const path = join(directory, "margin.sqlite");
+  if (
+    !existsSync(path) &&
+    registry.get<{ ready?: boolean }>("workspace-storage", project.id)?.ready
+  )
+    throw new Error("Workspace data is missing.");
+  if (directory === dataDir || !existsSync(path)) {
+    const preview = readSessionPreview(registry.db, id);
+    if (preview.session.projectId !== project.id)
+      throw new Error("Conversation not found.");
+    return res.json(preview);
+  }
+  assertDataPath(directory, path);
+  const db = new DatabaseSync(path, { readOnly: true });
+  try {
+    db.exec("PRAGMA busy_timeout=5000");
+    const preview = readSessionPreview(db, id);
+    if (preview.session.projectId !== project.id)
+      throw new Error("Conversation not found.");
+    res.json(preview);
+  } finally {
+    db.close();
+  }
+});
 app.use("/api/sessions/:id", async (req, res) => {
   await proxy(sessionProject(String(req.params.id)), req, res);
 });
@@ -331,18 +428,22 @@ app.post("/api/projects/:id/plugins/:pluginId/:action", async (req, res) => {
   await proxy(projectById(String(req.params.id)), req, res);
 });
 app.post("/api/models/refresh", async (req, res) => {
-  await proxy(initial, req, res);
+  await proxy(projectById(initial.id), req, res);
 });
 app.use("/api/customize", async (req, res) => {
   if (!["GET", "HEAD"].includes(req.method)) await workers.requireIdle();
-  await proxy(margin, req, res);
+  await proxy(projectById(margin.id), req, res);
 });
 app.use("/api", (_req, res) =>
   res.status(404).json({ error: "Unknown API route." }),
 );
-if (process.env.NODE_ENV === "production")
+if (process.env.NODE_ENV === "production") {
   app.use(express.static(join(appRoot, "dist")));
-else {
+  app.get(
+    ["/", "/chats/:id", "/workspaces/:id", "/customize", "/customize/:tab"],
+    (_req, res) => res.sendFile(join(appRoot, "dist", "index.html")),
+  );
+} else {
   const { createServer } = await import("vite");
   const vite = await createServer({
     configFile: join(appRoot, "vite.config.ts"),

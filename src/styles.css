@@ -235,6 +235,13 @@ p {
 .sidebar-heading button {
   padding: 4px 8px;
 }
+.sidebar-heading > span {
+  margin-right: auto;
+}
+.sidebar-heading {
+  justify-content: flex-start;
+  gap: 8px;
+}
 .project-select {
   font-weight: 550;
   width: 100%;
@@ -1698,5 +1705,243 @@ p {
   }
   .comment-rail {
     background: #fafafa !important;
+  }
+}
+
+/* Workspace and chat management */
+.session-list > button {
+  gap: 10px;
+}
+.session-list > button .session-title {
+  flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.conversation-spinner {
+  flex: 0 0 13px;
+  width: 13px;
+  height: 13px;
+  border: 1.5px solid #c7c7c7;
+  border-top-color: #666;
+  border-radius: 50%;
+  animation: conversation-spin 0.8s linear infinite;
+}
+.conversation-unread {
+  flex: 0 0 7px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #3779e8;
+  margin: 0 3px;
+}
+@keyframes conversation-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .conversation-spinner {
+    animation-duration: 2s;
+  }
+}
+.conversation-menu {
+  position: fixed;
+  z-index: 100;
+  width: 220px;
+  padding: 5px;
+  background: white;
+  border: 1px solid #dedede;
+  box-shadow: 0 6px 24px #0002;
+  border-radius: 9px;
+}
+.conversation-menu button {
+  display: flex;
+  width: 100%;
+  text-align: left;
+  justify-content: flex-start;
+  padding: 10px 12px;
+  font-size: 13px;
+}
+.conversation-menu .delete-menu-item {
+  color: #ad3d37;
+}
+.conversation-menu button:disabled {
+  color: #aaa;
+}
+.conversation-loading {
+  padding: 44px 38px;
+  max-width: 880px;
+}
+.conversation-loading > div {
+  height: 14px;
+  background: #f3f3f3;
+  margin-bottom: 20px;
+  border-radius: 5px;
+}
+.conversation-loading > div:first-child {
+  width: 40%;
+  height: 22px;
+  margin-bottom: 30px;
+}
+.conversation-loading > div:last-child {
+  width: 70%;
+}
+.chat-status {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+  gap: 5px;
+  font-size: 11px;
+  color: #777;
+  line-height: 1.3;
+  white-space: nowrap;
+}
+.chat-status > i {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #aaa;
+  flex-shrink: 0;
+}
+.chat-status.running > i {
+  background: #5f65b8;
+  animation: status-pulse 1.4s ease-in-out infinite;
+}
+.chat-status.waiting {
+  color: #87600e;
+}
+.chat-status.waiting > i {
+  background: #b68726;
+}
+.chat-status.failed {
+  color: #b6433f;
+}
+.chat-status.failed > i {
+  background: #b6433f;
+}
+.chat-status.unread {
+  color: #4156a0;
+  font-weight: 600;
+}
+.chat-status.unread > i {
+  background: #4156a0;
+}
+.reply-end {
+  display: block;
+  height: 1px;
+  width: 100%;
+}
+@keyframes status-pulse {
+  50% {
+    opacity: 0.3;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .chat-status.running > i {
+    animation: none;
+  }
+}
+.management-dialog {
+  width: min(520px, calc(100vw - 32px));
+  max-height: min(680px, calc(100dvh - 48px));
+  overflow: auto;
+  border: 1px solid #ddd;
+  border-radius: 16px;
+  padding: 24px;
+  color: #292929;
+  background: #fff;
+  box-shadow: 0 20px 80px #0002;
+}
+.management-dialog::backdrop {
+  background: #0005;
+}
+.management-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 18px;
+}
+.management-heading h2 {
+  font-size: 19px;
+  margin: 0;
+}
+.management-dialog p {
+  font-size: 14px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+.management-dialog form label {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: 14px;
+}
+.management-dialog input {
+  min-width: 0;
+  width: 100%;
+  border: 1px solid #ddd;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: white;
+  color: #222;
+}
+.management-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 22px;
+}
+.management-actions button {
+  padding: 9px 14px;
+}
+.management-actions .danger {
+  color: white;
+  background: #af3f39;
+}
+.workspace-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.all-workspaces {
+  display: flex;
+  flex-direction: column;
+  margin-top: 14px;
+  gap: 5px;
+}
+.all-workspaces button {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  text-align: left;
+  padding: 12px;
+  width: 100%;
+  gap: 5px;
+}
+.all-workspaces button[aria-current="true"] {
+  background: #f1f1f1;
+}
+.all-workspaces strong {
+  font-size: 14px;
+}
+.all-workspaces span {
+  font-size: 12px;
+  color: #777;
+  overflow-wrap: anywhere;
+}
+.mobile-chat-status {
+  display: none;
+}
+@media (max-width: 850px) {
+  .toolbar-actions > .chat-status {
+    display: none;
+  }
+  .mobile-chat-status {
+    display: flex;
+    padding: 7px 14px;
+    border-bottom: 1px solid #f3f3f3;
   }
 }

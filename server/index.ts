@@ -5,6 +5,9 @@ import { dirname, join, basename, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { z } from "zod";
 import { Store } from "./store.ts";
+import { readSessionPreview } from "./session-preview.ts";
+import { SessionActivityTracker } from "./session-activity.ts";
+import { deleteSavedSession } from "./delete-session.ts";
 import { LiveSession, errorText } from "./sessions.ts";
 import { createModels, listModels } from "./models.ts";
 import { loadPlugins } from "./plugins.ts";
@@ -42,7 +45,10 @@ function requireWorkspace(id: string) {
 
 const projectView = (project: Project): Project => ({
   ...project,
-  name: resolve(project.path) === appRoot ? "Margin" : project.name,
+  name:
+    resolve(project.path) === appRoot && !project.renamed
+      ? "Margin"
+      : project.name,
   kind: resolve(project.path) === appRoot ? "margin" : "project",
   launchWritable:
     execution.mode === "cco"
@@ -86,6 +92,32 @@ const plugins = [
     : []),
 ];
 const live = new Map<string, AgentBackend>();
+const trackers = new Map<string, SessionActivityTracker>();
+const deleting = new Set<string>();
+for (const session of store.sessions()) {
+  if (
+    session.activity &&
+    ["running", "waiting"].includes(session.activity.status)
+  )
+    store.put("activity", session.id, {
+      ...session.activity,
+      status: "stopped",
+    });
+}
+function observe(snapshot: import("../shared/types.ts").Snapshot) {
+  const id = snapshot.session.id;
+  const tracker = trackers.get(id);
+  if (tracker && !deleting.has(id)) {
+    const previous = JSON.stringify(tracker.activity);
+    const activity = tracker.update(snapshot);
+    if (previous !== JSON.stringify(activity))
+      store.put("activity", id, activity);
+  }
+  return {
+    ...snapshot,
+    session: { ...snapshot.session, activity: tracker?.activity },
+  };
+}
 for (const p of initialCatalog)
   if (p.enabled && !p.server) loadedFolders.add(p.id);
 const activePluginFolders = [
@@ -128,7 +160,7 @@ app.use((req, res, next) => {
     "Content-Security-Policy",
     `default-src 'self'; script-src 'self'${process.env.NODE_ENV === "production" ? "" : " 'unsafe-inline'"}; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self' ws://127.0.0.1:* ws://localhost:*; frame-ancestors 'none'; base-uri 'none'; object-src 'none'`,
   );
-  if (req.path === "/" && !workerToken)
+  if (!req.path.startsWith("/api/") && req.accepts("html") && !workerToken)
     res.cookie("margin_session", secret, {
       httpOnly: true,
       sameSite: "strict",
@@ -173,6 +205,7 @@ if (boundProjectId) {
     id: boundProjectId,
     name: process.env.MARGIN_WORKSPACE_NAME ?? "Workspace",
     path: process.env.MARGIN_WORKSPACE_PATH!,
+    renamed: process.env.MARGIN_WORKSPACE_RENAMED === "1",
   };
   if (
     !project.path ||
@@ -194,6 +227,7 @@ if (
   store.put("project", p.id, p);
 }
 function getLive(id: string) {
+  if (deleting.has(id)) throw new Error("Conversation is being deleted.");
   let l = live.get(id);
   const info = store.get<SessionInfo>("session", id);
   if (!info) throw new Error("Conversation not found.");
@@ -209,6 +243,9 @@ function getLive(id: string) {
     );
   l = backend.create(info, project, host);
   live.set(id, l);
+  trackers.set(id, new SessionActivityTracker(store.get("activity", id)));
+  observe(l.snapshot());
+  l.onSnapshot(observe);
   return l;
 }
 const marginProject = () =>
@@ -309,6 +346,44 @@ app.get(
       capabilities: { customization: true, workspacePicker: true },
       execution,
     });
+  }),
+);
+app.get(
+  "/api/sessions",
+  asyncRoute((_req, res) => {
+    const projectIds = new Set(
+      store
+        .projects()
+        .filter(
+          (p) =>
+            (!boundProjectId || p.id === boundProjectId) &&
+            workspaceAccess.canOpen(p.path),
+        )
+        .map((p) => p.id),
+    );
+    res.json({
+      sessions: store.sessions().filter((s) => projectIds.has(s.projectId)),
+    });
+  }),
+);
+app.patch(
+  "/api/projects/:id",
+  asyncRoute((req, res) => {
+    const id = String(req.params.id);
+    requireWorkspace(id);
+    const { name } = z
+      .object({ name: z.string().trim().min(1).max(100) })
+      .strict()
+      .parse(req.body);
+    const project = store.get<Project>("project", id);
+    if (!project) throw new Error("Workspace not found.");
+    project.name = name;
+    project.renamed = true;
+    store.put("project", id, project);
+    for (const session of live.values())
+      if (session instanceof LiveSession && session.project.id === id)
+        Object.assign(session.project, project);
+    res.json(projectView(project));
   }),
 );
 app.get(
@@ -488,12 +563,26 @@ app.post(
       throw new Error("Conversation already exists.");
     store.put("session", info.id, info);
     const l = getLive(info.id);
-    res.json(l.snapshot());
+    res.json(observe(l.snapshot()));
   }),
 );
 app.get(
   "/api/sessions/:id",
-  asyncRoute((req, res) => res.json(getLive(String(req.params.id)).snapshot())),
+  asyncRoute((req, res) =>
+    res.json(observe(getLive(String(req.params.id)).snapshot())),
+  ),
+);
+app.get(
+  "/api/sessions/:id/preview",
+  asyncRoute((req, res) => {
+    const id = String(req.params.id);
+    const preview = readSessionPreview(store.db, id);
+    requireWorkspace(preview.session.projectId);
+    const project = store.get<Project>("project", preview.session.projectId);
+    if (!project) throw new Error("Workspace not found.");
+    workspaceAccess.requireDirectory(project.path);
+    res.json(live.get(id)?.snapshot() ?? preview);
+  }),
 );
 app.get(
   "/api/sessions/:id/events",
@@ -505,8 +594,10 @@ app.get(
       Connection: "keep-alive",
       "X-Accel-Buffering": "no",
     });
-    const send = (snapshot: unknown) =>
-      res.write(`data: ${JSON.stringify({ type: "snapshot", snapshot })}\n\n`);
+    const send = (snapshot: import("../shared/types.ts").Snapshot) =>
+      res.write(
+        `data: ${JSON.stringify({ type: "snapshot", snapshot: observe(snapshot) })}\n\n`,
+      );
     send(l.snapshot());
     const unsubscribe = l.onSnapshot(send);
     const heartbeat = setInterval(() => res.write(": keepalive\n\n"), 20000);
@@ -522,6 +613,39 @@ const batchSchema = z.object({
   commentIds: z.array(z.string().uuid()).max(200),
   skill: z.string().max(200).optional(),
 });
+app.delete(
+  "/api/sessions/:id",
+  asyncRoute(async (req, res) => {
+    const id = String(req.params.id);
+    const info = store.get<SessionInfo>("session", id);
+    if (!info) throw new Error("Conversation not found.");
+    requireWorkspace(info.projectId);
+    const session = live.get(id);
+    if (deleting.has(id)) throw new Error("Conversation is being deleted.");
+    if (
+      session &&
+      ((session.hasActiveWork?.() ?? session.snapshot().busy) ||
+        session.snapshot().dialogs.length)
+    )
+      return res
+        .status(409)
+        .json({ error: "Stop this conversation before deleting it." });
+    deleting.add(id);
+    try {
+      await session?.dispose();
+      deleteSavedSession(
+        store,
+        session?.info ?? store.get<SessionInfo>("session", id) ?? info,
+        dataDir,
+      );
+      live.delete(id);
+      trackers.delete(id);
+      res.json({ ok: true });
+    } finally {
+      deleting.delete(id);
+    }
+  }),
+);
 app.post(
   "/api/sessions/:id/send",
   asyncRoute(async (req, res) => {
@@ -538,13 +662,19 @@ app.post(
       requireIdle();
       history.save("Before customization", "automatic", true);
     }
-    res.json(await l.send(batch));
+    const result = await l.send(batch);
+    observe(l.snapshot());
+    res.json(result);
   }),
 );
 app.post(
   "/api/sessions/:id/stop",
   asyncRoute(async (req, res) => {
-    await getLive(String(req.params.id)).stop();
+    const id = String(req.params.id);
+    const session = getLive(id);
+    await session.stop();
+    trackers.get(id)?.stop();
+    observe(session.snapshot());
     res.json({ ok: true });
   }),
 );
@@ -599,7 +729,11 @@ app.put(
   asyncRoute((req, res) => {
     const b = z.object({ text: z.string().max(100000) }).parse(req.body);
     getLive(String(req.params.id)).setComposer(b.text);
-    res.json({ ok: true });
+    res.json({
+      ok: true,
+      composerRevision:
+        store.get<number>("composer-revision", String(req.params.id)) ?? 0,
+    });
   }),
 );
 const commentSchema = z.object({
@@ -695,9 +829,13 @@ app.use("/api", (_req, res) =>
 );
 if (workerToken) {
   /* Worker APIs are only reached through the local launcher. */
-} else if (process.env.NODE_ENV === "production")
+} else if (process.env.NODE_ENV === "production") {
   app.use(express.static(join(appRoot, "dist")));
-else {
+  app.get(
+    ["/", "/chats/:id", "/workspaces/:id", "/customize", "/customize/:tab"],
+    (_req, res) => res.sendFile(join(appRoot, "dist", "index.html")),
+  );
+} else {
   const { createServer } = await import("vite");
   const vite = await createServer({
     configFile: join(appRoot, "vite.config.ts"),

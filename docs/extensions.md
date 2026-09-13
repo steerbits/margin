@@ -14,6 +14,35 @@ SQLite app storage          Pi backend (0.85.1 SDK)
 
 This separation is designed to let an additional runtime implement the backend contract without replacing the commenting UI. Only Pi is currently implemented and live-tested. A different runtime still requires an adapter, authentication work, and meaningful compatibility tests.
 
+## Stable identities and navigation
+
+A Margin conversation is a session. `Project.id` and `SessionInfo.id` are stored UUIDs, stable across reloads, restarts, and workspace display-name changes. Browser session plugins receive `context.snapshot.session.id` and `.projectId`; workspace panels receive `context.project.id` and optional `context.sessionId`. Server session plugins receive `context.sessionId` and `context.project.id`. These are Margin IDs; a Pi native/background session may have a different ID. Individual messages are not URL destinations.
+
+Build relative URLs with the shared, pure helpers (usable by browser or server plugins):
+
+```ts
+import { chatUrl, workspaceUrl, customizeUrl } from "../../shared/navigation.ts";
+chatUrl(sessionId);                         // /chats/<UUID>
+workspaceUrl(projectId);                    // /workspaces/<UUID>
+chatUrl(sessionId, "project-notes:notes");   // /chats/<UUID>?panel=project-notes%3Anotes
+customizeUrl("plugins");                    // /customize/plugins
+```
+
+For navigation within the browser app, use the host helper. It preserves composer drafts, respects unfinished inline-comment guards, and returns a promise that rejects if navigation is blocked:
+
+```ts
+import { navigate } from "../../src/navigation.ts";
+await navigate({ kind: "chat", sessionId, panel: "project-notes:notes" });
+await navigate({ kind: "workspace", projectId });
+await navigate({ kind: "customize", tab: "history" });
+```
+
+Panel IDs use `<plugin id>:<panel id>`. Workspace panels can open without a chat; session panels require a chat destination. `comments` selects the built-in comments panel on a chat. Unknown/deleted destinations show an unavailable view; unavailable plugin panels show an explanatory notice.
+
+`GET /api/sessions/:id/preview` reads saved history, comments, and composer data without creating a backend or launching a workspace worker. The client uses it to prefetch recent chats, then reconciles with the selected chat’s live stream. Cached content can precede fresh runtime state; sending waits for that live state. `composerRevision` accompanies composer snapshots and write acknowledgements so old stream messages cannot replace a newer acknowledged draft. Preview text and revision come from the same SQLite read snapshot.
+
+`GET /api/sessions` returns lightweight summaries, including optional `activity` with `status`, `replyId`, and `completionId`. Completion IDs identify a newly settled reply without generating another notification on reconnect. The browser stores read markers separately. `PATCH /api/projects/:id` accepts `{ name }`; `DELETE /api/sessions/:id` rejects active work with HTTP 409. All routes retain the app’s existing local authentication.
+
 ## Local plugins
 
 Add a directory under `plugins/` with either or both:

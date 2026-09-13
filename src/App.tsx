@@ -39,6 +39,24 @@ import type {
   ExecutionInfo,
 } from "../shared/types.ts";
 import { api } from "./api.ts";
+import {
+  destinationUrl,
+  parseRoute,
+  type AppRoute,
+  type Destination,
+  type CustomizeTab,
+} from "../shared/navigation.ts";
+import type { NavigationRequest } from "./navigation.ts";
+import { defaultSkill, skillLabel } from "../shared/skills.ts";
+import { ChatStatus } from "./ChatStatus.tsx";
+import { ConversationMenu } from "./ConversationMenu.tsx";
+import { ChatCache, ChatDrafts } from "./chat-cache.ts";
+import { useUnread } from "./use-unread.ts";
+import {
+  AppDialog,
+  WorkspacePicker,
+  readRecentWorkspaces,
+} from "./WorkspacePicker.tsx";
 import { anchorFromRange, rangeForAnchor } from "./anchors.ts";
 import { Markdown } from "./Markdown.tsx";
 import { ToolCard } from "./ToolCard.tsx";
@@ -79,12 +97,48 @@ export function App() {
     models: [],
     readOnlyAuth: false,
   });
-  const [projectId, setProjectId] = useState(
-      () => localStorage.getItem("margin.project") ?? "",
+  const [projectId, setProjectId] = useState(""),
+    [sessionId, setSessionId] = useState<string | null>(null);
+  const [loaded, setLoaded] = useState(false);
+  const [viewportWidth, setViewportWidth] = useState(window.innerWidth);
+  useEffect(() => {
+    const resized = () => setViewportWidth(window.innerWidth);
+    window.addEventListener("resize", resized);
+    return () => window.removeEventListener("resize", resized);
+  }, []);
+  const [hubTab, setHubTab] = useState<CustomizeTab>("examples");
+  const [routeMissing, setRouteMissing] = useState(false);
+  const routeRef = useRef<AppRoute>(
+    parseRoute(location.pathname, location.search),
+  );
+  const returnRoute = useRef<Destination | null>(null);
+  const historyIndex = useRef(Number(history.state?.marginIndex ?? 0));
+  const restoringHistory = useRef(false);
+  const [recents, setRecents] = useState(readRecentWorkspaces);
+  const [allWorkspaces, setAllWorkspaces] = useState(false);
+  const [renameOpen, setRenameOpen] = useState(false);
+  const [workspaceName, setWorkspaceName] = useState("");
+  const [deleteTarget, setDeleteTarget] = useState<SessionInfo | null>(null);
+  const [contextMenu, setContextMenu] = useState<{
+    session: SessionInfo;
+    x: number;
+    y: number;
+  } | null>(null);
+  const histories = useRef(new ChatCache()).current;
+  const pendingDrafts = useRef(
+    new ChatDrafts((id, text) =>
+      api(`/sessions/${id}/composer`, { text }, "PUT"),
     ),
-    [sessionId, setSessionId] = useState<string | null>(
-      localStorage.getItem("margin.session"),
-    );
+  ).current;
+  const previews = useRef(new Map<string, Promise<void>>()).current;
+  const deletedSessions = useRef(new Set<string>()).current;
+  const positions = useRef(
+    new Map<string, { top: number; sticky: boolean }>(),
+  ).current;
+  const skillChoices = useRef(new Map<string, string>()).current;
+  const [managing, setManaging] = useState(false);
+  const [statusError, setStatusError] = useState("");
+  const skillChosen = useRef(false);
   const [snapshot, setSnapshot] = useState<Snapshot | null>(null),
     [rail, setRail] = useState(false),
     [sidebar, setSidebar] = useState(() => window.innerWidth > 650);
@@ -119,10 +173,27 @@ export function App() {
   const restoreConversation = useRef<(() => void) | undefined>(undefined);
   function changePanel(next: string | null) {
     if (next === panel) return;
+    if (editing) {
+      fail(
+        new Error(
+          "Finish or cancel your draft comment before changing panels.",
+        ),
+      );
+      return;
+    }
     restoreConversation.current = captureConversationPosition(
       scrollRef.current,
     );
-    setPanel(next);
+    const route = routeRef.current;
+    void flushDraft()
+      .then(() => {
+        if (routeRef.current !== route) return;
+        setPanel(next);
+        setRail(false);
+        if (route.kind === "chat" || route.kind === "workspace")
+          writeRoute({ ...route, panel: next ?? undefined });
+      })
+      .catch(fail);
   }
   useLayoutEffect(() => {
     restoreConversation.current?.();
@@ -131,31 +202,157 @@ export function App() {
   const stickyBottom = useRef(true),
     selectedId = useRef(sessionId),
     lastAccepted = useRef<string>("");
-  const draftVersion = useRef(0),
-    saveChain = useRef<Promise<unknown>>(Promise.resolve());
+  const draftVersion = useRef(0);
+  const snapshotRef = useRef(snapshot);
+  snapshotRef.current = snapshot;
   const currentProject = boot.projects.find((p) => p.id === projectId);
   const fail = (e: unknown) =>
     setError(e instanceof Error ? e.message : String(e));
-  const refresh = useCallback(async () => {
-    const b = await api<Bootstrap>(
-      `/bootstrap?projectId=${encodeURIComponent(localStorage.getItem("margin.project") ?? "")}`,
+  function writeRoute(next: Destination, replace = false) {
+    const url = destinationUrl(next);
+    if (location.pathname + location.search !== url) {
+      if (!replace) historyIndex.current++;
+      history[replace ? "replaceState" : "pushState"](
+        { marginIndex: historyIndex.current },
+        "",
+        url,
+      );
+    } else history.replaceState({ marginIndex: historyIndex.current }, "", url);
+    routeRef.current = next;
+  }
+  function applyRoute(next: AppRoute, data: Bootstrap) {
+    setRenameOpen(false);
+    setDeleteTarget(null);
+    setContextMenu(null);
+    setAllWorkspaces(false);
+    routeRef.current = next;
+    setRouteMissing(false);
+    if (next.kind === "customize") {
+      const marginProject =
+        data.projects.find((p) => p.id === data.marginProjectId) ??
+        data.projects.find((p) => p.kind === "margin");
+      const saved =
+        data.projects.find(
+          (p) => p.id === localStorage.getItem("margin.project"),
+        ) ?? data.projects[0];
+      setProjectId(
+        (current) =>
+          marginProject?.id ??
+          (data.projects.some((p) => p.id === current)
+            ? current
+            : (saved?.id ?? "")),
+      );
+      if (!returnRoute.current) {
+        const chat = data.sessions.find(
+          (s) => s.id === localStorage.getItem("margin.session"),
+        );
+        if (chat) returnRoute.current = { kind: "chat", sessionId: chat.id };
+        else if (saved)
+          returnRoute.current = { kind: "workspace", projectId: saved.id };
+      }
+      setHubTab(next.tab);
+      setHubOpen(true);
+      setPanel(null);
+      setRail(false);
+      return;
+    }
+    setHubOpen(false);
+    const chat =
+      next.kind === "chat"
+        ? data.sessions.find((s) => s.id === next.sessionId)
+        : undefined;
+    const project =
+      next.kind === "workspace"
+        ? data.projects.find((p) => p.id === next.projectId)
+        : chat
+          ? data.projects.find((p) => p.id === chat.projectId)
+          : undefined;
+    if (!project || (next.kind === "chat" && !chat)) {
+      setRouteMissing(true);
+      activateSession(null);
+      setPanel(null);
+      setRail(false);
+      return;
+    }
+    setProjectId(project.id);
+    activateSession(chat?.id ?? null);
+    const nextPanel =
+      next.kind === "chat" || next.kind === "workspace"
+        ? next.panel
+        : undefined;
+    const foundPanel =
+      !nextPanel ||
+      nextPanel === "comments" ||
+      browserPlugins.some((p) =>
+        p.panels?.some(
+          (x) =>
+            `${p.id}:${x.id}` === nextPanel &&
+            (x.scope === "workspace" || !!chat),
+        ),
+      );
+    setPanel(
+      foundPanel && nextPanel !== "comments" ? (nextPanel ?? null) : null,
     );
+    setRail(nextPanel === "comments" && !!chat);
+    if (!foundPanel)
+      setError(
+        "This panel is unavailable. It may belong to a disabled plugin.",
+      );
+  }
+  async function go(next: Destination, data = boot, replace = false) {
+    if (managing)
+      throw new Error(
+        "Wait for the current change to finish before navigating.",
+      );
+    if (editing)
+      throw new Error("Finish or cancel your draft comment before navigating.");
+    if (sending)
+      throw new Error("Wait for your message to be saved before navigating.");
+    const save = flushDraft();
+    void save.catch(fail);
+    if (next.kind === "customize" && routeRef.current.kind !== "customize") {
+      if (sessionId && scrollRef.current)
+        positions.set(sessionId, {
+          top: scrollRef.current.scrollTop,
+          sticky: stickyBottom.current,
+        });
+      const previous = routeRef.current;
+      if (previous.kind === "chat" || previous.kind === "workspace")
+        returnRoute.current = previous;
+    }
+    setError("");
+    writeRoute(next, replace);
+    applyRoute(next, data);
+  }
+  const refresh = useCallback(async () => {
+    const route = parseRoute(location.pathname, location.search);
+    const query =
+      route.kind === "chat"
+        ? `sessionId=${encodeURIComponent(route.sessionId)}`
+        : `projectId=${encodeURIComponent(route.kind === "workspace" ? route.projectId : (localStorage.getItem("margin.project") ?? ""))}`;
+    const b = await api<Bootstrap>(`/bootstrap?${query}`);
     const pluginErrors = await loadBrowserPlugins(b.activePluginFolders);
     if (pluginErrors.length)
       setError(
         `Some browser plugins could not load: ${pluginErrors.join("; ")}`,
       );
     setBoot(b);
-    setProjectId((p) =>
-      b.projects.some((project) => project.id === p)
-        ? p
-        : b.projects[0]?.id || "",
-    );
-    setSessionId((id) => {
-      if (!id || b.sessions.some((session) => session.id === id)) return id;
-      localStorage.removeItem("margin.session");
-      return null;
-    });
+    setLoaded(true);
+    let next = parseRoute(location.pathname, location.search);
+    if (next.kind === "home") {
+      const chat = b.sessions.find(
+        (s) => s.id === localStorage.getItem("margin.session"),
+      );
+      const project =
+        b.projects.find(
+          (p) => p.id === localStorage.getItem("margin.project"),
+        ) ?? b.projects[0];
+      if (chat) next = { kind: "chat", sessionId: chat.id };
+      else if (project) next = { kind: "workspace", projectId: project.id };
+    }
+    if (next.kind !== "home" && next.kind !== "not-found")
+      writeRoute(next, true);
+    applyRoute(next, b);
     setNewModel(
       (v) =>
         v ||
@@ -172,48 +369,143 @@ export function App() {
     void refresh().catch(fail);
   }, [refresh]);
   useEffect(() => {
-    if (projectId) localStorage.setItem("margin.project", projectId);
+    if (projectId) {
+      localStorage.setItem("margin.project", projectId);
+      const next = [
+        projectId,
+        ...readRecentWorkspaces().filter((id) => id !== projectId),
+      ];
+      localStorage.setItem("margin.recent-workspaces", JSON.stringify(next));
+      setRecents(next);
+    }
   }, [projectId]);
-  useEffect(() => {
-    selectedId.current = sessionId;
-    setSnapshot(null);
+  function activateSession(id: string | null) {
+    if (selectedId.current === id) return;
+    const previous = selectedId.current;
+    if (previous && snapshotRef.current?.session.id === previous) {
+      histories.put({ ...snapshotRef.current, composer: draftRef.current });
+      positions.set(previous, {
+        top: scrollRef.current?.scrollTop ?? 0,
+        sticky: stickyBottom.current,
+      });
+    }
+    selectedId.current = id;
+    const cached = id ? histories.get(id) : undefined;
+    const pending = id ? pendingDrafts.get(id) : undefined;
+    setSnapshot(cached ?? null);
+    snapshotRef.current = cached ?? null;
+    setSessionId(id);
     setConnected(false);
     setEditing(null);
     setSelection(null);
     setActive(null);
-    setSkill("");
-    setRail(false);
-    setPanel((current) =>
-      browserPlugins.some((p) =>
-        p.panels?.some(
-          (x) => `${p.id}:${x.id}` === current && x.scope === "workspace",
-        ),
-      )
-        ? current
-        : null,
-    );
-    dirty.current = false;
-    stickyBottom.current = true;
+    setCommentGaps({});
+    const text = id
+      ? pendingDrafts.text(id, cached?.composer ?? "", cached?.composerRevision)
+      : "";
+    setDraft(text);
+    draftRef.current = text;
+    dirty.current = !!pending;
+    setSkill(id ? (skillChoices.get(id) ?? "") : "");
+    skillChosen.current = !!id && skillChoices.has(id);
+    stickyBottom.current = id ? (positions.get(id)?.sticky ?? true) : true;
     if (saveTimer.current) clearTimeout(saveTimer.current);
+  }
+  function prefetchSession(id: string) {
+    if (deletedSessions.has(id)) return Promise.resolve();
+    if (previews.has(id)) return previews.get(id)!;
+    const previous = histories.get(id);
+    const request = api<Snapshot>(`/sessions/${id}/preview`)
+      .then((preview) => {
+        // A later live event always wins over an earlier preview request.
+        if (deletedSessions.has(id) || histories.get(id) !== previous) return;
+        histories.put(preview);
+        if (selectedId.current === id && !snapshotRef.current) {
+          setSnapshot(preview);
+          snapshotRef.current = preview;
+          const text = pendingDrafts.text(
+            id,
+            preview.composer,
+            preview.composerRevision,
+          );
+          setDraft(text);
+          draftRef.current = text;
+        }
+      })
+      .catch(() => {
+        /* The live connection reports errors; speculative reads do not interrupt navigation. */
+      })
+      .finally(() => previews.delete(id));
+    previews.set(id, request);
+    return request;
+  }
+  const previewCandidates = boot.sessions
+    .filter((s) => s.projectId === projectId)
+    .slice(0, 5);
+  const previewKey = previewCandidates
+    .map((s) => `${s.id}:${s.updatedAt}`)
+    .join(",");
+  useEffect(() => {
+    if (!loaded) return;
+    for (const session of previewCandidates)
+      if (!histories.get(session.id)) void prefetchSession(session.id);
+  }, [loaded, projectId, previewKey]);
+  useLayoutEffect(() => {
+    const saved = sessionId ? positions.get(sessionId) : undefined;
+    if (scrollRef.current && snapshot?.session.id === sessionId)
+      scrollRef.current.scrollTop =
+        saved && !saved.sticky ? saved.top : scrollRef.current.scrollHeight;
+  }, [sessionId, hubOpen, snapshot?.session.id]);
+  useEffect(() => {
+    const warn = (event: BeforeUnloadEvent) => {
+      if (!pendingDrafts.unsaved) return;
+      event.preventDefault();
+      event.returnValue = "";
+    };
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, []);
+  useEffect(() => {
+    if (!loaded) return;
     if (!sessionId) {
-      localStorage.removeItem("margin.session");
-      setDraft("");
-      draftRef.current = "";
+      if (!hubOpen) localStorage.removeItem("margin.session");
       return;
     }
     localStorage.setItem("margin.session", sessionId);
+    if (!histories.get(sessionId)) void prefetchSession(sessionId);
+    let closed = false;
     const stream = new EventSource(`/api/sessions/${sessionId}/events`);
-    stream.onopen = () => setConnected(true);
-    stream.onerror = () => setConnected(false);
+    stream.onerror = () => {
+      if (!closed) setConnected(false);
+    };
     stream.onmessage = (e) => {
+      if (closed || deletedSessions.has(sessionId)) return;
       const { snapshot: s } = JSON.parse(e.data) as { snapshot: Snapshot };
+      histories.put(s);
       if (selectedId.current !== s.session.id) return;
+      setConnected(true);
       setSnapshot(s);
-      setProjectId(s.session.projectId);
-      if (!dirty.current) {
-        setDraft(s.composer);
-        draftRef.current = s.composer;
-      }
+      snapshotRef.current = s;
+      if (!s.busy && !skillChosen.current) {
+        const choice = s.messages.some((m) => m.role === "user")
+          ? ""
+          : defaultSkill(s.skills);
+        setSkill(choice);
+        skillChoices.set(s.session.id, choice);
+        skillChosen.current = true;
+      } else
+        setSkill((current) =>
+          s.skills.some((x) => x.name === current) ? current : "",
+        );
+      const pending = pendingDrafts.get(s.session.id);
+      const text = pendingDrafts.text(
+        s.session.id,
+        s.composer,
+        s.composerRevision,
+      );
+      setDraft(text);
+      draftRef.current = text;
+      dirty.current = !!pending;
       setBoot((b) => ({
         ...b,
         sessions: [
@@ -222,8 +514,95 @@ export function App() {
         ],
       }));
     };
-    return () => stream.close();
-  }, [sessionId]);
+    return () => {
+      closed = true;
+      stream.close();
+    };
+  }, [sessionId, loaded]);
+  const navigationHandler = useRef<
+    (next: AppRoute, index?: number) => Promise<void>
+  >(async () => {});
+  navigationHandler.current = async (next, index) => {
+    if (index === undefined) {
+      if (next.kind === "home" || next.kind === "not-found")
+        throw new Error("Unknown destination.");
+      return go(next);
+    }
+    try {
+      if (editing || sending || managing)
+        throw new Error(
+          "Finish or cancel your draft comment, and wait for sending to finish before navigating.",
+        );
+      void flushDraft().catch(fail);
+      historyIndex.current = index;
+      setError("");
+      if (next.kind === "home")
+        next = {
+          kind: "workspace",
+          projectId: projectId || boot.projects[0]?.id || "",
+        };
+      applyRoute(next, boot);
+    } catch (error) {
+      restoringHistory.current = true;
+      history.go(historyIndex.current - index);
+      fail(error);
+    }
+  };
+  useEffect(() => {
+    const pop = (event: PopStateEvent) => {
+      if (restoringHistory.current) {
+        restoringHistory.current = false;
+        return;
+      }
+      void navigationHandler.current(
+        parseRoute(location.pathname, location.search),
+        Number(event.state?.marginIndex ?? 0),
+      );
+    };
+    const plugin = (event: Event) => {
+      event.preventDefault();
+      const { destination, resolve, reject } = (
+        event as CustomEvent<NavigationRequest>
+      ).detail;
+      void navigationHandler.current(destination).then(resolve, reject);
+    };
+    window.addEventListener("popstate", pop);
+    window.addEventListener("margin:navigate", plugin);
+    return () => {
+      window.removeEventListener("popstate", pop);
+      window.removeEventListener("margin:navigate", plugin);
+    };
+  }, []);
+  useEffect(() => {
+    if (!loaded) return;
+    let cancelled = false;
+    let timer: ReturnType<typeof setTimeout>;
+    const poll = async () => {
+      try {
+        const result = await api<{
+          sessions: SessionInfo[];
+          workspaceErrors?: string[];
+        }>("/sessions");
+        if (!cancelled) {
+          setBoot((b) => ({
+            ...b,
+            sessions: result.sessions.filter((s) => !deletedSessions.has(s.id)),
+            workspaceErrors: result.workspaceErrors ?? b.workspaceErrors,
+          }));
+          setStatusError("");
+        }
+      } catch {
+        if (!cancelled)
+          setStatusError("Chat status updates are unavailable. Retrying…");
+      }
+      if (!cancelled) timer = setTimeout(() => void poll(), 1500);
+    };
+    void poll();
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [loaded]);
   useEffect(() => {
     if (stickyBottom.current && scrollRef.current)
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
@@ -233,49 +612,54 @@ export function App() {
     snapshot?.dialogs.length,
   ]);
   function updateDraft(text: string) {
+    updateChatDraft(sessionId, text);
+  }
+  function updateChatDraft(id: string | null, text: string) {
+    if (id && deletedSessions.has(id)) return;
+    if (id) pendingDrafts.set(id, text);
+    if (selectedId.current !== id) {
+      if (id) void pendingDrafts.flush(id).catch(fail);
+      return;
+    }
     setDraft(text);
     draftRef.current = text;
     dirty.current = true;
     const version = ++draftVersion.current;
     if (saveTimer.current) clearTimeout(saveTimer.current);
-    if (sessionId) {
-      const id = sessionId;
+    if (id) {
       saveTimer.current = setTimeout(
         () => void persistDraft(id, text, version).catch(fail),
         250,
       );
     }
   }
-  function persistDraft(id: string, text: string, version: number) {
-    const request = saveChain.current
-      .catch(() => {})
-      .then(() => api(`/sessions/${id}/composer`, { text }, "PUT"));
-    saveChain.current = request;
-    return request.then(() => {
-      if (selectedId.current === id && draftVersion.current === version)
-        dirty.current = false;
-    });
+  async function persistDraft(id: string, _text: string, _version: number) {
+    await pendingDrafts.flush(id);
+    if (selectedId.current === id && !pendingDrafts.get(id))
+      dirty.current = false;
   }
   async function flushDraft() {
     if (saveTimer.current) clearTimeout(saveTimer.current);
-    if (sessionId && dirty.current)
-      await persistDraft(sessionId, draftRef.current, draftVersion.current);
-    else await saveChain.current;
+    if (sessionId) await pendingDrafts.flush(sessionId);
+  }
+  function workspacePanel() {
+    return browserPlugins.some((p) =>
+      p.panels?.some(
+        (x) => `${p.id}:${x.id}` === panel && x.scope === "workspace",
+      ),
+    )
+      ? (panel ?? undefined)
+      : undefined;
   }
   async function switchSession(id: string | null) {
-    if (editing) {
-      setError(
-        "Finish or cancel your draft comment before changing conversations.",
-      );
-      return;
-    }
     try {
-      await flushDraft();
-      setHubOpen(false);
-      setSessionId(id);
-      setError("");
-    } catch (e) {
-      fail(e);
+      await go(
+        id
+          ? { kind: "chat", sessionId: id, panel: workspacePanel() }
+          : { kind: "workspace", projectId, panel: workspacePanel() },
+      );
+    } catch (error) {
+      fail(error);
     }
   }
   async function createSession() {
@@ -292,7 +676,15 @@ export function App() {
         projectId,
         model: boot.models.find((m) => modelKey(m) === newModel),
       });
-      setSessionId(s.session.id);
+      histories.put(s);
+      const data = { ...boot, sessions: [s.session, ...boot.sessions] };
+      setBoot(data);
+      writeRoute({
+        kind: "chat",
+        sessionId: s.session.id,
+        panel: workspacePanel(),
+      });
+      applyRoute(routeRef.current, data);
       setError("");
     } catch (e) {
       fail(e);
@@ -301,15 +693,8 @@ export function App() {
     }
   }
   async function openCustomization() {
-    if (editing) {
-      setError("Finish or cancel your comment first.");
-      return;
-    }
-    await flushDraft();
-    setPanel(null);
-    setRail(false);
+    await go({ kind: "customize", tab: "examples" });
     if (window.innerWidth <= 650) setSidebar(false);
-    setHubOpen(true);
   }
   async function customizationPrompt(project: Project, prompt: string) {
     await flushDraft();
@@ -319,9 +704,10 @@ export function App() {
     });
     if (prompt)
       await api(`/sessions/${s.session.id}/composer`, { text: prompt }, "PUT");
-    setProjectId(project.id);
-    setSessionId(s.session.id);
-    setHubOpen(false);
+    histories.put({ ...s, composer: prompt });
+    const data = { ...boot, sessions: [s.session, ...boot.sessions] };
+    setBoot(data);
+    await go({ kind: "chat", sessionId: s.session.id }, data);
   }
   async function chooseWorkspace() {
     if (choosingWorkspaceRef.current) return;
@@ -347,22 +733,26 @@ export function App() {
     }
   }
   async function openProject(p: Project) {
-    await flushDraft();
-    setBoot((b) => ({
-      ...b,
-      projects: b.projects.some((x) => x.id === p.id)
-        ? b.projects
-        : [...b.projects, p],
-    }));
-    setProjectId(p.id);
-    setSessionId(null);
-    localStorage.removeItem("margin.session");
-    setHubOpen(false);
-    setError("");
+    const data = {
+      ...boot,
+      projects: boot.projects.some((x) => x.id === p.id)
+        ? boot.projects
+        : [...boot.projects, p],
+    };
+    await go(
+      { kind: "workspace", projectId: p.id, panel: workspacePanel() },
+      data,
+    );
+    setBoot(data);
+    setAllWorkspaces(false);
   }
   async function saveComments(comments: Comment[]) {
-    await api(`/sessions/${sessionId}/comments`, comments, "PUT");
-    setSnapshot((s) => (s ? { ...s, comments } : s));
+    const id = sessionId!;
+    await api(`/sessions/${id}/comments`, comments, "PUT");
+    const cached = histories.get(id);
+    if (cached && !deletedSessions.has(id))
+      histories.put({ ...cached, comments });
+    setSnapshot((s) => (s?.session.id === id ? { ...s, comments } : s));
   }
   async function saveComment() {
     if (!editing || !snapshot || !editing.text.trim()) return;
@@ -386,7 +776,15 @@ export function App() {
     }
   }
   async function send() {
-    if (!snapshot) return;
+    if (
+      !snapshot ||
+      !connected ||
+      sending ||
+      editing ||
+      snapshot.busy ||
+      snapshot.dialogs.length
+    )
+      return;
     setSending(true);
     setError("");
     if (saveTimer.current) clearTimeout(saveTimer.current);
@@ -422,6 +820,8 @@ export function App() {
       if (selectedId.current === sendingSession) {
         if (draftVersion.current === version) dirty.current = false;
         setSkill("");
+        if (sendingSession) skillChoices.set(sendingSession, "");
+        skillChosen.current = true;
         stickyBottom.current = true;
       }
     } catch (e) {
@@ -443,6 +843,8 @@ export function App() {
     setActive("editing");
     setRail(true);
     setPanel(null);
+    if (routeRef.current.kind === "chat")
+      writeRoute({ ...routeRef.current, panel: "comments" }, true);
     setSelection(null);
     window.getSelection()?.removeAllRanges();
     stickyBottom.current = false;
@@ -453,6 +855,9 @@ export function App() {
       return;
     }
     setRail(open);
+    const route = routeRef.current;
+    if (route.kind === "chat")
+      writeRoute({ ...route, panel: open ? "comments" : undefined });
     setPanel(null);
     if (open && window.innerWidth <= 900)
       requestAnimationFrame(() =>
@@ -499,6 +904,8 @@ export function App() {
     setActive(c.id);
     setRail(true);
     setPanel(null);
+    if (routeRef.current.kind === "chat")
+      writeRoute({ ...routeRef.current, panel: "comments" });
     const root = document.querySelector<HTMLElement>(
       `[data-message-id="${CSS.escape(c.anchor.messageId)}"]`,
     );
@@ -604,15 +1011,212 @@ export function App() {
     state: snapshot?.pluginState[id],
     action: (name, input) =>
       api(`/sessions/${sessionId}/plugins/${id}/${name}`, input),
-    setComposer: updateDraft,
+    setComposer: (text) => updateChatDraft(snapshot!.session.id, text),
   });
   const draftCount =
     snapshot?.comments.filter((c) => c.status === "draft").length ?? 0;
   const busy = snapshot?.busy ?? false;
+  const currentActivity =
+    boot.sessions.find((s) => s.id === sessionId)?.activity ??
+    snapshot?.session.activity;
+  const isUnread = useUnread(
+    sessionId,
+    currentActivity,
+    !hubOpen &&
+      !routeMissing &&
+      !!snapshot &&
+      !allWorkspaces &&
+      !renameOpen &&
+      !deleteTarget &&
+      !contextMenu &&
+      !(panel && viewportWidth <= 900) &&
+      !(sidebar && viewportWidth <= 650),
+    scrollRef,
+    snapshot?.messages.at(-1)?.id,
+  );
+  const orderedProjects = [
+    ...recents
+      .map((id) => boot.projects.find((p) => p.id === id))
+      .filter((p): p is Project => !!p),
+    ...boot.projects.filter((p) => !recents.includes(p.id)),
+  ];
+  const recentProjects = (
+    currentProject
+      ? [
+          currentProject,
+          ...orderedProjects.filter((p) => p.id !== currentProject.id),
+        ]
+      : orderedProjects
+  ).slice(0, 5);
+  function sessionActive(info: SessionInfo) {
+    if (snapshot?.session.id === info.id && connected)
+      return snapshot.busy || snapshot.dialogs.length > 0;
+    return ["running", "waiting"].includes(
+      boot.sessions.find((s) => s.id === info.id)?.activity?.status ??
+        info.activity?.status ??
+        "idle",
+    );
+  }
   const model = snapshot?.session.model;
   const agentName = snapshot?.session.backendLabel ?? "Pi";
   return (
     <div className={`app ${sidebar ? "" : "sidebar-hidden"}`}>
+      {contextMenu && (
+        <ConversationMenu
+          {...contextMenu}
+          active={sessionActive(contextMenu.session)}
+          onClose={() => setContextMenu(null)}
+          onStop={() => {
+            const id = contextMenu.session.id;
+            setContextMenu(null);
+            void api(`/sessions/${id}/stop`, {}).catch(fail);
+          }}
+          onDelete={() => {
+            setError("");
+            setDeleteTarget(contextMenu.session);
+            setContextMenu(null);
+          }}
+        />
+      )}
+      {allWorkspaces && (
+        <WorkspacePicker
+          projects={orderedProjects}
+          current={projectId}
+          onClose={() => setAllWorkspaces(false)}
+          onSelect={(project) => void openProject(project).catch(fail)}
+        />
+      )}
+      {renameOpen && (
+        <AppDialog
+          title="Rename workspace"
+          onClose={() => {
+            if (!managing) setRenameOpen(false);
+          }}
+        >
+          <form
+            onSubmit={(event) => {
+              event.preventDefault();
+              setManaging(true);
+              void api<Project>(
+                `/projects/${projectId}`,
+                { name: workspaceName.trim() },
+                "PATCH",
+              )
+                .then((project) => {
+                  setBoot((b) => ({
+                    ...b,
+                    projects: b.projects.map((p) =>
+                      p.id === project.id ? project : p,
+                    ),
+                  }));
+                  setRenameOpen(false);
+                })
+                .catch(fail)
+                .finally(() => setManaging(false));
+            }}
+          >
+            <label>
+              Workspace name
+              <input
+                autoFocus
+                value={workspaceName}
+                maxLength={100}
+                onChange={(event) => setWorkspaceName(event.target.value)}
+              />
+            </label>
+            <p className="muted">Folder: {currentProject?.path}</p>
+            <div className="management-actions">
+              <button
+                type="button"
+                disabled={managing}
+                onClick={() => setRenameOpen(false)}
+              >
+                Cancel
+              </button>
+              <button
+                className="primary"
+                disabled={managing || !workspaceName.trim()}
+              >
+                Save name
+              </button>
+            </div>
+          </form>
+        </AppDialog>
+      )}
+      {deleteTarget && (
+        <AppDialog
+          title="Delete conversation?"
+          onClose={() => {
+            if (!managing) setDeleteTarget(null);
+          }}
+        >
+          <p>
+            Permanently delete “{deleteTarget.title}”, its messages, comments,
+            and draft? This cannot be undone.
+          </p>
+          <p className="muted">
+            Workspace files and shared plugin data are kept.
+          </p>
+          {error && (
+            <p className="error-text" role="alert">
+              {error}
+            </p>
+          )}
+          <div className="management-actions">
+            <button disabled={managing} onClick={() => setDeleteTarget(null)}>
+              Cancel
+            </button>
+            <button
+              className="danger"
+              disabled={managing || sessionActive(deleteTarget)}
+              onClick={() => {
+                const target = deleteTarget;
+                if (selectedId.current === target.id && editing) {
+                  fail(
+                    new Error(
+                      "Finish or cancel your draft comment before deleting this conversation.",
+                    ),
+                  );
+                  return;
+                }
+                setManaging(true);
+                if (selectedId.current === target.id && saveTimer.current)
+                  clearTimeout(saveTimer.current);
+                void pendingDrafts
+                  .flush(target.id)
+                  .then(() => api(`/sessions/${target.id}`, {}, "DELETE"))
+                  .then(() => {
+                    deletedSessions.add(target.id);
+                    histories.delete(target.id);
+                    pendingDrafts.delete(target.id);
+                    positions.delete(target.id);
+                    skillChoices.delete(target.id);
+                    const data = {
+                      ...boot,
+                      sessions: boot.sessions.filter((s) => s.id !== target.id),
+                    };
+                    setBoot(data);
+                    if (selectedId.current === target.id) {
+                      snapshotRef.current = null;
+                      const next: Destination = {
+                        kind: "workspace",
+                        projectId: target.projectId,
+                        panel: workspacePanel(),
+                      };
+                      writeRoute(next, true);
+                      applyRoute(next, data);
+                    }
+                    setDeleteTarget(null);
+                  })
+                  .catch(fail)
+                  .finally(() => setManaging(false));
+              }}
+            >
+              Delete permanently
+            </button>
+          </div>
+        </AppDialog>
+      )}
       <header className="app-header">
         <div className="brand">
           <PanelRight size={21} />
@@ -666,6 +1270,17 @@ export function App() {
               <X size={16} />
             </button>
             <button
+              aria-label="Rename workspace"
+              title="Rename workspace"
+              disabled={!currentProject}
+              onClick={() => {
+                setWorkspaceName(currentProject?.name ?? "");
+                setRenameOpen(true);
+              }}
+            >
+              <Pencil size={16} />
+            </button>
+            <button
               aria-label="New workspace"
               title="Open or create a workspace"
               disabled={choosingWorkspace}
@@ -678,21 +1293,30 @@ export function App() {
           <select
             className="project-select"
             aria-label="Project"
+            disabled={!loaded}
             value={projectId}
             onChange={(e) => {
               if (editing) {
                 setError("Finish or cancel your draft comment first.");
                 return;
               }
-              setProjectId(e.target.value);
-              void switchSession(null);
+              if (e.target.value === "__all__") {
+                setAllWorkspaces(true);
+                return;
+              }
+              const project = boot.projects.find(
+                (p) => p.id === e.target.value,
+              );
+              if (project) void openProject(project).catch(fail);
             }}
           >
-            {boot.projects.map((p) => (
+            {recentProjects.map((p) => (
               <option value={p.id} key={p.id}>
                 {p.name}
               </option>
             ))}
+            <hr />
+            <option value="__all__">All workspaces…</option>
           </select>
           <button
             className="new-chat"
@@ -710,10 +1334,55 @@ export function App() {
                 <button
                   className={sessionId === s.id ? "selected" : ""}
                   key={s.id}
+                  data-session-id={s.id}
                   onClick={() => void switchSession(s.id)}
+                  onMouseEnter={() => {
+                    if (!histories.get(s.id)) void prefetchSession(s.id);
+                  }}
+                  onFocus={() => {
+                    if (!histories.get(s.id)) void prefetchSession(s.id);
+                  }}
+                  onContextMenu={(event) => {
+                    event.preventDefault();
+                    setContextMenu({
+                      session: s,
+                      x: event.clientX,
+                      y: event.clientY,
+                    });
+                  }}
+                  onKeyDown={(event) => {
+                    if (
+                      event.key === "ContextMenu" ||
+                      (event.shiftKey && event.key === "F10")
+                    ) {
+                      event.preventDefault();
+                      const rect = event.currentTarget.getBoundingClientRect();
+                      setContextMenu({
+                        session: s,
+                        x: rect.left + 20,
+                        y: rect.bottom,
+                      });
+                    }
+                  }}
+                  aria-haspopup="menu"
+                  title={s.title}
                 >
-                  <MessageSquare size={15} />
-                  <span>{s.title}</span>
+                  <span className="session-title">{s.title}</span>
+                  {s.activity?.status === "running" ? (
+                    <span
+                      className="conversation-spinner"
+                      role="img"
+                      aria-label="Running"
+                      title="Running"
+                    />
+                  ) : isUnread(s.id, s.activity) ? (
+                    <span
+                      className="conversation-unread"
+                      role="img"
+                      aria-label="Unread"
+                      title="Unread"
+                    />
+                  ) : null}
                 </button>
               ))}
             {!boot.sessions.some((s) => s.projectId === projectId) && (
@@ -728,6 +1397,11 @@ export function App() {
           </div>
         </aside>
         <main className="main">
+          {statusError && (
+            <div className="notice" role="status">
+              {statusError}
+            </div>
+          )}
           {error && (
             <div className="notice error" role="alert">
               <span>{error}</span>
@@ -741,9 +1415,31 @@ export function App() {
               Choose or create a folder in the system dialog.
             </div>
           )}
-          {hubOpen ? (
+          {routeMissing ? (
+            <div className="empty-state">
+              <h2>Destination unavailable</h2>
+              <p>
+                This conversation or workspace may have been deleted or its
+                folder is unavailable.
+              </p>
+              <button onClick={() => setAllWorkspaces(true)}>
+                Choose a workspace
+              </button>
+            </div>
+          ) : hubOpen ? (
             <CustomizeMargin
-              onClose={() => setHubOpen(false)}
+              tab={hubTab}
+              onTabChange={(tab) =>
+                void go({ kind: "customize", tab }).catch(fail)
+              }
+              onClose={() =>
+                void go(
+                  returnRoute.current ?? {
+                    kind: "workspace",
+                    projectId: projectId || boot.projects[0]?.id || "",
+                  },
+                ).catch(fail)
+              }
               onPrompt={customizationPrompt}
             />
           ) : (
@@ -769,10 +1465,21 @@ export function App() {
                   </span>
                   <span className="crumb-separator">/</span>
                   <span className="conversation-title">
-                    {snapshot?.session.title ?? "New conversation"}
+                    {snapshot?.session.title ??
+                      boot.sessions.find((s) => s.id === sessionId)?.title ??
+                      "New conversation"}
                   </span>
                 </div>
                 <div className="toolbar-actions">
+                  {sessionId && (
+                    <>
+                      <ChatStatus
+                        activity={currentActivity}
+                        unread={isUnread(sessionId, currentActivity)}
+                        agent={agentName}
+                      />
+                    </>
+                  )}
                   {browserPlugins.flatMap(
                     (p) =>
                       p.panels?.map((x) => (
@@ -794,7 +1501,6 @@ export function App() {
                                 ? null
                                 : `${p.id}:${x.id}`,
                             );
-                            setRail(false);
                           }}
                         >
                           <Plug size={15} />
@@ -815,6 +1521,15 @@ export function App() {
                   </button>
                 </div>
               </div>
+              {sessionId && (
+                <div className="mobile-chat-status">
+                  <ChatStatus
+                    activity={currentActivity}
+                    unread={isUnread(sessionId, currentActivity)}
+                    agent={agentName}
+                  />
+                </div>
+              )}
               {!!boot.workspaceErrors?.length && (
                 <div className="notice error" role="alert">
                   <span>
@@ -904,7 +1619,17 @@ export function App() {
                   else captureSelection();
                 }}
               >
-                {!snapshot ? (
+                {!snapshot && sessionId ? (
+                  <div
+                    className="conversation-loading"
+                    role="status"
+                    aria-label="Loading conversation"
+                  >
+                    <div />
+                    <div />
+                    <div />
+                  </div>
+                ) : !snapshot ? (
                   <div className="welcome">
                     <div className="welcome-icon">
                       <PanelRight size={32} />
@@ -1137,11 +1862,18 @@ export function App() {
                                 {m.skill && (
                                   <div className="skill-used">
                                     <BookOpen size={12} />
-                                    {m.skill}
+                                    {skillLabel(m.skill)}
                                   </div>
                                 )}
                                 <UserMessage text={m.text} />
                               </div>
+                            )}
+                            {m.role === "assistant" && !m.streaming && (
+                              <span
+                                className="reply-end"
+                                data-reply-end={m.id}
+                                aria-hidden="true"
+                              />
                             )}
                           </article>
                         ),
@@ -1216,13 +1948,18 @@ export function App() {
                               <select
                                 aria-label="Starting skill"
                                 value={skill}
-                                onChange={(e) => setSkill(e.target.value)}
-                                disabled={busy}
+                                onChange={(e) => {
+                                  skillChosen.current = true;
+                                  setSkill(e.target.value);
+                                  if (sessionId)
+                                    skillChoices.set(sessionId, e.target.value);
+                                }}
+                                disabled={busy || !connected}
                               >
                                 <option value="">No skill</option>
                                 {snapshot.skills.map((s) => (
                                   <option key={s.filePath} value={s.name}>
-                                    {s.name}
+                                    {skillLabel(s.name)}
                                   </option>
                                 ))}
                               </select>
@@ -1231,7 +1968,7 @@ export function App() {
                               type="button"
                               aria-label="Reload skills"
                               title="Reload Pi skills and extensions"
-                              disabled={busy}
+                              disabled={busy || !connected}
                               onClick={() =>
                                 void api(
                                   `/sessions/${sessionId}/reload`,
@@ -1267,6 +2004,7 @@ export function App() {
                               type="submit"
                               disabled={
                                 sending ||
+                                !!snapshot.dialogs.length ||
                                 !!editing ||
                                 (!draft.trim() && !draftCount) ||
                                 !connected
@@ -1282,7 +2020,7 @@ export function App() {
                           {editing
                             ? "Finish or cancel your draft comment before sending."
                             : skill
-                              ? `${skill} will guide your next message`
+                              ? `${skillLabel(skill)} will guide your next message`
                               : "Your skill sets the pace. Your comments shape the work."}
                         </span>
                         <kbd>⌘ ↵</kbd>
@@ -1292,7 +2030,7 @@ export function App() {
                           <span className="model-dot" />
                           <select
                             aria-label="Model"
-                            disabled={busy}
+                            disabled={busy || !connected}
                             value={modelKey(model)}
                             onChange={(e) => {
                               const m = boot.models.find(

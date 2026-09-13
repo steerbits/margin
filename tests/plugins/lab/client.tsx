@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { navigate } from "../../../src/navigation.ts";
 import type {
   BrowserPlugin,
   BrowserPluginContext,
@@ -29,6 +30,23 @@ const plugin: BrowserPlugin = {
   apiVersion: 1,
   panels: [{ id: "notes", title: "Lab notes", component: Panel }],
   messageActions: [
+    {
+      id: "delayed-composer",
+      label: "Prepare delayed draft",
+      run: async (_message, ctx) => {
+        await ctx.action("load", {});
+        ctx.setComposer("Draft prepared for the original chat");
+      },
+    },
+    {
+      id: "workspace-link",
+      label: "Open chat workspace",
+      run: (_message, ctx) =>
+        navigate({
+          kind: "workspace",
+          projectId: ctx.snapshot.session.projectId,
+        }),
+    },
     {
       id: "quote",
       label: "Use as prompt",

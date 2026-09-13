@@ -26,19 +26,21 @@ import {
   type PluginInfo,
 } from "../shared/customization.ts";
 import type { Project } from "../shared/types.ts";
+import type { CustomizeTab } from "../shared/navigation.ts";
 import "./CustomizeMargin.css";
 
 type Hub = { project: Project; plugins: PluginInfo[]; history: HistoryState };
 export function CustomizeMargin({
   onClose,
   onPrompt,
+  tab,
+  onTabChange,
 }: {
   onClose: () => void;
   onPrompt: (project: Project, prompt: string) => Promise<void>;
+  tab: CustomizeTab;
+  onTabChange: (tab: CustomizeTab) => void;
 }) {
-  const [tab, setTab] = useState<"examples" | "plugins" | "history">(
-    "examples",
-  );
   const [data, setData] = useState<Hub | null>(null),
     [error, setError] = useState(""),
     [notice, setNotice] = useState(""),
@@ -169,7 +171,7 @@ export function CustomizeMargin({
           <button
             key={t}
             aria-current={tab === t ? "page" : undefined}
-            onClick={() => setTab(t)}
+            onClick={() => onTabChange(t)}
           >
             {t === "examples" ? (
               <Layers size={17} />

@@ -1,3 +1,4 @@
+import { selectWorkspace } from "./navigation-helpers.ts";
 import {
   test,
   expect,
@@ -48,8 +49,7 @@ async function createSession(request: APIRequestContext, projectId: string) {
   return id;
 }
 async function visit(page: Page, id: string) {
-  await page.evaluate((id) => localStorage.setItem("margin.session", id), id);
-  await page.reload();
+  await page.goto(`/chats/${id}`);
   await expect(page.getByLabel("Starting skill")).toBeEnabled();
   await openNotes(page);
 }
@@ -238,8 +238,7 @@ test("load/save failures show errors and permit retry without losing edits", asy
       json: { error: "Notes storage unavailable" },
     }),
   );
-  await page.evaluate((id) => localStorage.setItem("margin.session", id), id);
-  await page.reload();
+  await page.goto(`/chats/${id}`);
   await expect(page.getByLabel("Starting skill")).toBeEnabled();
   await page.getByRole("button", { name: "Notes", exact: true }).click();
   await expect(panel(page).getByRole("alert")).toContainText(
@@ -494,7 +493,7 @@ test("workspace Notes works before any chat and stays shared across chat and wor
   const otherProject = await createProject(page.request);
   await page.reload();
   const selector = page.getByRole("combobox", { name: "Project", exact: true });
-  await selector.selectOption(project);
+  await selectWorkspace(page, project);
   const before = await (await page.request.get("/api/bootstrap")).json();
   expect(
     before.sessions.filter((s: any) => s.projectId === project),
@@ -548,11 +547,11 @@ test("workspace Notes works before any chat and stays shared across chat and wor
     )
   ).json();
   expect(sessionNote.result.note.text).toBe("Unsaved workspace decision");
-  await selector.selectOption(otherProject);
+  await selectWorkspace(page, otherProject);
   await expect(editor(page)).toBeVisible();
   await expect(editor(page)).toHaveValue("");
   await save(page, "Other workspace");
-  await selector.selectOption(project);
+  await selectWorkspace(page, project);
   await expect(editor(page)).toHaveValue("Unsaved workspace decision");
   const invalid = await page.request.post(
     "/api/projects/missing/plugins/project-notes/save",

@@ -33,8 +33,7 @@ async function seed(page: Page) {
   const r = await page.request.post("/api/test/seed", { data: {} });
   expect(r.ok()).toBeTruthy();
   const { id } = await r.json();
-  await page.evaluate((id) => localStorage.setItem("margin.session", id), id);
-  await page.reload();
+  await page.goto(`/chats/${id}`);
   await expect(
     page.getByRole("heading", { name: "A focused meeting-notes app" }),
   ).toBeAttached();
@@ -102,7 +101,6 @@ test("formatted selection, table and code comments survive reload, send one batc
     .fill("Keep this personal and local.");
   await page.waitForTimeout(400);
   await page.reload();
-  await page.getByRole("button", { name: /^Comments/ }).click();
   await expect(page.locator(".comment-card")).toHaveCount(3);
   await expect(page.getByRole("textbox", { name: "Message Pi" })).toHaveValue(
     "Keep this personal and local.",
@@ -327,7 +325,7 @@ test("plugins persist project data, specialize messages, and fail without losing
     "Remember this across conversations.",
   );
   await page.reload();
-  await page.getByRole("button", { name: "Lab notes", exact: true }).click();
+  await expect(page.getByRole("button", { name: "Lab notes", exact: true })).toHaveAttribute("aria-expanded", "true");
   await expect(page.getByTestId("plugin-note")).toHaveText(
     "Remember this across conversations.",
   );
@@ -375,11 +373,7 @@ test("a plugin can register another main runtime without changing the browser co
       data: { projectId: bootstrap.projects[0].id, model },
     })
   ).json();
-  await page.evaluate(
-    (id) => localStorage.setItem("margin.session", id),
-    s.session.id,
-  );
-  await page.reload();
+  await page.goto(`/chats/${s.session.id}`);
   await expect(
     page.getByRole("heading", { name: "Another runtime" }),
   ).toBeVisible();

@@ -1,3 +1,4 @@
+import { Store } from "../../server/store.ts";
 import { test, expect } from "@playwright/test";
 import {
   readFileSync,
@@ -101,14 +102,7 @@ test("external folders have independent workers and Notes shared by their chats;
   const first = await create(a.id),
     second = await create(a.id),
     other = await create(b.id);
-  await page.evaluate(
-    ({ first, project }) => {
-      localStorage.setItem("margin.session", first);
-      localStorage.setItem("margin.project", project);
-    },
-    { first, project: a.id },
-  );
-  await page.reload();
+  await page.goto(`/chats/${first}`);
   await expect(
     page.getByRole("heading", { name: "Another runtime" }),
   ).toBeVisible();
@@ -243,4 +237,130 @@ test("a failed cco launch is reported and never replaced by a native worker", as
     { data: {} },
   );
   expect(retry.ok(), await retry.text()).toBe(true);
+});
+
+test("workspace-worker summaries, renames, deep links and deletion preserve stable identities", async ({
+  page,
+}) => {
+  await page.goto(link().url);
+  const folder = mkdtempSync(join(tmpdir(), "margin-worker-management-"));
+  folders.push(folder);
+  const project = await (
+    await page.request.post("/api/projects", { data: { path: folder } })
+  ).json();
+  const notes = `/api/projects/${project.id}/plugins/project-notes`;
+  expect(
+    (
+      await page.request.post(`${notes}/save`, {
+        data: { text: "Keep shared notes", revision: 0 },
+      })
+    ).ok(),
+  ).toBe(true);
+  const response = await page.request.post("/api/sessions", {
+    data: { projectId: project.id, model },
+  });
+  expect(response.ok(), await response.text()).toBe(true);
+  const id = (await response.json()).session.id;
+  await page.goto(`/chats/${id}?panel=project-notes%3Anotes`);
+  await expect(page.getByLabel("Project notes", { exact: true })).toHaveValue(
+    "Keep shared notes",
+  );
+  await page
+    .getByRole("button", { name: "Customize Margin", exact: true })
+    .click();
+  const sent = await page.request.post(`/api/sessions/${id}/send`, {
+    data: {
+      id: randomUUID(),
+      note: "Complete in another workspace",
+      commentIds: [],
+    },
+  });
+  expect(sent.ok(), await sent.text()).toBe(true);
+  await expect(
+    page.locator(`[data-session-id="${id}"] .conversation-unread`),
+  ).toHaveCount(1);
+  const renamed = await page.request.patch(`/api/projects/${project.id}`, {
+    data: { name: "Worker workspace" },
+  });
+  expect(renamed.ok(), await renamed.text()).toBe(true);
+  await page.goto(`/chats/${id}`);
+  await expect(page.locator(".project-breadcrumb")).toHaveText(
+    "Worker workspace",
+  );
+  const reopened = await (
+    await page.request.post("/api/projects", { data: { path: folder } })
+  ).json();
+  expect(reopened).toMatchObject({
+    id: project.id,
+    name: "Worker workspace",
+    path: project.path,
+  });
+  await page.locator(`[data-session-id="${id}"]`).click({ button: "right" });
+  await page
+    .getByRole("menuitem", { name: "Delete conversation", exact: true })
+    .click();
+  await page
+    .getByRole("button", { name: "Delete permanently", exact: true })
+    .click();
+  await expect(page).toHaveURL(new RegExp(`/workspaces/${project.id}$`));
+  expect((await page.request.get(`/api/sessions/${id}`)).ok()).toBe(false);
+  const summary = await (await page.request.get("/api/sessions")).json();
+  expect(summary.sessions.some((s: any) => s.id === id)).toBe(false);
+  expect(
+    (await (await page.request.post(`${notes}/load`, { data: {} })).json())
+      .result.note.text,
+  ).toBe("Keep shared notes");
+  await page.goto(`/chats/${id}`);
+  await expect(
+    page.getByRole("heading", { name: "Destination unavailable" }),
+  ).toBeVisible();
+});
+
+test("saved-history previews work without launching a workspace worker", async ({
+  page,
+}) => {
+  await page.goto(link().url);
+  const folder = mkdtempSync(join(tmpdir(), "margin-cold-preview-"));
+  folders.push(folder);
+  const project = await (
+    await page.request.post("/api/projects", { data: { path: folder } })
+  ).json();
+  const id = randomUUID();
+  const registry = new Store(join(link().root, "data", "margin.sqlite"));
+  registry.put("session", id, {
+    id,
+    projectId: project.id,
+    title: "Cold saved chat",
+    backend: "lab-virtual",
+    model,
+    createdAt: Date.now(),
+    updatedAt: Date.now(),
+  });
+  registry.put("session-owner", id, project.id);
+  registry.put("transcript", id, [
+    {
+      id: "saved-reply",
+      role: "assistant",
+      text: "Saved history without a running worker",
+    },
+  ]);
+  registry.put("composer", id, "Saved cold draft");
+  const cco = join(link().root, "test-bin", "cco");
+  const original = readFileSync(cco, "utf8");
+  writeFileSync(cco, "#!/bin/bash\nexit 71\n");
+  try {
+    const response = await page.request.get(`/api/sessions/${id}/preview`);
+    expect(response.ok(), await response.text()).toBe(true);
+    const preview = await response.json();
+    expect(preview.composer).toBe("Saved cold draft");
+    expect(preview.composerRevision).toBe(1);
+    expect(preview.messages[0].text).toBe(
+      "Saved history without a running worker",
+    );
+    expect(registry.get("workspace-storage", project.id)).toBeUndefined();
+  } finally {
+    writeFileSync(cco, original);
+    registry.deleteSession(id);
+    registry.close();
+  }
 });

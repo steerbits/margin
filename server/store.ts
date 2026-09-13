@@ -20,6 +20,19 @@ export class Store {
     return row ? JSON.parse(row.value) : undefined;
   }
   put(kind: string, id: string, value: unknown) {
+    if (kind === "composer") {
+      if (this.get(kind, id) === value) return;
+      // A single statement keeps text and revision atomic for preview readers.
+      this.db
+        .prepare(
+          `INSERT INTO records (kind,id,value) VALUES
+        ('composer',?,?),
+        ('composer-revision',?,CAST(COALESCE((SELECT value FROM records WHERE kind='composer-revision' AND id=?),'0') AS INTEGER)+1)
+        ON CONFLICT(kind,id) DO UPDATE SET value=excluded.value`,
+        )
+        .run(id, JSON.stringify(value), id, id);
+      return;
+    }
     this.db
       .prepare(
         "INSERT INTO records VALUES (?,?,?) ON CONFLICT(kind,id) DO UPDATE SET value=excluded.value",
@@ -37,9 +50,37 @@ export class Store {
     return this.list<Project>("project");
   }
   sessions() {
-    return this.list<SessionInfo>("session").sort(
-      (a, b) => b.updatedAt - a.updatedAt,
-    );
+    return this.list<SessionInfo>("session")
+      .map((session) => ({
+        ...session,
+        activity: this.get<SessionInfo["activity"]>("activity", session.id),
+      }))
+      .sort((a, b) => b.updatedAt - a.updatedAt);
+  }
+  deleteSession(id: string) {
+    this.db.exec("BEGIN IMMEDIATE");
+    try {
+      for (const kind of [
+        "session",
+        "session-owner",
+        "activity",
+        "transcript",
+        "composer",
+        "composer-revision",
+        "comments",
+        "interrupted",
+        "pi-backup",
+        "pending-input",
+      ])
+        this.db
+          .prepare("DELETE FROM records WHERE kind=? AND id=?")
+          .run(kind, id);
+      this.db.prepare("DELETE FROM batches WHERE session_id=?").run(id);
+      this.db.exec("COMMIT");
+    } catch (error) {
+      this.db.exec("ROLLBACK");
+      throw error;
+    }
   }
   comments(id: string) {
     return this.get<Comment[]>("comments", id) ?? [];
