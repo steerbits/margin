@@ -309,7 +309,11 @@ export function installFixtures(
     const l = getLive(String(req.params.id));
     const original = l.agent.prompt;
     l.agent.prompt = async (text, options) => {
-      await l.ui.request("confirm", "Accept this submission?");
+      const accepted = await l.ui.request("confirm", "Accept this submission?");
+      if (!accepted) {
+        options?.preflightResult?.(false);
+        return;
+      }
       await original.call(l.agent, text, options);
     };
     res.json({ ok: true });

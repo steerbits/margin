@@ -61,7 +61,9 @@ test("artifact review works through a workspace gateway and delivers feedback to
     await page
       .getByRole("button", { name: "Send feedback", exact: true })
       .click();
-    await expect(page.locator(".artifact-comment-meta")).toContainText("Sent");
+    await expect(page).toHaveURL(new RegExp(`/chats/${session.id}$`));
+    await expect(page.locator(".artifact-window")).toHaveCount(0);
+    await expect(page.locator(".sent-batch")).toBeVisible();
     const state = await (
       await page.request.get(`/api/sessions/${session.id}`)
     ).json();

@@ -1,5 +1,16 @@
 # Evaluation record
 
+## Follow-up: accepted feedback returns to the processing chat
+
+The human adopted the proposed lifecycle defaults and emphasized seeing the chat as processing begins. Implemented: hide the empty Artifacts launcher; retain sent comments under initially collapsed **Previous feedback**, with unsent comments still visible; close the overlay and scroll to latest chat activity on batch acceptance. Standalone reviews navigate to their associated chat rather than leaving the user in a review page or an unrelated browser tab. Overall-only chat messages now say **Overall feedback sent** rather than “0 artifact comments sent.”
+
+- `npm run check`: **71 Node tests passed**, TypeScript and production build passed. Added assertions for conversation-scoped batch status through prepared, submitting, rejected and accepted states. The bundle-size advisory remains (about 661 KB / 204 KB gzip).
+- `npm run test:e2e`: **54 Chromium tests passed**, including **9 artifact workflows**. Verified returning from a long/scrolled conversation to visible sent feedback while the backend is still busy; old comments collapsed after an actual file update; new unsent comments remaining visible and attached; hidden launcher before registration and its appearance without a reload; combined and overall-only sends; separate-window return to the correct chat; HTTP failure and delayed preflight rejection preserving feedback; and closing only after acceptance, not merely an HTTP `submitting` response.
+- `npm run test:gateway -- artifacts.spec.ts`: **1 passed**, including standalone review returning to the correct external-workspace conversation. The full gateway suite was not rerun; its prior unrelated unread failure remains documented below.
+- Inspected the actual updated-report screenshot with one active draft and collapsed previous feedback. Evaluation used self-review and simulated-agent browser fixtures, not independent reviewers or a live model editing-quality evaluation.
+
+The implementation adds explicit submission confirmation to the review state endpoint. Loading this version requires restarting Margin and reloading the browser; an older server produces a check-chat/restart notice rather than an indefinite Sending state. No live server was restarted. Private feedback storage and generated files were left unchanged. The previously reported persistent history-lock incident remains unconfirmed and was not bypassed by this work.
+
 ## Follow-up: backdrop dismissal, save shortcut and history-lock investigation
 
 Implemented the two explicit interaction requests: outside-click dismissal (without dismissing on a drag out of the editor) and ⌘Enter/Ctrl+Enter to save the focused comment without sending it. Plain Enter remains multiline. Existing recovery is retained on dismissal, including an offline comment and overall feedback. Collapsing sent comments, closing after accepted Send, and hiding the empty Artifacts launcher remain recommendations pending the human's decision—not implemented behavior.

@@ -245,6 +245,22 @@
   overflow: auto;
   padding: 14px;
 }
+.artifact-history {
+  margin-top: 12px;
+  border-top: 1px solid #e4e4e8;
+  padding-top: 12px;
+}
+.artifact-history summary {
+  cursor: pointer;
+  color: #596477;
+  font-size: 12px;
+  font-weight: 600;
+}
+.artifact-history > p {
+  color: #888;
+  font-size: 11px;
+  margin: 8px 0 12px;
+}
 .artifact-comments-empty {
   text-align: center;
   color: #aaa;

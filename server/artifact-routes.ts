@@ -44,8 +44,10 @@ export function installArtifactRoutes(
     "/api/sessions/:id/artifacts",
     route((req, res, store) => {
       const snapshot = host.snapshot(String(req.params.id));
+      const batch = z.string().uuid().optional().parse(req.query.batch);
       res.json({
         ...store.state(),
+        ...(batch ? { submission: store.submission(batch) } : {}),
         busy: snapshot.busy || snapshot.dialogs.length > 0,
         sendBlockReason: snapshot.dialogs.length
           ? "Answer the agent's question in chat before sending. Your feedback is saved."

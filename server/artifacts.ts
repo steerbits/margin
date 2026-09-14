@@ -183,6 +183,23 @@ export class ArtifactStore {
       overall: data.overall ?? { text: "", revision: 0, mutationId: "" },
     };
   }
+  submission(id: string): NonNullable<ArtifactReview["submission"]> {
+    const batch = this.load().batches.find((b) => b.id === id);
+    if (!batch)
+      throw new Error("Feedback batch not found in this conversation.");
+    const status = this.store.batch(this.sessionId, id)?.status;
+    return {
+      id,
+      status:
+        status === "accepted" ||
+        status === "rejected" ||
+        status === "submitting"
+          ? status
+          : batch.locked
+            ? "submitting"
+            : "prepared",
+    };
+  }
   updateOverall(input: unknown): ArtifactOverall {
     const next = artifactOverallInput.parse(input),
       data = this.settled();

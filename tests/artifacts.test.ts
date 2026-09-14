@@ -131,7 +131,13 @@ test("feedback freezes precise artifact context, stays draft on rejection, locks
     const payload = JSON.parse(batch.prompt.slice(batch.prompt.indexOf("{")));
     assert.equal(payload.artifactComments[0].comment, c.text);
     assert.equal(payload.artifactComments[0].artifact.location, "report.md");
+    assert.equal(f.service.submission(batch.id).status, "prepared");
+    assert.throws(
+      () => new ArtifactStore(f.store, "another-session").submission(batch.id),
+      /not found/,
+    );
     f.service.lock(batch.id);
+    assert.equal(f.service.submission(batch.id).status, "submitting");
     assert.equal(f.service.state().comments[0].delivery, "submitting");
     assert.throws(
       () =>
@@ -139,8 +145,10 @@ test("feedback freezes precise artifact context, stays draft on rejection, locks
       ReviewConflict,
     );
     f.service.reject(batch.id);
+    assert.equal(f.service.submission(batch.id).status, "rejected");
     assert.equal(f.service.state().comments[0].delivery, "draft");
     f.store.markBatch(f.sessionId, batch.id, "accepted");
+    assert.equal(f.service.submission(batch.id).status, "accepted");
     assert.equal(f.service.state().comments[0].delivery, "sent");
     f.service.update({ ...c, deleted: true, mutationId: randomUUID() });
     assert.equal(f.service.prepareBatch(batch.id, [c.id]).prompt, batch.prompt);

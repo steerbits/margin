@@ -40,6 +40,11 @@ export interface ArtifactReview {
   artifacts: Artifact[];
   comments: ArtifactComment[];
   overall?: ArtifactOverall;
+  /** Included when the caller requests confirmation of its own submitted batch. */
+  submission?: {
+    id: string;
+    status: "prepared" | "submitting" | "accepted" | "rejected";
+  };
 }
 export interface PreviewConnection {
   url: string;

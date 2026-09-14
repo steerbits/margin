@@ -1,10 +1,10 @@
 import { test, expect, type Page } from "@playwright/test";
-import { readFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
-async function seed(page: Page) {
+async function seed(page: Page, options: Record<string, unknown> = {}) {
   await page.goto("/");
-  const response = await page.request.post("/api/test/seed", { data: {} });
+  const response = await page.request.post("/api/test/seed", { data: options });
   expect(response.ok()).toBeTruthy();
   const { id } = await response.json();
   const fixtures = await page.request.post(
@@ -39,7 +39,14 @@ async function saved(page: Page) {
 test("artifact Markdown selection persists across close/reload and sends precise feedback into its conversation", async ({
   page,
 }) => {
-  const { id, markdown } = await seed(page);
+  const { id, markdown, root } = await seed(page, {
+    historyCount: 4,
+    responseDelay: 3000,
+  });
+  await page.locator(".scroll-area").evaluate((el) => {
+    el.scrollTop = 0;
+    el.dispatchEvent(new Event("scroll"));
+  });
   await page.getByLabel("Review artifact").selectOption(markdown.id);
   await expect(
     page.getByRole("button", { name: "Point to comment", exact: true }),
@@ -62,9 +69,11 @@ test("artifact Markdown selection persists across close/reload and sends precise
   await page
     .getByRole("button", { name: "Send feedback", exact: true })
     .click();
-  await expect(page.locator(".artifact-comment-meta").first()).toContainText(
-    "Sent",
-  );
+  await expect(page.locator(".artifact-window")).toHaveCount(0);
+  await expect(page.locator(".sent-batch")).toBeInViewport();
+  expect(
+    (await (await page.request.get(`/api/sessions/${id}`)).json()).busy,
+  ).toBe(true);
   await expect
     .poll(async () =>
       JSON.stringify(
@@ -82,12 +91,43 @@ test("artifact Markdown selection persists across close/reload and sends precise
     "Revenue grew steadily, but retention needs attention.",
   );
   expect(payload.artifactComments[0].artifact.location).toBe(markdown.location);
-  await page.getByLabel("Close artifact review").click();
+  writeFileSync(
+    join(root, "report.md"),
+    "# Updated report\n\nThe report changed after feedback.\n",
+  );
   await page.reload();
   await page.getByRole("button", { name: "Artifacts", exact: true }).click();
+  await expect(
+    page
+      .frameLocator("iframe")
+      .getByRole("heading", { name: "Updated report", exact: true }),
+  ).toBeVisible();
+  await expect(page.locator(".artifact-history summary")).toHaveText(
+    "Previous feedback (1)",
+  );
+  await expect(page.locator(".artifact-comment")).toHaveCount(0);
+  await page.locator(".artifact-history summary").click();
   await expect(page.locator(".artifact-comment-text")).toHaveText(
     "Explore retention before adding more charts.",
   );
+  await page.locator(".artifact-history summary").click();
+  await page
+    .getByRole("button", { name: "Comment on this page", exact: true })
+    .click();
+  await page
+    .getByLabel("Feedback 1", { exact: true })
+    .fill("A new thought on the updated report.");
+  await page.getByLabel("Feedback 1", { exact: true }).press("Meta+Enter");
+  await expect(page.locator(".artifact-attached-count")).toHaveText(
+    "1 comment attached",
+  );
+  await expect(page.locator(".artifact-comment-text")).toHaveText(
+    "A new thought on the updated report.",
+  );
+  await page.screenshot({
+    path: ".margin-data/artifact-review-history.png",
+    fullPage: true,
+  });
 });
 test("Command/Ctrl+Enter saves only the focused artifact comment, while Enter stays multiline", async ({
   page,
@@ -216,6 +256,12 @@ test("artifact HTML originals remain clean and a new review window shares durabl
   );
   expect(readFileSync(join(root, "page.html"), "utf8")).toBe(before);
   await original.close();
+  await popup
+    .getByRole("button", { name: "Send feedback", exact: true })
+    .click();
+  await expect(popup).toHaveURL(new RegExp(`/chats/${id}$`));
+  await expect(popup.locator(".artifact-window")).toHaveCount(0);
+  await expect(popup.locator(".sent-batch")).toBeVisible();
   await popup.close();
 });
 test("ordinary agent Markdown, HTML and localhost links open wrapped without manual registration or automatic popups", async ({
@@ -235,6 +281,9 @@ test("ordinary agent Markdown, HTML and localhost links open wrapped without man
     page.getByRole("link", { name: "Read generated report", exact: true }),
   ).toBeVisible();
   await expect(page.locator(".artifact-window")).toHaveCount(0);
+  await expect(
+    page.getByRole("button", { name: "Artifacts", exact: true }),
+  ).toHaveCount(0);
   expect(
     (await (await page.request.get(`/api/sessions/${id}/artifacts`)).json())
       .artifacts,
@@ -262,6 +311,9 @@ test("ordinary agent Markdown, HTML and localhost links open wrapped without man
     (await (await page.request.get(`/api/sessions/${id}/artifacts`)).json())
       .artifacts,
   ).toHaveLength(3);
+  await expect(
+    page.getByRole("button", { name: "Artifacts", exact: true }),
+  ).toBeVisible();
   await expect(
     page.getByRole("link", { name: "External documentation" }),
   ).toHaveAttribute("href", "https://example.com/docs.md");
@@ -338,6 +390,8 @@ test("two saved comments across artifacts reopen as one sendable batch, retainin
   await page
     .getByRole("button", { name: "Send feedback", exact: true })
     .click();
+  await expect(page.locator(".artifact-window")).toHaveCount(0);
+  await page.getByRole("button", { name: "Artifacts", exact: true }).click();
   await expect(
     page.getByLabel("Overall feedback", { exact: true }),
   ).toHaveValue("");
@@ -368,9 +422,78 @@ test("two saved comments across artifacts reopen as one sendable batch, retainin
   await page
     .getByRole("button", { name: "Send feedback", exact: true })
     .click();
-  await expect(
-    page.getByLabel("Overall feedback", { exact: true }),
-  ).toHaveValue("");
+  await expect(page.locator(".artifact-window")).toHaveCount(0);
+  await expect(page.locator(".user-bubble").last()).toContainText(
+    "One more general thought, without inline comments.",
+  );
+});
+
+test("failed and rejected submissions keep the review open; delayed acceptance returns to the processing chat", async ({
+  page,
+}) => {
+  const { id } = await seed(page, { responseDelay: 3000 });
+  await page
+    .getByRole("button", { name: "Comment on this page", exact: true })
+    .click();
+  await page
+    .getByLabel("Feedback 1", { exact: true })
+    .fill("Preserve this attached comment.");
+  await page.getByLabel("Feedback 1", { exact: true }).press("Meta+Enter");
+  await page
+    .getByLabel("Overall feedback", { exact: true })
+    .fill("Preserve my overall feedback too.");
+  await saved(page);
+  await page.route("**/artifacts/send", (route) =>
+    route.fulfill({ status: 503, json: { error: "Temporary send failure" } }),
+  );
+  await page
+    .getByRole("button", { name: "Send feedback", exact: true })
+    .click();
+  await expect(page.locator(".artifact-notice")).toContainText(
+    "Temporary send failure",
+  );
+  await expect(page.locator(".artifact-window")).toBeVisible();
+  await page.unroute("**/artifacts/send");
+  await page.request.post(`/api/test/${id}/delay-preflight`, { data: {} });
+  for (const accepted of [false, true]) {
+    await expect(
+      page.getByRole("button", { name: "Send feedback", exact: true }),
+    ).toBeEnabled();
+    await page
+      .getByRole("button", { name: "Send feedback", exact: true })
+      .click();
+    await expect(
+      page.getByRole("button", { name: "Sending…", exact: true }),
+    ).toBeDisabled();
+    // HTTP returned "submitting", but that must not count as acceptance.
+    await expect(page.locator(".artifact-window")).toBeVisible();
+    const snapshot = await (
+      await page.request.get(`/api/sessions/${id}`)
+    ).json();
+    expect(snapshot.dialogs).toHaveLength(1);
+    await page.request.post(
+      `/api/sessions/${id}/dialogs/${snapshot.dialogs[0].id}`,
+      { data: { value: accepted } },
+    );
+    if (!accepted) {
+      await expect(page.locator(".artifact-notice")).toContainText(
+        "Feedback was not accepted",
+      );
+      await expect(
+        page.getByLabel("Overall feedback", { exact: true }),
+      ).toHaveValue("Preserve my overall feedback too.");
+      await expect(page.locator(".artifact-attached-count")).toHaveText(
+        "1 comment attached",
+      );
+    }
+  }
+  await expect(page.locator(".artifact-window")).toHaveCount(0);
+  await expect(page.locator(".user-bubble").last()).toContainText(
+    "Preserve my overall feedback too.",
+  );
+  expect(
+    (await (await page.request.get(`/api/sessions/${id}`)).json()).busy,
+  ).toBe(true);
 });
 
 test("a blocked send explains the agent dialog and becomes usable again without losing the saved comment", async ({

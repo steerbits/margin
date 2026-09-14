@@ -57,10 +57,42 @@ function isReviewBackdrop(event: {
   );
 }
 
-export function ArtifactLauncher({ sessionId }: { sessionId: string }) {
+export function ArtifactLauncher({
+  sessionId,
+  onSent,
+}: {
+  sessionId: string;
+  onSent?: () => void;
+}) {
   const [open, setOpen] = useState(false),
     [artifactId, setArtifactId] = useState<string>();
   const [sourceLocation, setSourceLocation] = useState<string>();
+  const [hasArtifacts, setHasArtifacts] = useState(
+    () => !!localStorage.getItem(`margin-artifact-selected:${sessionId}`),
+  );
+  useEffect(() => {
+    let disposed = false;
+    let timer: ReturnType<typeof setTimeout>;
+    async function check() {
+      try {
+        const review = await api<ArtifactReview>(
+          `/sessions/${sessionId}/artifacts`,
+        );
+        if (disposed) return;
+        setHasArtifacts(review.artifacts.length > 0);
+        // Registration is durable and artifacts aren't removed individually.
+        if (review.artifacts.length) return;
+      } catch {
+        /* Keep known reviews accessible through temporary outages. */
+      }
+      if (!disposed) timer = setTimeout(() => void check(), 2000);
+    }
+    void check();
+    return () => {
+      disposed = true;
+      clearTimeout(timer);
+    };
+  }, [sessionId]);
   useEffect(() => {
     const listener = (event: Event) => {
       const e = event as CustomEvent<{
@@ -79,22 +111,28 @@ export function ArtifactLauncher({ sessionId }: { sessionId: string }) {
   }, [sessionId]);
   return (
     <>
-      <button
-        onClick={() => {
-          setArtifactId(undefined);
-          setSourceLocation(undefined);
-          setOpen(true);
-        }}
-      >
-        <FileText size={16} />
-        Artifacts
-      </button>
+      {hasArtifacts && (
+        <button
+          onClick={() => {
+            setArtifactId(undefined);
+            setSourceLocation(undefined);
+            setOpen(true);
+          }}
+        >
+          <FileText size={16} />
+          Artifacts
+        </button>
+      )}
       {open && (
         <ArtifactReviewWindow
           sessionId={sessionId}
           initialArtifactId={artifactId}
           initialLocation={sourceLocation}
           onClose={() => setOpen(false)}
+          onSent={() => {
+            setOpen(false);
+            onSent?.();
+          }}
         />
       )}
     </>
@@ -106,12 +144,14 @@ export function ArtifactReviewWindow({
   initialArtifactId,
   initialLocation,
   onClose,
+  onSent,
   standalone = false,
 }: {
   sessionId: string;
   initialArtifactId?: string;
   initialLocation?: string;
   onClose?: () => void;
+  onSent?: () => void;
   standalone?: boolean;
 }) {
   const [state, setState] = useState<
@@ -142,6 +182,10 @@ export function ArtifactReviewWindow({
   const [deleteId, setDeleteId] = useState(""),
     [sending, setSending] = useState(false);
   const [tick, setTick] = useState(0);
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const mounted = useRef(true);
+  const pendingBatch = useRef<string | undefined>(undefined);
+  const posting = useRef(false);
   const drafts = useRef<ArtifactDrafts | null>(null);
   if (!drafts.current)
     drafts.current = new ArtifactDrafts(
@@ -167,24 +211,61 @@ export function ArtifactReviewWindow({
   const pressedBackdrop = useRef(false);
   const artifact = state.artifacts.find((a) => a.id === artifactId);
   const comments = queue.merge(state.comments).filter((c) => !c.deleted);
+  const currentComments = comments.filter((c) => c.delivery !== "sent");
+  const previousComments = comments.filter((c) => c.delivery === "sent");
+  const visibleComments = historyOpen ? comments : currentComments;
   const draftComments = comments.filter(
     (c) => c.delivery === "draft" && c.saved !== false && c.text.trim(),
   );
   const unfinished = comments.filter(
     (c) => c.delivery === "draft" && c.saved === false && c.text.trim(),
   );
-  const latest = useRef({ artifact, comments, pointing });
-  latest.current = { artifact, comments, pointing };
+  const latest = useRef({
+    artifact,
+    comments: visibleComments,
+    pointing,
+    sending,
+  });
+  latest.current = { artifact, comments: visibleComments, pointing, sending };
+  function confirmSubmission(id: string, status: string) {
+    if (!mounted.current || pendingBatch.current !== id) return;
+    if (status === "accepted") {
+      pendingBatch.current = undefined;
+      setSending(false);
+      if (standalone) location.assign(`/chats/${sessionId}`);
+      else (onSent ?? onClose)?.();
+    } else if (status === "rejected") {
+      pendingBatch.current = undefined;
+      setSending(false);
+      setError(
+        "Feedback was not accepted. Your comments and overall feedback are still here; review and try again.",
+      );
+    }
+  }
   async function refresh() {
+    const batch = pendingBatch.current;
     const next = await api<
       ArtifactReview & { busy: boolean; sendBlockReason?: string | null }
-    >(`/sessions/${sessionId}/artifacts`);
+    >(
+      `/sessions/${sessionId}/artifacts${batch ? `?batch=${encodeURIComponent(batch)}` : ""}`,
+    );
+    if (!mounted.current) return;
     setState(next);
     setLoaded(true);
     setConnected(true);
     setArtifactId((id) => id || next.artifacts.at(-1)?.id || "");
+    if (next.submission)
+      confirmSubmission(next.submission.id, next.submission.status);
+    else if (batch && pendingBatch.current === batch) {
+      pendingBatch.current = undefined;
+      setSending(false);
+      setError(
+        "This server cannot confirm artifact submissions yet. Check the chat before retrying, then restart Margin to load the update.",
+      );
+    }
   }
   useEffect(() => {
+    mounted.current = true;
     let disposed = false;
     const failed = (e: Error) => {
       if (!disposed) {
@@ -217,6 +298,7 @@ export function ArtifactReviewWindow({
     window.addEventListener("beforeunload", leaving);
     return () => {
       disposed = true;
+      mounted.current = false;
       clearInterval(timer);
       clearTimeout(saveTimer.current);
       window.removeEventListener("beforeunload", leaving);
@@ -261,7 +343,7 @@ export function ArtifactReviewWindow({
   }
   function select(anchor: ArtifactAnchor) {
     const current = latest.current;
-    if (!current.artifact) return;
+    if (!current.artifact || current.sending) return;
     const existing = current.comments.find(
       (c) =>
         c.artifactId === current.artifact!.id &&
@@ -372,11 +454,11 @@ export function ArtifactReviewWindow({
   }, [connection]);
   useEffect(() => {
     post("inspect", {
-      comments: comments
+      comments: visibleComments
         .filter((c) => c.artifactId === artifactId)
         .map((c) => ({ id: c.id, anchor: c.anchor })),
     });
-  }, [connection, state.comments, tick]);
+  }, [connection, state.comments, tick, historyOpen]);
   useEffect(() => {
     if (!connection || ready) return;
     const timeout = setTimeout(
@@ -389,6 +471,8 @@ export function ArtifactReviewWindow({
     return () => clearTimeout(timeout);
   }, [connection, ready]);
   async function send() {
+    if (posting.current || pendingBatch.current) return;
+    posting.current = true;
     setSending(true);
     setError("");
     try {
@@ -403,16 +487,24 @@ export function ArtifactReviewWindow({
             c.text.trim(),
         )
         .map((c) => c.id);
-      await api(`/sessions/${sessionId}/artifacts/send`, {
-        id: crypto.randomUUID(),
-        commentIds: ids,
-        overallRevision: overall.revision,
-      });
-      await refresh();
+      const id = crypto.randomUUID();
+      const result = await api<{ status: string }>(
+        `/sessions/${sessionId}/artifacts/send`,
+        {
+          id,
+          commentIds: ids,
+          overallRevision: overall.revision,
+        },
+      );
+      if (!mounted.current) return;
+      pendingBatch.current = id;
+      confirmSubmission(id, result.status);
+      if (pendingBatch.current) await refresh();
     } catch (e) {
-      setError((e as Error).message);
+      if (mounted.current) setError((e as Error).message);
     } finally {
-      setSending(false);
+      posting.current = false;
+      if (mounted.current && !pendingBatch.current) setSending(false);
     }
   }
   async function remove(comment: ArtifactComment) {
@@ -589,7 +681,7 @@ export function ArtifactReviewWindow({
           </button>
         </div>
         <button
-          disabled={!artifact}
+          disabled={!artifact || sending}
           onClick={() =>
             ready
               ? post("page-comment")
@@ -666,7 +758,7 @@ export function ArtifactReviewWindow({
             </p>
           </div>
           <div className="artifact-comment-list">
-            {!comments.length && (
+            {!currentComments.length && (
               <div className="artifact-comments-empty">
                 <MessageSquarePlus size={24} />
                 <p>
@@ -680,137 +772,159 @@ export function ArtifactReviewWindow({
                 </small>
               </div>
             )}
-            {comments.map((c, i) => (
-              <article
-                key={c.id}
-                data-artifact-comment={c.id}
-                className={`artifact-comment ${activeId === c.id ? "active" : ""}`}
-              >
-                <div className="artifact-comment-meta">
-                  <span>
-                    {i + 1} ·{" "}
-                    {c.delivery === "sent"
-                      ? "Sent"
-                      : c.delivery === "submitting"
-                        ? "Sending…"
-                        : c.saved === false || !c.text
-                          ? "Writing"
-                          : "Saved"}
-                  </span>
-                  <small>
-                    {c.artifactId !== artifactId
-                      ? "Other artifact"
-                      : status[c.id] === "changed"
-                        ? "Original target changed"
-                        : status[c.id] === "other-route"
-                          ? "On another screen"
-                          : status[c.id] === "found"
-                            ? "Target found"
-                            : "Saved context"}
-                  </small>
-                </div>
-                <button
-                  className="artifact-comment-source"
-                  onClick={() => setArtifactId(c.artifactId)}
+            {[currentComments, previousComments].map((group, groupIndex) => {
+              const cards = group.map((c, i) => (
+                <article
+                  key={c.id}
+                  data-artifact-comment={c.id}
+                  className={`artifact-comment ${activeId === c.id ? "active" : ""}`}
                 >
-                  {c.anchor.kind === "page"
-                    ? "Page"
-                    : c.anchor.kind === "text"
-                      ? "Text"
-                      : "Element"}{" "}
-                  ·{" "}
-                  {state.artifacts.find((a) => a.id === c.artifactId)?.title ??
-                    "Artifact"}
-                </button>
-                <button
-                  className="artifact-quote"
-                  onClick={() => {
-                    setActiveId(c.id);
-                    if (c.artifactId !== artifactId)
-                      setArtifactId(c.artifactId);
-                    else post("locate", { anchor: c.anchor });
-                  }}
-                  title="Locate original target"
-                >
-                  {c.anchor.quote || "Whole page"}
-                </button>
-                <small className="artifact-target-path" title={c.anchor.route}>
-                  {c.anchor.route}
-                </small>
-                {c.delivery === "draft" && (c.saved === false || !c.text) ? (
-                  <textarea
-                    aria-label={`Feedback ${i + 1}`}
-                    maxLength={20000}
-                    placeholder="What would you change or explore?"
-                    value={c.text}
-                    disabled={sending}
-                    onChange={(e) =>
-                      edit({ ...c, text: e.target.value, saved: false })
-                    }
-                    onFocus={() => setActiveId(c.id)}
-                    onKeyDown={(e) => {
-                      if (
-                        (e.metaKey || e.ctrlKey) &&
-                        e.key === "Enter" &&
-                        !e.nativeEvent.isComposing
-                      ) {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        if (!sending && !e.repeat) void saveComment(c);
-                      }
+                  <div className="artifact-comment-meta">
+                    <span>
+                      {i + 1} ·{" "}
+                      {c.delivery === "sent"
+                        ? "Sent"
+                        : c.delivery === "submitting"
+                          ? "Sending…"
+                          : c.saved === false || !c.text
+                            ? "Writing"
+                            : "Saved"}
+                    </span>
+                    <small>
+                      {c.artifactId !== artifactId
+                        ? "Other artifact"
+                        : status[c.id] === "changed"
+                          ? "Original target changed"
+                          : status[c.id] === "other-route"
+                            ? "On another screen"
+                            : status[c.id] === "found"
+                              ? "Target found"
+                              : "Saved context"}
+                    </small>
+                  </div>
+                  <button
+                    className="artifact-comment-source"
+                    onClick={() => setArtifactId(c.artifactId)}
+                  >
+                    {c.anchor.kind === "page"
+                      ? "Page"
+                      : c.anchor.kind === "text"
+                        ? "Text"
+                        : "Element"}{" "}
+                    ·{" "}
+                    {state.artifacts.find((a) => a.id === c.artifactId)
+                      ?.title ?? "Artifact"}
+                  </button>
+                  <button
+                    className="artifact-quote"
+                    onClick={() => {
+                      setActiveId(c.id);
+                      if (c.artifactId !== artifactId)
+                        setArtifactId(c.artifactId);
+                      else post("locate", { anchor: c.anchor });
                     }}
-                  />
-                ) : (
-                  <p className="artifact-comment-text">{c.text}</p>
-                )}
-                <div className="artifact-comment-actions">
-                  {c.delivery === "draft" &&
-                    (c.saved === false || !c.text ? (
-                      <button
-                        disabled={!c.text.trim() || sending}
-                        title="Save comment (⌘Enter or Ctrl+Enter)"
-                        aria-keyshortcuts="Meta+Enter Control+Enter"
-                        onClick={() => void saveComment(c)}
-                      >
-                        Save
-                      </button>
+                    title="Locate original target"
+                  >
+                    {c.anchor.quote || "Whole page"}
+                  </button>
+                  <small
+                    className="artifact-target-path"
+                    title={c.anchor.route}
+                  >
+                    {c.anchor.route}
+                  </small>
+                  {c.delivery === "draft" && (c.saved === false || !c.text) ? (
+                    <textarea
+                      aria-label={`Feedback ${i + 1}`}
+                      maxLength={20000}
+                      placeholder="What would you change or explore?"
+                      value={c.text}
+                      disabled={sending}
+                      onChange={(e) =>
+                        edit({ ...c, text: e.target.value, saved: false })
+                      }
+                      onFocus={() => setActiveId(c.id)}
+                      onKeyDown={(e) => {
+                        if (
+                          (e.metaKey || e.ctrlKey) &&
+                          e.key === "Enter" &&
+                          !e.nativeEvent.isComposing
+                        ) {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          if (!sending && !e.repeat) void saveComment(c);
+                        }
+                      }}
+                    />
+                  ) : (
+                    <p className="artifact-comment-text">{c.text}</p>
+                  )}
+                  <div className="artifact-comment-actions">
+                    {c.delivery === "draft" &&
+                      (c.saved === false || !c.text ? (
+                        <button
+                          disabled={!c.text.trim() || sending}
+                          title="Save comment (⌘Enter or Ctrl+Enter)"
+                          aria-keyshortcuts="Meta+Enter Control+Enter"
+                          onClick={() => void saveComment(c)}
+                        >
+                          Save
+                        </button>
+                      ) : (
+                        <button
+                          disabled={sending}
+                          onClick={() => {
+                            edit({ ...c, saved: false });
+                            setActiveId(c.id);
+                            requestAnimationFrame(() =>
+                              document
+                                .querySelector<HTMLTextAreaElement>(
+                                  `[data-artifact-comment="${c.id}"] textarea`,
+                                )
+                                ?.focus(),
+                            );
+                          }}
+                        >
+                          Edit
+                        </button>
+                      ))}
+                    {deleteId === c.id ? (
+                      <>
+                        <span>Delete annotation?</span>
+                        <button
+                          disabled={sending}
+                          onClick={() => void remove(c)}
+                        >
+                          Delete
+                        </button>
+                        <button onClick={() => setDeleteId("")}>Keep</button>
+                      </>
                     ) : (
                       <button
-                        disabled={sending}
-                        onClick={() => {
-                          edit({ ...c, saved: false });
-                          setActiveId(c.id);
-                          requestAnimationFrame(() =>
-                            document
-                              .querySelector<HTMLTextAreaElement>(
-                                `[data-artifact-comment="${c.id}"] textarea`,
-                              )
-                              ?.focus(),
-                          );
-                        }}
+                        disabled={sending || c.delivery === "submitting"}
+                        onClick={() => setDeleteId(c.id)}
                       >
-                        Edit
-                      </button>
-                    ))}
-                  {deleteId === c.id ? (
-                    <>
-                      <span>Delete annotation?</span>
-                      <button disabled={sending} onClick={() => void remove(c)}>
                         Delete
                       </button>
-                      <button onClick={() => setDeleteId("")}>Keep</button>
-                    </>
-                  ) : (
-                    <button
-                      disabled={sending || c.delivery === "submitting"}
-                      onClick={() => setDeleteId(c.id)}
-                    >
-                      Delete
-                    </button>
-                  )}
-                </div>
-              </article>
-            ))}
+                    )}
+                  </div>
+                </article>
+              ));
+              return groupIndex === 0 ? (
+                <div key="current">{cards}</div>
+              ) : group.length > 0 ? (
+                <details
+                  key="previous"
+                  className="artifact-history"
+                  open={historyOpen}
+                  onToggle={(e) => setHistoryOpen(e.currentTarget.open)}
+                >
+                  <summary>Previous feedback ({group.length})</summary>
+                  <p>Already sent. Kept for reference, not attached again.</p>
+                  {historyOpen && cards}
+                </details>
+              ) : null;
+            })}
           </div>
           <footer className="artifact-send">
             <label htmlFor="artifact-overall">Overall feedback</label>

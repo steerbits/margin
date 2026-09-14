@@ -1473,7 +1473,18 @@ export function App() {
                 </div>
                 <div className="toolbar-actions">
                   {sessionId && (
-                    <ArtifactLauncher key={sessionId} sessionId={sessionId} />
+                    <ArtifactLauncher
+                      key={sessionId}
+                      sessionId={sessionId}
+                      onSent={() => {
+                        stickyBottom.current = true;
+                        requestAnimationFrame(() => {
+                          if (scrollRef.current)
+                            scrollRef.current.scrollTop =
+                              scrollRef.current.scrollHeight;
+                        });
+                      }}
+                    />
                   )}
                   {sessionId && (
                     <>
@@ -2309,23 +2320,26 @@ function UserMessage({ text }: { text: string }) {
         <div className="user-bubble">
           <div className="sent-batch">
             <MessageSquare size={14} />
-            {b.artifactComments.length} artifact comment
-            {b.artifactComments.length === 1 ? "" : "s"} sent
+            {b.artifactComments.length
+              ? `${b.artifactComments.length} artifact comment${b.artifactComments.length === 1 ? "" : "s"} sent`
+              : "Overall feedback sent"}
           </div>
           {b.overallReply && <p>{b.overallReply}</p>}
-          <details>
-            <summary>View artifact feedback</summary>
-            {b.artifactComments.map((c, i) => (
-              <div className="sent-feedback" key={i}>
-                <strong>{c.artifact.title}</strong>
-                <p className="small muted">
-                  {c.artifact.location} · {c.target.route}
-                </p>
-                <blockquote>{c.target.quote}</blockquote>
-                <p>{c.comment}</p>
-              </div>
-            ))}
-          </details>
+          {b.artifactComments.length > 0 && (
+            <details>
+              <summary>View artifact feedback</summary>
+              {b.artifactComments.map((c, i) => (
+                <div className="sent-feedback" key={i}>
+                  <strong>{c.artifact.title}</strong>
+                  <p className="small muted">
+                    {c.artifact.location} · {c.target.route}
+                  </p>
+                  <blockquote>{c.target.quote}</blockquote>
+                  <p>{c.comment}</p>
+                </div>
+              ))}
+            </details>
+          )}
         </div>
       );
     } catch {
