@@ -496,6 +496,131 @@ test("failed and rejected submissions keep the review open; delayed acceptance r
   ).toBe(true);
 });
 
+test("previous feedback stays above the overall box and follows the current artifact, path, query and fragment", async ({
+  page,
+}) => {
+  const { markdown, app } = await seed(page);
+  const frame = page.frameLocator('iframe[title="Review artifact content"]');
+  async function addPageComment(text: string, number: number) {
+    await page
+      .getByRole("button", { name: "Comment on this page", exact: true })
+      .click();
+    const editor = page.getByLabel(`Feedback ${number}`, { exact: true });
+    await editor.fill(text);
+    await editor.press("Meta+Enter");
+    await expect(editor).toHaveCount(0);
+  }
+  async function navigate(route: string) {
+    await frame
+      .locator("body")
+      .evaluate((_el, next) => history.pushState({}, "", next), route);
+    await expect(page.getByLabel("Artifact address")).toHaveValue(
+      new URL(route, app.location).href,
+    );
+  }
+  async function pinned() {
+    const bounds = await page.locator(".artifact-history").evaluate((el) => {
+      const history = el.getBoundingClientRect(),
+        footer = document
+          .querySelector(".artifact-send")!
+          .getBoundingClientRect(),
+        sidebar = el.parentElement!.getBoundingClientRect();
+      return {
+        gap: footer.top - history.bottom,
+        overflow: footer.bottom - sidebar.bottom,
+      };
+    });
+    expect(Math.abs(bounds.gap)).toBeLessThan(2);
+    expect(bounds.overflow).toBeLessThan(2);
+    await expect(
+      page.getByLabel("Overall feedback", { exact: true }),
+    ).toBeInViewport();
+  }
+  await expect(
+    page.getByRole("button", { name: "Point to comment", exact: true }),
+  ).toBeEnabled();
+  await addPageComment("First note for the app home page", 1);
+  await addPageComment("Second note for the app home page", 2);
+  await frame.getByRole("link", { name: "Details", exact: true }).click();
+  await expect(page.getByLabel("Artifact address")).toHaveValue(/\/details$/);
+  await navigate("/details?tab=metrics#chart");
+  await addPageComment("Only for the metrics chart link", 3);
+  await page.getByLabel("Review artifact").selectOption(markdown.id);
+  await expect(
+    frame.getByRole("heading", { name: "Quarterly review", exact: true }),
+  ).toBeVisible();
+  await addPageComment("Only for the Markdown report", 4);
+  await saved(page);
+  await page
+    .getByRole("button", { name: "Send feedback", exact: true })
+    .click();
+  await expect(page.locator(".artifact-window")).toHaveCount(0);
+  await page.getByRole("button", { name: "Artifacts", exact: true }).click();
+  await expect(page.locator(".artifact-history summary")).toHaveText(
+    "Previous feedback (1)",
+  );
+  await pinned();
+  await page.locator(".artifact-history summary").click();
+  await expect(
+    page.locator(".artifact-history .artifact-comment-text"),
+  ).toHaveText("Only for the Markdown report");
+  await addPageComment("Still attached while I review a different artifact", 1);
+  await page.getByLabel("Review artifact").selectOption(app.id);
+  await expect(
+    frame.getByRole("heading", { name: "Review dashboard", exact: true }),
+  ).toBeVisible();
+  await expect(page.locator(".artifact-history summary")).toHaveText(
+    "Previous feedback (2)",
+  );
+  await expect(
+    page.locator(".artifact-history .artifact-comment-text"),
+  ).toHaveText([
+    "First note for the app home page",
+    "Second note for the app home page",
+  ]);
+  await expect(page.locator(".artifact-attached-count")).toHaveText(
+    "1 comment attached",
+  );
+  await expect(
+    page.locator(".artifact-comment-list .artifact-comment-text"),
+  ).toHaveText("Still attached while I review a different artifact");
+  await pinned();
+  await navigate("/details?tab=metrics#chart");
+  await expect(
+    page.locator(".artifact-history .artifact-comment-text"),
+  ).toHaveText("Only for the metrics chart link");
+  await navigate("/details?tab=other#chart");
+  await expect(page.locator(".artifact-history")).toHaveCount(0);
+  await navigate("/details?tab=metrics#other");
+  await expect(page.locator(".artifact-history")).toHaveCount(0);
+  await navigate("/");
+  await expect(page.locator(".artifact-history summary")).toHaveText(
+    "Previous feedback (2)",
+  );
+  for (let i = 0; i < 4; i++)
+    await addPageComment(`Pending thought ${i + 1}`, i + 2);
+  await saved(page);
+  expect(
+    await page
+      .locator(".artifact-comment-list")
+      .evaluate((el) => el.scrollHeight > el.clientHeight),
+  ).toBe(true);
+  await page.locator(".artifact-comment-list").evaluate((el) => {
+    el.scrollTop = el.scrollHeight;
+  });
+  await pinned();
+  await page.locator(".artifact-history summary").click();
+  await pinned();
+  await page.screenshot({
+    path: ".margin-data/artifact-review-page-history.png",
+    fullPage: true,
+  });
+  await page.locator(".artifact-history summary").click();
+  await page.setViewportSize({ width: 390, height: 844 });
+  await pinned();
+  await expect(page.locator(".artifact-history summary")).toBeInViewport();
+});
+
 test("a blocked send explains the agent dialog and becomes usable again without losing the saved comment", async ({
   page,
 }) => {

@@ -23,6 +23,10 @@ import { ArtifactPreviews } from "../server/artifact-preview.ts";
 import { ArtifactDrafts } from "../src/artifact-drafts.ts";
 import { OverallFeedbackDraft } from "../src/artifact-overall.ts";
 import {
+  artifactInitialRoute,
+  previousPageComments,
+} from "../src/artifact-history.ts";
+import {
   artifactLocationFromLink,
   artifactOutputLink,
 } from "../shared/artifact-links.ts";
@@ -175,6 +179,65 @@ test("unknown, duplicated, empty or overlarge review batches are refused; pre-se
     f.service.lock(batch.id);
     f.service.recoverUnstartedBatches();
     assert.equal(f.service.state().comments[0].delivery, "draft");
+  } finally {
+    f.close();
+  }
+});
+test("previous feedback is scoped to the artifact and exact page URL, not the current revision", () => {
+  const f = fixture();
+  try {
+    const sent: ArtifactComment = {
+      ...f.draft,
+      delivery: "sent",
+      text: "Previous note",
+    };
+    const comments: ArtifactComment[] = [
+      sent,
+      { ...sent, id: randomUUID(), artifactId: randomUUID() },
+      {
+        ...sent,
+        id: randomUUID(),
+        anchor: { ...sent.anchor, route: "/report.md?tab=other" },
+      },
+      {
+        ...sent,
+        id: randomUUID(),
+        anchor: { ...sent.anchor, route: "/report.md#section" },
+      },
+      { ...sent, id: randomUUID(), delivery: "draft" },
+      { ...sent, id: randomUUID(), delivery: "submitting" },
+      { ...sent, id: randomUUID(), deleted: true },
+    ];
+    assert.deepEqual(
+      previousPageComments(comments, f.artifact.id, "/report.md"),
+      [sent],
+    );
+    assert.deepEqual(
+      previousPageComments(comments, f.artifact.id, "/other.md"),
+      [],
+    );
+    assert.equal(
+      artifactInitialRoute({ ...f.artifact, location: "reports/a b#c.md" }),
+      "/reports/a%20b%23c.md",
+    );
+    assert.equal(
+      artifactInitialRoute({
+        ...f.artifact,
+        kind: "app",
+        location: "http://localhost:3000/details?tab=metrics#chart",
+      }),
+      "/details?tab=metrics#chart",
+    );
+    assert.equal(
+      comments[4].delivery,
+      "draft",
+      "Scoping history must not modify unsent comments",
+    );
+    assert.equal(
+      sent.anchor.documentRevision,
+      "old",
+      "An old revision remains available on the same page",
+    );
   } finally {
     f.close();
   }

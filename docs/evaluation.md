@@ -1,5 +1,16 @@
 # Evaluation record
 
+## Follow-up: bottom-pinned, page-specific previous feedback
+
+The human noted that history floated midway down the sidebar and followed neither the selected artifact nor its page. Moved **Previous feedback** outside the active-comment scroller, directly above the overall box. Its expanded height is bounded and scrollable. History now matches the current registered artifact plus displayed path/query/hash, using the existing saved target route; no new scope control or storage migration was needed. Unsent attachments remain conversation-wide and visible. Content revisions do not hide prior feedback for the same page.
+
+- `npm run check`: **72 Node tests passed**, TypeScript and production build passed. Added scope checks for another artifact, path, query, hash, draft/submitting/deleted annotations, old revisions and encoded file entry routes. The existing bundle advisory remains (about 662 KB / 204 KB gzip).
+- `npm run test:e2e -- artifacts.spec.ts`: **10 artifact Chromium tests passed**. The new workflow sends two home-page comments, one query/hash-specific app-page comment and a Markdown comment; reopens and switches pages; verifies only matching history appears; retains a new Markdown attachment while reviewing the app; and measures the history/footer adjacency while the active list scrolls, with history expanded/collapsed and at a narrow viewport.
+- `npm run test:gateway -- artifacts.spec.ts`: **1 passed**. The full browser and gateway suites were not rerun for this focused frontend follow-up.
+- Inspected the actual screenshot showing two collapsed prior comments immediately above the overall box while five pending comments occupy the independently scrolling list. This was automated-fixture testing and self-review, not independent review or a claim about live model quality.
+
+Only frontend behavior changed; a browser reload loads the built update, without restarting the server. Feedback storage and generated artifacts were not changed. Route changes follow the preview bridge's existing URL reporting; app state that does not change the URL is not treated as a distinct page.
+
 ## Follow-up: accepted feedback returns to the processing chat
 
 The human adopted the proposed lifecycle defaults and emphasized seeing the chat as processing begins. Implemented: hide the empty Artifacts launcher; retain sent comments under initially collapsed **Previous feedback**, with unsent comments still visible; close the overlay and scroll to latest chat activity on batch acceptance. Standalone reviews navigate to their associated chat rather than leaving the user in a review page or an unrelated browser tab. Overall-only chat messages now say **Overall feedback sent** rather than “0 artifact comments sent.”

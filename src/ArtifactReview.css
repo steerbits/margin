@@ -216,6 +216,7 @@
   background: #fafafa;
 }
 .artifact-feedback-heading {
+  flex-shrink: 0;
   padding: 19px 20px 14px;
   border-bottom: 1px solid #eee;
 }
@@ -246,11 +247,18 @@
   padding: 14px;
 }
 .artifact-history {
-  margin-top: 12px;
+  flex: 0 1 auto;
+  min-height: 43px;
+  max-height: 35%;
+  overflow: auto;
   border-top: 1px solid #e4e4e8;
-  padding-top: 12px;
 }
 .artifact-history summary {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  padding: 13px 18px;
+  background: #fafafa;
   cursor: pointer;
   color: #596477;
   font-size: 12px;
@@ -259,7 +267,10 @@
 .artifact-history > p {
   color: #888;
   font-size: 11px;
-  margin: 8px 0 12px;
+  margin: 0 14px 12px;
+}
+.artifact-history .artifact-comment {
+  margin: 0 14px 12px;
 }
 .artifact-comments-empty {
   text-align: center;
@@ -359,6 +370,7 @@
   color: #777;
 }
 .artifact-send {
+  flex-shrink: 0;
   display: flex;
   flex-direction: column;
   padding: 14px 18px;
