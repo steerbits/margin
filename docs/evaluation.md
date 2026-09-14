@@ -1,5 +1,20 @@
 # Evaluation record
 
+## September 14: generated artifact review
+
+Implemented the shared review overlay and standalone window, a read-only original address, Markdown/HTML/local-app viewers, runtime-only injection, durable conversation-associated drafts and normal chat batch delivery. Source HTML was compared byte-for-byte before and after review. No annotation code is written to generated artifacts.
+
+Observed checks:
+
+- `npm run check`: **67 Node tests passed**, TypeScript and production build passed. This includes 8 new artifact/storage/proxy/recovery tests. Vite still reports the existing large-chunk advisory (main JS about 653 KB, about 201 KB gzip).
+- `npm run test:e2e`: **49 Chromium tests passed**, including 4 new artifact workflows: Markdown selection and exact chat delivery; real Vite module/HMR and modal/button interaction; original HTML and a separate review window; failed network saves and explicit deletion.
+- `npm run test:gateway -- artifacts.spec.ts`: the new external-workspace artifact review/delivery test **passed**, including the isolated iframe opened through the gateway. This uses the existing cco test shim, not actual OS sandbox enforcement.
+- The six pre-existing gateway tests produced **5 passes and 1 failure**: `workspace-worker summaries, renames, deep links and deletion preserve stable identities` fails at its unread-indicator assertion. The same assertion failed again in an isolated checkout of the pre-artifact commit. It was not fixed or hidden in this feature's scope.
+- Actual desktop screenshots were inspected for the Markdown viewer and live-app modal/comment flow. No independent reviewer was available: architecture, preservation and interaction checks were self-review plus automated tests, not independent/user preference evidence.
+
+Browser fixtures simulate agent replies; live model editing quality was not retested. Only Chromium was exercised. Arbitrary frameworks, authenticated apps, canvas targeting, large-scale performance, real cco enforcement for the new listeners, and new PDF/image viewers remain unverified/deferred. The interactive demonstration is a separate disposable test app with temporary data and simulated replies, not the user's real chat. See [artifact review](artifact-review.md) for exact supported behavior and limits.
+
+
 Evaluated on September 10, 2026 with Pi SDK **0.85.1**, Node **25.5.0**, and Chromium through Playwright. The original `margin-prototype.html` remains unchanged.
 
 ## Live results

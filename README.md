@@ -57,6 +57,14 @@ Inline comments are sent as a normal user message: a short instruction followed 
 
 Tool rows show their outcome as text as well as color. Gray is normal running/success styling; red means Pi reported a tool error. For bash this may be a nonzero exit code (including a search returning no matches), a timeout, a stopped command, or a permission failure. Open the row for the actual output. Red is not a separate command-approval or danger classification.
 
+## Review generated artifacts
+
+Open **Artifacts** in a conversation to review a generated Markdown/HTML file or a running HTTP localhost app in a large browser-like overlay. Its read-only address bar shows the original location. Select text or choose **Point to comment**, collect saved drafts, and send feedback without returning to chat. **Open in new window** shares the same review; **Open original** omits annotation code. The agent can register outputs using `present_artifact` and include a review link in its reply.
+
+Feedback stays in private Margin conversation storage, never in generated source files. Runtime-only injection leaves HTML and app code unchanged. Drafts survive closing/reloading, failed saves, and target changes; only explicit deletion removes annotations. Sending waits until the agent is ready. PDF/image viewers, arbitrary websites and self-improvement are deferred. See [artifact review](docs/artifact-review.md) for storage, proxy restrictions and verified workflows.
+
+After updating the source, run `npm run build`, finish active agent work, restart Margin with your usual launch command, then refresh the browser. This is a shared core feature with modular viewers, not a separately installable v1 plugin.
+
 ## Skills and authentication
 
 Margin uses Pi's own skill discovery, including `~/.pi/agent/skills/`, project `.pi/skills/`, and configured sources. The picker applies the selected skill to the **next message**; its instructions then remain in Pi's conversation. Reload skills with the refresh icon next to the picker. The bundled `think-with-me` skill lives in `skills/think-with-me/SKILL.md`. It is the default for a new chat’s first message; adding or choosing another skill does not change that default. If it is deleted or unavailable, new chats select **No skill**. Sending a message clears the picker, while the invoked instructions remain in the conversation. As before, your own Pi skills can be added without changing the app.

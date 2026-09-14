@@ -566,7 +566,7 @@ export function ArtifactReviewWindow({
               ref={frame}
               src={connection.url}
               title="Review artifact content"
-              sandbox="allow-scripts allow-same-origin allow-forms"
+              sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox"
               referrerPolicy="no-referrer"
             />
           ) : (
