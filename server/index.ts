@@ -10,6 +10,7 @@ import { ArtifactStore } from "./artifacts.ts";
 import { installArtifactRoutes } from "./artifact-routes.ts";
 import { readSessionPreview } from "./session-preview.ts";
 import { SessionActivityTracker } from "./session-activity.ts";
+import { snapshotStream } from "./snapshot-stream.ts";
 import { deleteSavedSession } from "./delete-session.ts";
 import { LiveSession, errorText } from "./sessions.ts";
 import { createModels, listModels } from "./models.ts";
@@ -600,17 +601,17 @@ app.get(
       Connection: "keep-alive",
       "X-Accel-Buffering": "no",
     });
-    const send = (snapshot: import("../shared/types.ts").Snapshot) =>
-      res.write(
+    const stream = snapshotStream<import("../shared/types.ts").Snapshot>(res, {
+      serialize: (snapshot) =>
         `data: ${JSON.stringify({ type: "snapshot", snapshot: observe(snapshot) })}\n\n`,
-      );
-    send(l.snapshot());
-    const unsubscribe = l.onSnapshot(send);
-    const heartbeat = setInterval(() => res.write(": keepalive\n\n"), 20000);
-    req.on("close", () => {
-      clearInterval(heartbeat);
-      unsubscribe();
+      onClose: () => {
+        clearInterval(heartbeat);
+        unsubscribe();
+      },
     });
+    const unsubscribe = l.onSnapshot(stream.send);
+    const heartbeat = setInterval(stream.heartbeat, 20000);
+    stream.send(l.snapshot());
   }),
 );
 const batchSchema = z.object({
