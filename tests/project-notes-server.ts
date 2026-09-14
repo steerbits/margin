@@ -15,6 +15,17 @@ import { execFileSync } from "node:child_process";
 
 // Build fixtures in a disposable copy, not in the running app's dist/. Serving
 // the production bundle also avoids sharing Vite's HMR port with a live app.
+// Test hosts launched from a Margin agent must not inherit the real worker identity.
+for (const key of [
+  "MARGIN_WORKER_TOKEN",
+  "MARGIN_WORKSPACE_ID",
+  "MARGIN_WORKSPACE_PATH",
+  "MARGIN_WORKSPACE_NAME",
+  "MARGIN_WORKSPACE_RENAMED",
+  "MARGIN_CCO_INFO",
+  "MARGIN_INITIAL_PROJECTS",
+])
+  delete process.env[key];
 const source = resolve(import.meta.dirname, "..");
 const root = realpathSync(mkdtempSync(join(tmpdir(), "margin-notes-e2e-app-")));
 process.on("exit", () => rmSync(root, { recursive: true, force: true }));

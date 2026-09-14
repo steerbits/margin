@@ -68,6 +68,7 @@ export class Store {
         "composer",
         "composer-revision",
         "comments",
+        "artifact-review",
         "interrupted",
         "pi-backup",
         "pending-input",

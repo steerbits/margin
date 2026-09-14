@@ -1,6 +1,7 @@
 import React from "react";
 import { createRoot } from "react-dom/client";
 import { App } from "./App.tsx";
+import { ArtifactReviewWindow } from "./ArtifactReview.tsx";
 import "./styles.css";
 async function connectBrowser() {
   const connect = new URLSearchParams(location.hash.slice(1)).get("connect");
@@ -26,9 +27,20 @@ window.addEventListener("hashchange", () => {
 });
 async function start() {
   await connectBrowser().catch(() => false);
+  const review = location.pathname.match(/^\/review\/([a-f0-9-]{36})$/);
   createRoot(document.getElementById("root")!).render(
     <React.StrictMode>
-      <App />
+      {review ? (
+        <ArtifactReviewWindow
+          sessionId={review[1]}
+          initialArtifactId={
+            new URLSearchParams(location.search).get("artifact") ?? undefined
+          }
+          standalone
+        />
+      ) : (
+        <App />
+      )}
     </React.StrictMode>,
   );
 }

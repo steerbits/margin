@@ -1,6 +1,7 @@
 import type express from "express";
 import { randomUUID } from "node:crypto";
-import { writeFileSync, existsSync, rmSync } from "node:fs";
+import { writeFileSync, existsSync, rmSync, mkdirSync } from "node:fs";
+import { ArtifactStore } from "./artifacts.ts";
 import { join, dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { Store } from "./store.ts";
@@ -52,6 +53,77 @@ export function installFixtures(
   app: express.Express,
   { store, getLive }: { store: Store; getLive: (id: string) => LiveSession },
 ) {
+  const artifactFixtures = new Map<
+    string,
+    { root: string; vite: import("vite").ViteDevServer }
+  >();
+  const appScript = (updated = false) => `export function render() {
+    document.querySelector('#app').innerHTML = '<h1>${updated ? "Updated dashboard" : "Review dashboard"}</h1><p>A local app with real interactions.</p><button id="open">Open settings</button><output id="hits">0</output><dialog id="settings"><h2>Settings</h2><button id="save">${updated ? "Apply changes" : "Save"}</button></dialog>';
+    document.querySelector('#open').onclick = () => document.querySelector('#settings').showModal();
+    document.querySelector('#save').addEventListener('pointerdown', () => document.querySelector('#hits').textContent = String(Number(document.querySelector('#hits').textContent) + 1));
+  } render(); if (import.meta.hot) import.meta.hot.accept();`;
+  app.post("/api/test/:id/artifact-fixtures", async (req, res, next) => {
+    try {
+      if (process.env.MARGIN_DISPOSABLE_TEST_APP !== "1")
+        throw new Error("Artifact fixtures require a disposable test app.");
+      const id = String(req.params.id),
+        l = getLive(id);
+      await l.ready;
+      const root = join(l.project.path, "artifact-fixture", id);
+      mkdirSync(root, { recursive: true });
+      writeFileSync(
+        join(root, "report.md"),
+        "# Quarterly review\n\nRevenue grew steadily, but retention needs attention.\n\n| Metric | Value |\n| --- | --- |\n| Revenue | 42 |\n| Retention | 81% |\n\n**What should we explore next?**\n",
+      );
+      writeFileSync(
+        join(root, "page.html"),
+        '<!doctype html><html><head><title>HTML report</title><link rel="stylesheet" href="./style.css"></head><body><h1>HTML report</h1><p id="summary">A static report worth reviewing.</p><button id="action" onclick="this.textContent=\'Activated\'">Try button</button></body></html>',
+      );
+      writeFileSync(
+        join(root, "style.css"),
+        "body { font:18px/1.7 system-ui; padding:50px; color:#243044; } button { padding:12px 20px; font:inherit; } dialog { border:1px solid #ccc; border-radius:12px; padding:32px; }",
+      );
+      writeFileSync(
+        join(root, "index.html"),
+        '<!doctype html><html><head><title>Review dashboard</title><link rel="stylesheet" href="/style.css"></head><body><main id="app"></main><script type="module" src="/main.js"></script></body></html>',
+      );
+      writeFileSync(join(root, "main.js"), appScript());
+      const { createServer } = await import("vite");
+      const vite = await createServer({
+        root,
+        configFile: false,
+        server: { host: "127.0.0.1", port: 0 },
+        logLevel: "error",
+      });
+      await vite.listen();
+      const port = (
+        vite.httpServer!.address() as import("node:net").AddressInfo
+      ).port;
+      artifactFixtures.set(id, { root, vite });
+      const artifacts = new ArtifactStore(store, id);
+      const markdown = artifacts.register(l.project, {
+        location: join(root, "report.md"),
+        title: "Quarterly review",
+      });
+      const html = artifacts.register(l.project, {
+        location: join(root, "page.html"),
+        title: "HTML report",
+      });
+      const webapp = artifacts.register(l.project, {
+        location: `http://127.0.0.1:${port}`,
+        title: "Review dashboard",
+      });
+      res.json({ markdown, html, app: webapp, root });
+    } catch (error) {
+      next(error);
+    }
+  });
+  app.post("/api/test/:id/artifact-update", (req, res) => {
+    const fixture = artifactFixtures.get(String(req.params.id));
+    if (!fixture) throw new Error("Fixture not found.");
+    writeFileSync(join(fixture.root, "main.js"), appScript(true));
+    res.json({ ok: true });
+  });
   app.post("/api/test/customization-file", (req, res) => {
     if (process.env.MARGIN_DISPOSABLE_TEST_APP !== "1") {
       res

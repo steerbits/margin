@@ -10,6 +10,7 @@ import type { ToolView } from "../shared/types.ts";
 import type { BrowserPluginContext } from "./plugin-api.ts";
 import { browserPlugins } from "./plugins.ts";
 import { PluginBoundary } from "./PluginBoundary.tsx";
+import { requestArtifactReview } from "./ArtifactReview.tsx";
 function output(result: unknown): string {
   const c = (result as { content?: unknown })?.content;
   if (typeof c === "string") return c;
@@ -27,6 +28,39 @@ export function ToolCard({
   tool: ToolView;
   context: (id: string) => BrowserPluginContext;
 }) {
+  const presentation = tool.result as {
+    details?: {
+      artifact?: { title: string; location: string };
+      reviewUrl?: string;
+    };
+  };
+  if (
+    tool.name === "present_artifact" &&
+    tool.status === "success" &&
+    presentation.details?.artifact &&
+    presentation.details.reviewUrl?.startsWith("/review/")
+  ) {
+    const { artifact, reviewUrl } = presentation.details;
+    return (
+      <div className="artifact-result">
+        <FileCode2 size={20} />
+        <div>
+          <strong>{artifact.title}</strong>
+          <small>{artifact.location}</small>
+        </div>
+        <a
+          href={reviewUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          onClick={(e) => {
+            if (requestArtifactReview(reviewUrl!)) e.preventDefault();
+          }}
+        >
+          Review artifact
+        </a>
+      </div>
+    );
+  }
   const args = tool.args as { command?: string; path?: string };
   const label = args?.path ?? args?.command ?? tool.name;
   const content = output(tool.result);

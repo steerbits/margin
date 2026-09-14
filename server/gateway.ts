@@ -147,10 +147,11 @@ app.use((req, res, next) => {
     return res.status(403).end();
   }
   res.setHeader("X-Content-Type-Options", "nosniff");
+  res.setHeader("X-Margin-Host", "gateway");
   res.setHeader("Referrer-Policy", "no-referrer");
   res.setHeader(
     "Content-Security-Policy",
-    `default-src 'self'; script-src 'self'${process.env.NODE_ENV === "production" ? "" : " 'unsafe-inline'"}; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self' ws://127.0.0.1:* ws://localhost:*; frame-ancestors 'none'; base-uri 'none'; object-src 'none'`,
+    `default-src 'self'; script-src 'self'${process.env.NODE_ENV === "production" ? "" : " 'unsafe-inline'"}; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self' ws://127.0.0.1:* ws://localhost:*; frame-src http://127.0.0.1:* http://localhost:*; frame-ancestors 'none'; base-uri 'none'; object-src 'none'`,
   );
   if (req.path.startsWith("/api/")) {
     res.setHeader("Cache-Control", "no-store");
@@ -440,7 +441,14 @@ app.use("/api", (_req, res) =>
 if (process.env.NODE_ENV === "production") {
   app.use(express.static(join(appRoot, "dist")));
   app.get(
-    ["/", "/chats/:id", "/workspaces/:id", "/customize", "/customize/:tab"],
+    [
+      "/",
+      "/chats/:id",
+      "/review/:id",
+      "/workspaces/:id",
+      "/customize",
+      "/customize/:tab",
+    ],
     (_req, res) => res.sendFile(join(appRoot, "dist", "index.html")),
   );
 } else {

@@ -39,6 +39,7 @@ import type {
   ExecutionInfo,
 } from "../shared/types.ts";
 import { api } from "./api.ts";
+import { ArtifactLauncher } from "./ArtifactReview.tsx";
 import {
   destinationUrl,
   parseRoute,
@@ -1472,6 +1473,9 @@ export function App() {
                 </div>
                 <div className="toolbar-actions">
                   {sessionId && (
+                    <ArtifactLauncher key={sessionId} sessionId={sessionId} />
+                  )}
+                  {sessionId && (
                     <>
                       <ChatStatus
                         activity={currentActivity}
@@ -2288,6 +2292,41 @@ function modelKey(m?: ModelInfo) {
   return m ? `${m.backend ?? "pi"}:${m.provider}/${m.id}` : "";
 }
 function UserMessage({ text }: { text: string }) {
+  if (text.startsWith("I reviewed the generated artifacts in Margin.")) {
+    try {
+      const b = JSON.parse(text.slice(text.indexOf("{"))) as {
+        artifactComments: {
+          artifact: { title: string; location: string };
+          target: { route: string; quote: string };
+          comment: string;
+        }[];
+      };
+      return (
+        <div className="user-bubble">
+          <div className="sent-batch">
+            <MessageSquare size={14} />
+            {b.artifactComments.length} artifact comment
+            {b.artifactComments.length === 1 ? "" : "s"} sent
+          </div>
+          <details>
+            <summary>View artifact feedback</summary>
+            {b.artifactComments.map((c, i) => (
+              <div className="sent-feedback" key={i}>
+                <strong>{c.artifact.title}</strong>
+                <p className="small muted">
+                  {c.artifact.location} · {c.target.route}
+                </p>
+                <blockquote>{c.target.quote}</blockquote>
+                <p>{c.comment}</p>
+              </div>
+            ))}
+          </details>
+        </div>
+      );
+    } catch {
+      /* Retain readable raw feedback from future/unknown payload versions. */
+    }
+  }
   if (text.startsWith("I reviewed your replies."))
     try {
       const b = JSON.parse(text.slice(text.indexOf("{"))) as {

@@ -1,4 +1,5 @@
 import { pluginStorage } from "./plugin-storage.ts";
+import { presentArtifactTool } from "./artifact-tool.ts";
 import { randomUUID } from "node:crypto";
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -173,9 +174,12 @@ export class LiveSession implements AgentBackend {
       settingsManager: settings,
       resourceLoader: loader,
       sessionManager: manager,
-      customTools: this.plugins.flatMap(
-        (p) => p.tools?.(this.pluginContext(p.id)) ?? [],
-      ),
+      customTools: [
+        presentArtifactTool(this.store, this.info.id, this.project),
+        ...this.plugins.flatMap(
+          (p) => p.tools?.(this.pluginContext(p.id)) ?? [],
+        ),
+      ],
     });
     this.agent = result.session;
     this.info.sessionFile = manager.getSessionFile();

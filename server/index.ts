@@ -5,6 +5,9 @@ import { dirname, join, basename, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { z } from "zod";
 import { Store } from "./store.ts";
+import { ArtifactPreviews } from "./artifact-preview.ts";
+import { ArtifactStore } from "./artifacts.ts";
+import { installArtifactRoutes } from "./artifact-routes.ts";
 import { readSessionPreview } from "./session-preview.ts";
 import { SessionActivityTracker } from "./session-activity.ts";
 import { deleteSavedSession } from "./delete-session.ts";
@@ -95,6 +98,7 @@ const live = new Map<string, AgentBackend>();
 const trackers = new Map<string, SessionActivityTracker>();
 const deleting = new Set<string>();
 for (const session of store.sessions()) {
+  new ArtifactStore(store, session.id).recoverUnstartedBatches();
   if (
     session.activity &&
     ["running", "waiting"].includes(session.activity.status)
@@ -139,6 +143,7 @@ const port = Number(process.env.PORT ?? 4317);
 const app = express(),
   secret = randomBytes(32).toString("hex");
 let listeningPort = port;
+const artifactPreviews = new ArtifactPreviews(() => [listeningPort]);
 app.set("case sensitive routing", true);
 app.disable("x-powered-by");
 app.use((req, res, next) => {
@@ -155,10 +160,11 @@ app.use((req, res, next) => {
       .status(403)
       .json({ error: "Cross-origin requests are not allowed." });
   res.setHeader("X-Content-Type-Options", "nosniff");
+  res.setHeader("X-Margin-Host", "worker");
   res.setHeader("Referrer-Policy", "no-referrer");
   res.setHeader(
     "Content-Security-Policy",
-    `default-src 'self'; script-src 'self'${process.env.NODE_ENV === "production" ? "" : " 'unsafe-inline'"}; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self' ws://127.0.0.1:* ws://localhost:*; frame-ancestors 'none'; base-uri 'none'; object-src 'none'`,
+    `default-src 'self'; script-src 'self'${process.env.NODE_ENV === "production" ? "" : " 'unsafe-inline'"}; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self' ws://127.0.0.1:* ws://localhost:*; frame-src http://127.0.0.1:* http://localhost:*; frame-ancestors 'none'; base-uri 'none'; object-src 'none'`,
   );
   if (!req.path.startsWith("/api/") && req.accepts("html") && !workerToken)
     res.cookie("margin_session", secret, {
@@ -633,6 +639,7 @@ app.delete(
     deleting.add(id);
     try {
       await session?.dispose();
+      artifactPreviews.closeSession(id);
       deleteSavedSession(
         store,
         session?.info ?? store.get<SessionInfo>("session", id) ?? info,
@@ -646,27 +653,48 @@ app.delete(
     }
   }),
 );
+async function sendBatch(
+  id: string,
+  batch: import("../shared/types.ts").FeedbackBatch,
+) {
+  if (maintenance || sourceNeedsRestart)
+    throw new Error(
+      "Rebuild and restart Margin to activate the restored source before sending more work.",
+    );
+  const l = getLive(id);
+  if (
+    l.info.projectId === marginProject().id &&
+    process.env.MARGIN_TEST_MODE !== "1"
+  ) {
+    requireIdle();
+    history.save("Before customization", "automatic", true);
+  }
+  const result = await l.send(batch);
+  observe(l.snapshot());
+  return result;
+}
 app.post(
   "/api/sessions/:id/send",
   asyncRoute(async (req, res) => {
-    if (maintenance || sourceNeedsRestart)
-      throw new Error(
-        "Rebuild and restart Margin to activate the restored source before sending more work.",
-      );
-    const l = getLive(String(req.params.id)),
-      batch = batchSchema.parse(req.body);
-    if (
-      l.info.projectId === marginProject().id &&
-      process.env.MARGIN_TEST_MODE !== "1"
-    ) {
-      requireIdle();
-      history.save("Before customization", "automatic", true);
-    }
-    const result = await l.send(batch);
-    observe(l.snapshot());
-    res.json(result);
+    res.json(
+      await sendBatch(String(req.params.id), batchSchema.parse(req.body)),
+    );
   }),
 );
+installArtifactRoutes(app, {
+  store,
+  previews: artifactPreviews,
+  send: sendBatch,
+  snapshot: (id) => getLive(id).snapshot(),
+  project: (id) => {
+    const session = store.get<SessionInfo>("session", id);
+    const project = session && store.get<Project>("project", session.projectId);
+    if (!project) throw new Error("Conversation not found.");
+    requireWorkspace(project.id);
+    workspaceAccess.requireDirectory(project.path);
+    return project;
+  },
+});
 app.post(
   "/api/sessions/:id/stop",
   asyncRoute(async (req, res) => {
@@ -832,7 +860,14 @@ if (workerToken) {
 } else if (process.env.NODE_ENV === "production") {
   app.use(express.static(join(appRoot, "dist")));
   app.get(
-    ["/", "/chats/:id", "/workspaces/:id", "/customize", "/customize/:tab"],
+    [
+      "/",
+      "/chats/:id",
+      "/review/:id",
+      "/workspaces/:id",
+      "/customize",
+      "/customize/:tab",
+    ],
     (_req, res) => res.sendFile(join(appRoot, "dist", "index.html")),
   );
 } else {
@@ -869,6 +904,7 @@ const server = app.listen(port, "127.0.0.1", () => {
 });
 async function shutdown() {
   server.close();
+  artifactPreviews.close();
   nativeDirectoryPicker.close();
   for (const l of live.values()) await l.dispose();
   for (const p of plugins) await p.dispose?.();

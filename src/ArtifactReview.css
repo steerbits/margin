@@ -1,0 +1,453 @@
+.artifact-window {
+  color: var(--ink);
+  background: #fff;
+  border: 1px solid #dedee3;
+  padding: 0;
+  border-radius: 14px;
+  width: calc(100vw - 48px);
+  max-width: 1720px;
+  height: calc(100dvh - 48px);
+  max-height: none;
+  box-shadow: 0 28px 100px #0004;
+  overflow: hidden;
+  font-size: 14px;
+}
+.artifact-window[open],
+.artifact-standalone {
+  display: flex;
+  flex-direction: column;
+}
+.artifact-window::backdrop {
+  background: #1118;
+  backdrop-filter: blur(3px);
+}
+.artifact-standalone {
+  width: 100%;
+  max-width: none;
+  height: 100dvh;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+.artifact-chrome {
+  min-height: 49px;
+  padding: 8px 14px 8px 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  background: #f7f7f9;
+  border-bottom: 1px solid var(--line);
+  flex-shrink: 0;
+}
+.artifact-title,
+.artifact-window-actions,
+.artifact-address-row,
+.artifact-controls,
+.artifact-mode {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.artifact-title {
+  color: #71717a;
+  font-size: 12px;
+}
+.artifact-brand {
+  font-weight: 750;
+  font-size: 16px;
+  color: #25252a;
+  letter-spacing: -0.5px;
+}
+.artifact-private {
+  border-left: 1px solid #ddd;
+  padding-left: 10px;
+  font-size: 11px;
+}
+.artifact-window-actions button {
+  font-size: 12px;
+}
+.artifact-close {
+  padding: 8px;
+  color: inherit;
+  display: flex;
+}
+.artifact-address-row {
+  padding: 10px 18px;
+  background: #f7f7f9;
+  flex-shrink: 0;
+}
+.artifact-address-row > svg {
+  color: #787880;
+}
+.artifact-address-row input {
+  min-width: 0;
+  flex: 1;
+  padding: 8px 12px;
+  font:
+    12px/1.5 ui-monospace,
+    monospace;
+  color: #565660;
+  background: white;
+  border-color: #e4e4e8;
+}
+.artifact-address-row button {
+  font-size: 12px;
+  white-space: nowrap;
+}
+.artifact-controls {
+  padding: 10px 18px;
+  border-bottom: 1px solid var(--line);
+  gap: 10px;
+  flex-shrink: 0;
+  flex-wrap: wrap;
+}
+.artifact-controls select {
+  max-width: 250px;
+  font-size: 13px;
+  font-weight: 600;
+}
+.artifact-controls > button {
+  font-size: 12px;
+  color: #555;
+}
+.artifact-mode {
+  margin-left: auto;
+  gap: 2px;
+  border: 1px solid #e4e4e7;
+  background: #f7f7f9;
+  padding: 3px;
+  border-radius: 8px;
+}
+.artifact-mode button {
+  font-size: 12px;
+  padding: 6px 10px;
+}
+.artifact-mode [aria-pressed="true"] {
+  color: #1d4ed8;
+  background: white;
+  box-shadow: 0 1px 3px #0002;
+}
+.artifact-add {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 18px 22px;
+  background: #fafafa;
+  border-bottom: 1px solid var(--line);
+}
+.artifact-add label {
+  font-size: 13px;
+  font-weight: 600;
+}
+.artifact-add input {
+  flex: 1;
+  min-width: 230px;
+  font-size: 13px;
+  padding: 10px;
+}
+.artifact-add small {
+  flex-basis: 100%;
+  color: #71717a;
+}
+.artifact-notice {
+  padding: 10px 20px;
+  font-size: 12px;
+  line-height: 1.6;
+  background: #fff5da;
+  border-bottom: 1px solid #efdda9;
+  display: flex;
+  gap: 14px;
+  justify-content: space-between;
+}
+.artifact-notice button {
+  flex-shrink: 0;
+  font-weight: 600;
+}
+.artifact-body {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+.artifact-canvas {
+  flex: 1;
+  min-width: 0;
+  background: #fff;
+  position: relative;
+}
+.artifact-canvas iframe {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  background: white;
+}
+.artifact-empty {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  justify-content: center;
+  align-items: center;
+  text-align: center;
+  padding: 40px;
+  color: #777;
+}
+.artifact-empty > svg {
+  color: #aaa;
+  margin-bottom: 24px;
+}
+.artifact-empty h2 {
+  font-size: 24px;
+  color: #333;
+  font-weight: 550;
+}
+.artifact-empty p {
+  max-width: 440px;
+  font-size: 15px;
+}
+.artifact-feedback {
+  width: 320px;
+  flex-shrink: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  border-left: 1px solid #e6e6e8;
+  background: #fafafa;
+}
+.artifact-feedback-heading {
+  padding: 19px 20px 14px;
+  border-bottom: 1px solid #eee;
+}
+.artifact-feedback h2 {
+  font-size: 14px;
+  margin: 0 0 8px;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.artifact-feedback h2 span {
+  background: #eaeaee;
+  padding: 2px 6px;
+  border-radius: 5px;
+  font-size: 11px;
+  color: #666;
+}
+.artifact-feedback-heading p {
+  font-size: 12px;
+  line-height: 1.55;
+  color: #777;
+  margin: 0;
+}
+.artifact-comment-list {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 14px;
+}
+.artifact-comments-empty {
+  text-align: center;
+  color: #aaa;
+  padding: 56px 14px;
+}
+.artifact-comments-empty p {
+  color: #777;
+  font-size: 15px;
+  margin: 15px 0;
+}
+.artifact-comments-empty small {
+  font-size: 12px;
+  line-height: 1.7;
+  display: block;
+}
+.artifact-comment {
+  background: #fff;
+  border: 1px solid #e4e4e8;
+  border-radius: 9px;
+  padding: 13px;
+  margin-bottom: 12px;
+}
+.artifact-comment.active {
+  border-color: #a8b9de;
+  box-shadow: 0 0 0 2px #eaf0fc;
+}
+.artifact-comment-meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 5px;
+  font-size: 10px;
+  color: #888;
+  margin-bottom: 10px;
+}
+.artifact-comment-meta > span {
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+.artifact-comment-meta small {
+  font-size: 10px;
+  text-align: right;
+}
+.artifact-quote {
+  display: block;
+  text-align: left;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  color: #646469;
+  background: #f5f5f7;
+  border-left: 2px solid #c9d4eb;
+  padding: 7px 9px;
+  font-size: 12px;
+  line-height: 1.5;
+  border-radius: 2px;
+  width: 100%;
+  max-height: 100px;
+  overflow: auto;
+}
+.artifact-target-path {
+  display: block;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 10px;
+  color: #999;
+  margin: 5px 0;
+}
+.artifact-comment textarea {
+  width: 100%;
+  display: block;
+  min-height: 94px;
+  padding: 8px 2px;
+  font-size: 13px;
+  line-height: 1.6;
+  resize: vertical;
+}
+.artifact-comment-text {
+  font-size: 13px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  margin: 8px 0;
+}
+.artifact-comment-actions {
+  display: flex;
+  gap: 5px;
+  align-items: center;
+  justify-content: flex-end;
+  margin-top: 5px;
+  font-size: 10px;
+}
+.artifact-comment-actions button {
+  font-size: 10px;
+  padding: 3px 5px;
+  color: #777;
+}
+.artifact-send {
+  display: flex;
+  flex-direction: column;
+  padding: 14px 18px;
+  border-top: 1px solid #e4e4e8;
+  background: #fff;
+  gap: 9px;
+}
+.artifact-send > span {
+  color: #888;
+  font-size: 10px;
+}
+.artifact-send button {
+  font-size: 13px;
+}
+.artifact-send small {
+  color: #888;
+  font-size: 10px;
+  line-height: 1.5;
+}
+.artifact-result {
+  border: 1px solid #e2e2e8;
+  border-radius: 9px;
+  padding: 12px 16px;
+  margin: 10px 0;
+  display: flex;
+  align-items: center;
+  gap: 15px;
+  font-size: 14px;
+}
+.artifact-result > div {
+  flex: 1;
+  min-width: 0;
+}
+.artifact-result strong,
+.artifact-result small {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.artifact-result small {
+  color: #777;
+  font-size: 12px;
+  margin-top: 4px;
+}
+@media (max-width: 850px) {
+  .artifact-window {
+    width: calc(100vw - 16px);
+    height: calc(100dvh - 16px);
+  }
+  .artifact-standalone {
+    width: 100%;
+    height: 100dvh;
+  }
+  .artifact-private {
+    display: none;
+  }
+  .artifact-feedback {
+    width: 270px;
+  }
+  .artifact-mode {
+    margin-left: 0;
+  }
+}
+@media (max-width: 600px) {
+  .artifact-chrome {
+    padding: 8px;
+  }
+  .artifact-title > span:not(.artifact-brand) {
+    display: none;
+  }
+  .artifact-address-row {
+    padding: 7px;
+    gap: 4px;
+  }
+  .artifact-address-row input {
+    font-size: 10px;
+  }
+  .artifact-body {
+    flex-direction: column;
+  }
+  .artifact-canvas {
+    min-height: 35%;
+  }
+  .artifact-feedback {
+    width: 100%;
+    height: 43%;
+    border-left: 0;
+    border-top: 1px solid #ddd;
+  }
+  .artifact-feedback-heading {
+    display: none;
+  }
+  .artifact-send {
+    flex-direction: row;
+    align-items: center;
+    padding: 8px;
+  }
+  .artifact-send small {
+    display: none;
+  }
+  .artifact-send button {
+    margin-left: auto;
+  }
+  .artifact-controls {
+    padding: 7px;
+    gap: 3px;
+  }
+}
