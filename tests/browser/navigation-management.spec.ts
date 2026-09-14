@@ -281,13 +281,13 @@ test("finished stays unread in Customize, across reload, and while the latest re
   );
 });
 
-test("Think with me is the first-message default; choosing another skill and deleting it have predictable fallbacks", async ({
+test("Shape with me is the first-message default; choosing another skill and deleting it have predictable fallbacks", async ({
   page,
 }) => {
   await page.goto("/");
   const hub = await (await page.request.get("/api/customize")).json();
   const skills = join(hub.project.path, "skills");
-  const original = join(skills, "think-with-me", "SKILL.md");
+  const original = join(skills, "shape-with-me", "SKILL.md");
   const source = readFileSync(original, "utf8");
   const extra = join(skills, "test-added-skill");
   mkdirSync(extra);
@@ -299,12 +299,13 @@ test("Think with me is the first-message default; choosing another skill and del
     await page.locator("button.new-chat").click();
     const picker = page.getByLabel("Starting skill");
     await expect(picker).toBeEnabled();
-    await expect(picker).toHaveValue("think-with-me");
-    await expect(picker.locator("option:checked")).toHaveText("Think with me");
+    await expect(picker).toHaveValue("shape-with-me");
+    await expect(picker.locator("option:checked")).toHaveText("Shape with me");
+    await expect(picker.locator('option[value="think-with-me"]')).toHaveCount(0);
     await picker.selectOption("test-added-skill");
     const chosen = new URL(page.url()).pathname.split("/").at(-1)!;
     await page.locator("button.new-chat").click();
-    await expect(picker).toHaveValue("think-with-me");
+    await expect(picker).toHaveValue("shape-with-me");
     await chatRow(page, chosen).click();
     await expect(picker).toHaveValue("test-added-skill");
     await picker.selectOption("");

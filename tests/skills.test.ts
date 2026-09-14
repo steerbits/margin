@@ -5,7 +5,7 @@ import {
   formatSkillsForPrompt,
   loadSkillsFromDir,
 } from "@earendil-works/pi-coding-agent";
-import { defaultSkill } from "../shared/skills.ts";
+import { defaultSkill, skillLabel } from "../shared/skills.ts";
 
 const skillsDir = fileURLToPath(new URL("../skills/", import.meta.url));
 const shapePath = fileURLToPath(
@@ -30,14 +30,21 @@ test("shape-with-me is discoverable and available in Pi's skill prompt", () => {
   assert.ok(prompt.includes(`<location>${shapePath}</location>`));
 });
 
-test("shape-with-me remains optional and does not replace the new-chat default", () => {
+test("Shape with me replaces Think with me as the new-chat default", () => {
   const { skills } = loadSkillsFromDir({ dir: skillsDir, source: "path" });
   const shape = skills.find((skill) => skill.name === "shape-with-me");
-  const original = skills.find((skill) => skill.name === "think-with-me");
   assert.ok(shape);
-  assert.ok(original);
-  assert.equal(defaultSkill(skills), "think-with-me");
-  assert.equal(defaultSkill([shape, original]), "think-with-me");
-  assert.equal(defaultSkill([original, shape]), "think-with-me");
-  assert.equal(defaultSkill([shape]), "");
+  assert.equal(skills.some((skill) => skill.name === "think-with-me"), false);
+  const additional = { ...shape, name: "another-skill" };
+  assert.equal(defaultSkill(skills), "shape-with-me");
+  assert.equal(defaultSkill([shape, additional]), "shape-with-me");
+  assert.equal(defaultSkill([additional, shape]), "shape-with-me");
+  assert.equal(defaultSkill([shape]), "shape-with-me");
+  assert.equal(defaultSkill([additional]), "");
+  assert.equal(defaultSkill([]), "");
+});
+
+test("shape-with-me has a friendly display name without renaming other skills", () => {
+  assert.equal(skillLabel("shape-with-me"), "Shape with me");
+  assert.equal(skillLabel("another-skill"), "another-skill");
 });

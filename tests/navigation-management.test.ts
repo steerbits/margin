@@ -176,18 +176,18 @@ test("deletion removes all owned chat state and native transcript, retaining wor
 
 test("renamed skill is discoverable and the default remains independent of other skills", () => {
   const result = loadSkillsFromDir({ dir: resolve("skills"), source: "path" });
-  assert.ok(result.skills.some((s) => s.name === "think-with-me"));
+  assert.ok(result.skills.some((s) => s.name === "shape-with-me"));
   assert.equal(
     result.skills.some((s) => s.name === "grill-frame-explore"),
     false,
   );
-  assert.equal(defaultSkill(result.skills), "think-with-me");
+  assert.equal(defaultSkill(result.skills), "shape-with-me");
   const additional = {
     name: "new-skill",
     filePath: "/example/SKILL.md",
     description: "Another skill",
   };
-  assert.equal(defaultSkill([additional, ...result.skills]), "think-with-me");
+  assert.equal(defaultSkill([additional, ...result.skills]), "shape-with-me");
   assert.equal(defaultSkill([additional]), "");
   assert.equal(defaultSkill([]), "");
 });

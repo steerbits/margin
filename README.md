@@ -47,7 +47,7 @@ Click the connection link printed in Terminal. It opens **http://127.0.0.1:4317*
 
 1. Open a project using the folder button, or select an existing project.
 2. Start a conversation. Use the gear beside **Connected** (or **Ready**) to save a default model and thinking effort. Until you choose one, Margin prefers your OpenAI Codex subscription model.
-3. **Think with me** is selected for the first message of a new chat when available. Choose another skill or **No skill** if you prefer, then send your prompt.
+3. **Shape with me** is selected for the first message of a new chat when available. Choose another skill or **No skill** if you prefer, then send your prompt.
 4. Select text in a completed reply and choose **Comment**. Selections can cross formatting, table cells, or code. The button beneath a reply comments on the whole reply.
 5. Save several draft comments, add an optional overall reply, and send them together. Sent comments remain anchored to the original reply when Pi produces a revision.
 
@@ -71,9 +71,9 @@ After updating the source, run `npm run build`, finish active agent work, restar
 
 ## Skills and authentication
 
-Margin uses Pi's own skill discovery, including `~/.pi/agent/skills/`, project `.pi/skills/`, and configured sources. The picker applies the selected skill to the **next message**; its instructions then remain in Pi's conversation. Reload skills with the refresh icon next to the picker. The bundled `think-with-me` skill lives in `skills/think-with-me/SKILL.md`. It is the default for a new chat’s first message; adding or choosing another skill does not change that default. If it is deleted or unavailable, new chats select **No skill**. Sending a message clears the picker, while the invoked instructions remain in the conversation. As before, your own Pi skills can be added without changing the app.
+Margin uses Pi's own skill discovery, including `~/.pi/agent/skills/`, project `.pi/skills/`, and configured sources. The picker applies the selected skill to the **next message**; its instructions then remain in Pi's conversation. Reload skills with the refresh icon next to the picker. The bundled **Shape with me** skill lives in `skills/shape-with-me/SKILL.md` (skill identifier: `shape-with-me`). It is the default for a new chat’s first message; adding or choosing another skill does not change that default. If it is deleted or unavailable, new chats select **No skill**. Sending a message clears the picker, while the invoked instructions remain in the conversation. As before, your own Pi skills can be added without changing the app.
 
-The optional **`shape-with-me`** sibling lives in `skills/shape-with-me/SKILL.md`. It retains clarification questions and automated evaluation, but replaces contract approval with a compact default approach, concrete previews and alternatives, and an invitation to bring a real case that might reveal missing assumptions. It also summarizes what feedback actually changed in chat. Use **Reload skills**, then select **`shape-with-me`** to experiment, preferably in a new chat so earlier skill instructions do not overlap. The default remains **Think with me**; no UI changes or influence score are included.
+**Shape with me** combines clarification questions and automated evaluation with a compact default approach, concrete previews and alternatives, and an invitation to bring a real case that might reveal missing assumptions. It also summarizes what feedback actually changed in chat. The former **Think with me** skill has been removed.
 
 Sign in with `pi` → `/login`, then refresh models or restart Margin. Credentials stay in Pi's server-side authentication storage. `openai-codex` uses your ChatGPT/Codex subscription; `openai` is a separate API-key provider. The UI does not silently switch providers when a request fails.
 
