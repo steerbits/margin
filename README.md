@@ -46,12 +46,14 @@ npm start
 Click the connection link printed in Terminal. It opens **http://127.0.0.1:4317** and connects this browser; later refreshes and restarts retain the connection. `npm start` launches a local gateway and starts one cco-wrapped Pi server per active workspace. Run it from a normal Terminal; a process already inside a restrictive sandbox cannot expand its inherited permissions. For development, `npm run dev` provides Vite browser updates; restart after backend/plugin changes. Explicit legacy direct-launch commands remain `npm run start:native` and `npm run dev:native`; `npm run start:single-sandbox` retains the former single cco server launcher.
 
 1. Open a project using the folder button, or select an existing project.
-2. Start a conversation. The default prefers your OpenAI Codex subscription model.
+2. Start a conversation. Use the gear beside **Connected** (or **Ready**) to save a default model and thinking effort. Until you choose one, Margin prefers your OpenAI Codex subscription model.
 3. **Think with me** is selected for the first message of a new chat when available. Choose another skill or **No skill** if you prefer, then send your prompt.
 4. Select text in a completed reply and choose **Comment**. Selections can cross formatting, table cells, or code. The button beneath a reply comments on the whole reply.
 5. Save several draft comments, add an optional overall reply, and send them together. Sent comments remain anchored to the original reply when Pi produces a revision.
 
-The **Thinking** dropdown beside the model selects effort for this conversation. It shows only levels supported by the current model, persists with the session, and is disabled while Pi is working. It does not change your global Pi defaults.
+**Settings**, in the top-right header, saves new-conversation defaults across all workspaces and restarts. Choose a provider/model and a supported thinking effort, or leave **Automatic** / **Pi default** to retain the existing startup behavior. **Save** affects new chats only, including chats started from Customize Margin; **Cancel** and Escape discard edits. Settings are stored in Margin’s database, not your global Pi settings. An unavailable selected model produces an error rather than silently switching providers. Default skill and additional settings are deferred; the dialog is organized into sections for future additions.
+
+The welcome screen’s **Default from Settings** uses the latest saved defaults. Selecting another model there overrides just the next chat; if it cannot support the default effort, Pi chooses its normal supported effort. The **Thinking** dropdown beside the model selects effort for the current conversation. It shows only supported levels, persists with the session, and is disabled while Pi is working. Neither conversation control changes your saved Margin or global Pi defaults.
 
 Inline comments are sent as a normal user message: a short instruction followed by JSON with `inlineComments` (original `messageId`, `quotedPassage`, and `comment`) and `overallReply`. Visual highlighting and offsets stay in Margin; the model receives the quotations and feedback.
 

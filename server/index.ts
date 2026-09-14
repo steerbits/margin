@@ -16,6 +16,13 @@ import { runtimeLog } from "./runtime-log.ts";
 import { deleteSavedSession } from "./delete-session.ts";
 import { LiveSession, errorText } from "./sessions.ts";
 import { createModels, listModels } from "./models.ts";
+import {
+  installSettingsRoutes,
+  modelReferenceSchema,
+  newConversationSettings,
+  readSettings,
+  settingsSchema,
+} from "./settings.ts";
 import { loadPlugins } from "./plugins.ts";
 import type { Project, SessionInfo } from "../shared/types.ts";
 import { executionInfo } from "./execution.ts";
@@ -542,6 +549,7 @@ app.post(
     res.json(projectView(project));
   }),
 );
+if (!workerToken) installSettingsRoutes(app, store, availableModels);
 app.post(
   "/api/models/refresh",
   asyncRoute(async (_req, res) =>
@@ -573,21 +581,22 @@ app.post(
       .object({
         projectId: z.string(),
         gatewaySessionId: z.string().uuid().optional(),
-        model: z
-          .object({
-            id: z.string(),
-            provider: z.string(),
-            name: z.string(),
-            subscription: z.boolean(),
-            backend: z.string().optional(),
-          })
-          .optional(),
+        model: modelReferenceSchema.optional(),
+        defaults: settingsSchema.optional(),
       })
       .parse(req.body);
     const project = store.get<Project>("project", input.projectId);
     if (!project) throw new Error("Project not found.");
     requireWorkspace(project.id);
     workspaceAccess.requireDirectory(project.path);
+    const defaults = workerToken
+      ? settingsSchema.parse(input.defaults)
+      : readSettings(store);
+    const selection = newConversationSettings(
+      defaults,
+      await availableModels(),
+      input.model,
+    );
     const info: SessionInfo = {
       id: workerToken
         ? (input.gatewaySessionId ??
@@ -597,9 +606,9 @@ app.post(
         : randomUUID(),
       projectId: input.projectId,
       title: "New conversation",
-      model: input.model,
-      backend: input.model?.backend ?? "pi",
-      backendLabel: backends.get(input.model?.backend ?? "pi")?.label,
+      ...selection,
+      backend: selection.model.backend ?? "pi",
+      backendLabel: backends.get(selection.model.backend ?? "pi")?.label,
       createdAt: Date.now(),
       updatedAt: Date.now(),
     };

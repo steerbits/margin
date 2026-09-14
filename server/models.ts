@@ -1,7 +1,13 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { getAgentDir, ModelRuntime } from "@earendil-works/pi-coding-agent";
-import type { Credential, CredentialStore } from "@earendil-works/pi-ai";
+import {
+  getSupportedThinkingLevels,
+  type Api,
+  type Model,
+  type Credential,
+  type CredentialStore,
+} from "@earendil-works/pi-ai";
 import type { ModelInfo } from "../shared/types.ts";
 
 // Optional mode for hosts that allow reading Pi credentials but cannot acquire its write lock.
@@ -34,14 +40,12 @@ export async function createModels(dataDir: string) {
       : {}),
   });
 }
-export function modelInfo(
-  runtime: ModelRuntime,
-  model: { id: string; provider: string; name: string },
-): ModelInfo {
+export function modelInfo(runtime: ModelRuntime, model: Model<Api>): ModelInfo {
   return {
     ...modelFields(model),
     backend: "pi",
     subscription: runtime.isUsingSubscription(model.provider),
+    thinkingLevels: getSupportedThinkingLevels(model),
   };
 }
 function modelFields(m: { id: string; provider: string; name: string }) {

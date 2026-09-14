@@ -28,6 +28,7 @@ import {
   Plug,
   CornerDownRight,
   SlidersHorizontal,
+  Settings,
 } from "lucide-react";
 import type {
   Anchor,
@@ -51,6 +52,7 @@ import type { NavigationRequest } from "./navigation.ts";
 import { defaultSkill, skillLabel } from "../shared/skills.ts";
 import { ChatStatus } from "./ChatStatus.tsx";
 import { ConversationMenu } from "./ConversationMenu.tsx";
+import { SettingsDialog } from "./SettingsDialog.tsx";
 import { ChatCache, ChatDrafts } from "./chat-cache.ts";
 import { useUnread } from "./use-unread.ts";
 import {
@@ -117,6 +119,7 @@ export function App() {
   const restoringHistory = useRef(false);
   const [recents, setRecents] = useState(readRecentWorkspaces);
   const [allWorkspaces, setAllWorkspaces] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const [renameOpen, setRenameOpen] = useState(false);
   const [workspaceName, setWorkspaceName] = useState("");
   const [deleteTarget, setDeleteTarget] = useState<SessionInfo | null>(null);
@@ -354,17 +357,6 @@ export function App() {
     if (next.kind !== "home" && next.kind !== "not-found")
       writeRoute(next, true);
     applyRoute(next, b);
-    setNewModel(
-      (v) =>
-        v ||
-        modelKey(
-          b.models.find(
-            (m) => m.provider === "openai-codex" && m.id === "gpt-5.6-sol",
-          ) ??
-            b.models.find((m) => m.provider === "openai-codex") ??
-            b.models[0],
-        ),
-    );
   }, []);
   useEffect(() => {
     void refresh().catch(fail);
@@ -677,6 +669,7 @@ export function App() {
         projectId,
         model: boot.models.find((m) => modelKey(m) === newModel),
       });
+      setNewModel("");
       histories.put(s);
       const data = { ...boot, sessions: [s.session, ...boot.sessions] };
       setBoot(data);
@@ -701,7 +694,6 @@ export function App() {
     await flushDraft();
     const s = await api<Snapshot>("/sessions", {
       projectId: project.id,
-      model: boot.models.find((m) => modelKey(m) === newModel),
     });
     if (prompt)
       await api(`/sessions/${s.session.id}/composer`, { text: prompt }, "PUT");
@@ -1027,6 +1019,7 @@ export function App() {
       !routeMissing &&
       !!snapshot &&
       !allWorkspaces &&
+      !settingsOpen &&
       !renameOpen &&
       !deleteTarget &&
       !contextMenu &&
@@ -1218,6 +1211,9 @@ export function App() {
           </div>
         </AppDialog>
       )}
+      {settingsOpen && (
+        <SettingsDialog onClose={() => setSettingsOpen(false)} />
+      )}
       <header className="app-header">
         <div className="brand">
           <PanelRight size={21} />
@@ -1249,6 +1245,14 @@ export function App() {
             <Circle size={7} fill="currentColor" />
             {sessionId ? (connected ? "Connected" : "Reconnecting…") : "Ready"}
           </span>
+          <button
+            aria-label="Settings"
+            title="Settings"
+            aria-haspopup="dialog"
+            onClick={() => setSettingsOpen(true)}
+          >
+            <Settings size={18} />
+          </button>
         </div>
       </header>
       <div className="workspace">
@@ -1666,6 +1670,7 @@ export function App() {
                         value={newModel}
                         onChange={(e) => setNewModel(e.target.value)}
                       >
+                        <option value="">Default from Settings</option>
                         {boot.models.map((m) => (
                           <option key={modelKey(m)} value={modelKey(m)}>
                             {m.name} · {m.provider}

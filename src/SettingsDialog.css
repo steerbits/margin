@@ -1,0 +1,44 @@
+.settings-section-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.settings-section-heading h3 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+}
+.settings-form .settings-description {
+  margin: 8px 0 24px;
+  color: var(--muted);
+}
+.settings-fields select {
+  width: 100%;
+  min-width: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--ink);
+  background: #fff;
+  font: inherit;
+}
+.settings-fields select:focus-visible {
+  outline: 2px solid #777;
+  outline-offset: 2px;
+}
+.settings-form .settings-help {
+  margin: 8px 0 20px;
+  color: var(--muted);
+  font-size: 12px;
+}
+.settings-form .settings-footnote {
+  border-top: 1px solid var(--line);
+  margin: 24px 0 0;
+  padding-top: 16px;
+  color: var(--muted);
+  font-size: 12px;
+}
+.settings-error {
+  color: #af3f39;
+}

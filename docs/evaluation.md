@@ -1,5 +1,16 @@
 # Evaluation record
 
+## Follow-up: shared new-conversation settings
+
+Added the header gear and Settings dialog for a default model and supported thinking effort. Defaults live in Margin's SQLite preferences; the gateway owns the app-wide record and passes a snapshot to each workspace worker only at chat creation. Existing chats keep their choices. Default skill remains deferred.
+
+- **114 Node tests passed**, **57 Chromium browser tests passed**, and **8 gateway browser tests passed**. TypeScript and the production build passed; the existing bundle-size advisory remains (about 668 KB / 206 KB gzip). Focused settings/adapter tests were rerun after the final typed restoration fix.
+- Covered settings persistence across database reopen, exact provider/backend identity, unsupported effort rejection, unchanged storage after rejected saves, per-chat model overrides, fresh defaults across workspace workers, gateway authentication, and ignoring browser-injected worker defaults.
+- Browser workflows checked Save, reload, Cancel/Escape with focus return, failed-save draft retention, unavailable-model recovery, capability changes, unchanged existing chats, and new-chat inheritance. Inspected actual 1440px desktop and 390px mobile screenshots as self-review; no independent reviewers or real-user preference evaluation were available.
+- A real SDK adapter regression test uses disposable configuration and an unused test API key without inference. It verifies new defaults, manual per-chat effort, adapter disposal/reopen, and byte-for-byte preservation of global Pi settings. It caught and fixed an empty-chat edge case: Pi does not automatically restore thinking entries until a transcript has messages, so Margin now explicitly restores those saved entries too.
+
+Live model inference and actual cco OS enforcement were not rerun. Gateway tests use the existing process-routing shim. No active Margin process was restarted; restart Margin and refresh the browser to activate the new backend routes and built UI.
+
 ## Follow-up: optional all-URL history for the current artifact
 
 The human identified a discoverability gap when a URL changes and requested **All previous feedback** only when it adds more comments than page history. Added that link inside expanded history, scoped to sent, non-deleted comments for the current artifact, with **This page only** to return. The section remains reachable at zero page comments if artifact history exists elsewhere. Navigation/collapse resets to page history; neither switching scope nor viewing sent notes changes the URL, attachments or storage.

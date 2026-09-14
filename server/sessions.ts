@@ -41,6 +41,7 @@ import { recoverInput, type PendingInput } from "./recovery.ts";
 import { RunRecovery, recoveryPrompt } from "./run-recovery.ts";
 import type { RuntimeOwner, RuntimeRecovery } from "./runtime-owner.ts";
 import { managedShell } from "./managed-shell.ts";
+import { automaticModel, thinkingLevels } from "../shared/settings.ts";
 
 export class LiveSession implements AgentBackend {
   events = new EventEmitter();
@@ -96,11 +97,7 @@ export class LiveSession implements AgentBackend {
       ? available.find(
           (m) => m.id === requested.id && m.provider === requested.provider,
         )
-      : (available.find(
-          (m) => m.provider === "openai-codex" && m.id === "gpt-5.6-sol",
-        ) ??
-        available.find((m) => m.provider === "openai-codex") ??
-        available[0]);
+      : automaticModel(available);
     if (requested && !model)
       throw new Error(
         "The selected model is unavailable. Choose another model.",
@@ -175,10 +172,23 @@ export class LiveSession implements AgentBackend {
           pending.persistedUserId ? "accepted" : "rejected",
         );
     }
+    // Pi only auto-restores effort when the transcript has messages. Empty
+    // chats can already have a per-chat choice, so restore their entry too.
+    const savedThinking = manager
+      .getBranch()
+      .some((entry) => entry.type === "thinking_level_change")
+      ? manager.buildSessionContext().thinkingLevel
+      : undefined;
+    const thinkingLevel =
+      thinkingLevels.find((level) => level === savedThinking) ??
+      (manager.getEntries().length
+        ? undefined
+        : this.info.initialThinkingLevel);
     const result = await createAgentSession({
       cwd: this.project.path,
       modelRuntime: this.models,
       model,
+      thinkingLevel,
       settingsManager: settings,
       resourceLoader: loader,
       sessionManager: manager,

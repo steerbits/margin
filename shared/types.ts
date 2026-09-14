@@ -1,3 +1,5 @@
+import type { ThinkingLevel } from "./settings.ts";
+
 export type Json =
   | null
   | boolean
@@ -11,6 +13,7 @@ export interface ModelInfo {
   name: string;
   subscription: boolean;
   backend?: string;
+  thinkingLevels?: ThinkingLevel[];
 }
 export interface SkillInfo {
   name: string;
@@ -39,6 +42,8 @@ export interface SessionInfo {
   projectId: string;
   title: string;
   sessionFile?: string;
+  /** Captured at creation; only used before a native session has entries. */
+  initialThinkingLevel?: ThinkingLevel;
   model?: ModelInfo;
   backend?: string;
   backendLabel?: string;

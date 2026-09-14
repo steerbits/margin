@@ -16,7 +16,8 @@ import { workspaceDataDir, assertDataPath } from "./workspace-data.ts";
 import { WorkspaceWorkers } from "./workspace-workers.ts";
 import { launcherAuth } from "./launcher-auth.ts";
 import { NativeDirectoryPicker } from "./native-directory-picker.ts";
-import type { Project, SessionInfo } from "../shared/types.ts";
+import type { ModelInfo, Project, SessionInfo } from "../shared/types.ts";
+import { installSettingsRoutes, readSettings } from "./settings.ts";
 
 // This process handles browser requests and worker lifecycle. It deliberately
 // imports neither Pi sessions nor executable server plugins.
@@ -367,6 +368,20 @@ app.post("/api/workspaces", async (req, res) => {
   registry.put("project", created.id, created);
   res.json(projectView(created));
 });
+installSettingsRoutes(app, registry, async () => {
+  const response = await workerFetch(
+    projectById(initial.id),
+    "/api/models/refresh",
+    "POST",
+    {},
+  );
+  const body = (await response.json()) as {
+    models: ModelInfo[];
+    error?: string;
+  };
+  if (!response.ok) throw new Error(body.error ?? "Unable to load models.");
+  return body.models;
+});
 app.post("/api/sessions", async (req, res) => {
   const { projectId } = z
     .object({ projectId: z.string().uuid() })
@@ -375,6 +390,8 @@ app.post("/api/sessions", async (req, res) => {
   const id = randomUUID();
   registry.put("session-owner", id, projectId);
   req.body.gatewaySessionId = id;
+  // The gateway owns app-wide defaults; workers receive a creation-time copy.
+  req.body.defaults = readSettings(registry);
   await proxy(project, req, res);
 });
 app.delete("/api/sessions/:id", async (req, res) => {
