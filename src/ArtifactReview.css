@@ -272,6 +272,15 @@
 .artifact-history .artifact-comment {
   margin: 0 14px 12px;
 }
+.artifact-history-scope {
+  display: block;
+  margin: 0 14px 12px;
+  padding: 0;
+  color: #365ca2;
+  font-size: 12px;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
 .artifact-comments-empty {
   text-align: center;
   color: #aaa;

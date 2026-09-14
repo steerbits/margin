@@ -9,17 +9,26 @@ export function artifactInitialRoute(artifact: Artifact): string {
   return "/" + artifact.location.split("/").map(encodeURIComponent).join("/");
 }
 
-/** Sent history follows the page; unsent attachments are deliberately not scoped here. */
-export function previousPageComments(
+/** Only sent, retained annotations for this artifact; never unsent attachments. */
+export function previousArtifactComments(
   comments: ArtifactComment[],
   artifactId: string,
-  route: string,
 ): ArtifactComment[] {
   return comments.filter(
     (comment) =>
       !comment.deleted &&
       comment.delivery === "sent" &&
-      comment.artifactId === artifactId &&
-      comment.anchor.route === route,
+      comment.artifactId === artifactId,
+  );
+}
+
+/** Page history is the default; all-artifact history is an explicit escape hatch. */
+export function previousPageComments(
+  comments: ArtifactComment[],
+  artifactId: string,
+  route: string,
+): ArtifactComment[] {
+  return previousArtifactComments(comments, artifactId).filter(
+    (comment) => comment.anchor.route === route,
   );
 }

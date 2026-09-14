@@ -24,6 +24,7 @@ import { ArtifactDrafts } from "../src/artifact-drafts.ts";
 import { OverallFeedbackDraft } from "../src/artifact-overall.ts";
 import {
   artifactInitialRoute,
+  previousArtifactComments,
   previousPageComments,
 } from "../src/artifact-history.ts";
 import {
@@ -214,6 +215,19 @@ test("previous feedback is scoped to the artifact and exact page URL, not the cu
     );
     assert.deepEqual(
       previousPageComments(comments, f.artifact.id, "/other.md"),
+      [],
+    );
+    assert.deepEqual(previousArtifactComments(comments, f.artifact.id), [
+      comments[0],
+      comments[2],
+      comments[3],
+    ]);
+    assert.deepEqual(
+      previousArtifactComments([sent], f.artifact.id),
+      previousPageComments([sent], f.artifact.id, "/report.md"),
+    );
+    assert.deepEqual(
+      previousArtifactComments(comments, "unknown-artifact"),
       [],
     );
     assert.equal(

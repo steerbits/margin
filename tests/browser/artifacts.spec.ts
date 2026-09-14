@@ -496,7 +496,7 @@ test("failed and rejected submissions keep the review open; delayed acceptance r
   ).toBe(true);
 });
 
-test("previous feedback stays above the overall box and follows the current artifact, path, query and fragment", async ({
+test("pinned history follows the page and offers all-artifact history only when other URLs have sent feedback", async ({
   page,
 }) => {
   const { markdown, app } = await seed(page);
@@ -564,6 +564,7 @@ test("previous feedback stays above the overall box and follows the current arti
   await expect(
     page.locator(".artifact-history .artifact-comment-text"),
   ).toHaveText("Only for the Markdown report");
+  await expect(page.locator(".artifact-history-scope")).toHaveCount(0);
   await addPageComment("Still attached while I review a different artifact", 1);
   await page.getByLabel("Review artifact").selectOption(app.id);
   await expect(
@@ -585,14 +586,76 @@ test("previous feedback stays above the overall box and follows the current arti
     page.locator(".artifact-comment-list .artifact-comment-text"),
   ).toHaveText("Still attached while I review a different artifact");
   await pinned();
+  const scopeLink = page.locator(".artifact-history-scope");
+  await expect(scopeLink).toHaveText("All previous feedback (3)");
+  const originalAddress = await page
+    .getByLabel("Artifact address")
+    .inputValue();
+  await scopeLink.click();
+  await expect(page.locator(".artifact-history summary")).toHaveText(
+    "All previous feedback (3)",
+  );
+  await expect(
+    page.locator(".artifact-history .artifact-comment-text"),
+  ).toHaveText([
+    "First note for the app home page",
+    "Second note for the app home page",
+    "Only for the metrics chart link",
+  ]);
+  await expect(page.getByLabel("Artifact address")).toHaveValue(
+    originalAddress,
+  );
+  await expect(page.locator(".artifact-attached-count")).toHaveText(
+    "1 comment attached",
+  );
+  await expect(scopeLink).toHaveText("This page only (2)");
+  await pinned();
+  await scopeLink.click();
+  await expect(page.locator(".artifact-history summary")).toHaveText(
+    "Previous feedback (2)",
+  );
+  await scopeLink.click();
+  // Changing URL defaults back to page history rather than carrying All mode along.
   await navigate("/details?tab=metrics#chart");
+  await expect(page.locator(".artifact-history summary")).toHaveText(
+    "Previous feedback (1)",
+  );
   await expect(
     page.locator(".artifact-history .artifact-comment-text"),
   ).toHaveText("Only for the metrics chart link");
   await navigate("/details?tab=other#chart");
-  await expect(page.locator(".artifact-history")).toHaveCount(0);
+  await expect(page.locator(".artifact-history summary")).toHaveText(
+    "Previous feedback (0)",
+  );
+  await expect(
+    page.locator(".artifact-history .artifact-comment-text"),
+  ).toHaveCount(0);
+  await expect(page.locator(".artifact-history")).toContainText(
+    "No previous feedback for this page.",
+  );
+  await expect(scopeLink).toHaveText("All previous feedback (3)");
+  await scopeLink.click();
+  await expect(
+    page.locator(".artifact-history .artifact-comment-text"),
+  ).toHaveCount(3);
+  await expect(scopeLink).toHaveText("This page only (0)");
+  await pinned();
+  await page.screenshot({
+    path: ".margin-data/artifact-review-all-history.png",
+    fullPage: true,
+  });
+  await page.locator(".artifact-history summary").click();
+  await expect(scopeLink).toHaveCount(0);
+  await page.locator(".artifact-history summary").click();
+  await expect(page.locator(".artifact-history summary")).toHaveText(
+    "Previous feedback (0)",
+  );
+  await expect(scopeLink).toHaveText("All previous feedback (3)");
   await navigate("/details?tab=metrics#other");
-  await expect(page.locator(".artifact-history")).toHaveCount(0);
+  await expect(
+    page.locator(".artifact-history .artifact-comment-text"),
+  ).toHaveCount(0);
+  await expect(scopeLink).toHaveText("All previous feedback (3)");
   await navigate("/");
   await expect(page.locator(".artifact-history summary")).toHaveText(
     "Previous feedback (2)",
@@ -600,6 +663,7 @@ test("previous feedback stays above the overall box and follows the current arti
   for (let i = 0; i < 4; i++)
     await addPageComment(`Pending thought ${i + 1}`, i + 2);
   await saved(page);
+  await expect(scopeLink).toHaveText("All previous feedback (3)");
   expect(
     await page
       .locator(".artifact-comment-list")

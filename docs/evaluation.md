@@ -1,5 +1,13 @@
 # Evaluation record
 
+## Follow-up: optional all-URL history for the current artifact
+
+The human identified a discoverability gap when a URL changes and requested **All previous feedback** only when it adds more comments than page history. Added that link inside expanded history, scoped to sent, non-deleted comments for the current artifact, with **This page only** to return. The section remains reachable at zero page comments if artifact history exists elsewhere. Navigation/collapse resets to page history; neither switching scope nor viewing sent notes changes the URL, attachments or storage.
+
+- **72 Node tests passed**, TypeScript and production build passed; **10 focused artifact Chromium tests passed**. Extended the existing history tests rather than adding a separate workflow count.
+- Verified absence of the link for single-page Markdown even with other artifacts' history; additional app URLs enabling it; all mode excluding another artifact and unsent drafts; unchanged preview address/attachment count; zero-page history access; returning to page-only mode; reset on navigation/collapse; and preserved footer placement. Inspected the actual all-history screenshot as self-review.
+- Full browser/gateway suites and live-model editing evaluation were not rerun for this focused frontend change. The existing bundle-size advisory remains (about 662 KB / 204 KB gzip). A browser reload loads the update; no server restart or feedback-data migration is required.
+
 ## Follow-up: bottom-pinned, page-specific previous feedback
 
 The human noted that history floated midway down the sidebar and followed neither the selected artifact nor its page. Moved **Previous feedback** outside the active-comment scroller, directly above the overall box. Its expanded height is bounded and scrollable. History now matches the current registered artifact plus displayed path/query/hash, using the existing saved target route; no new scope control or storage migration was needed. Unsent attachments remain conversation-wide and visible. Content revisions do not hide prior feedback for the same page.

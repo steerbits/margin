@@ -20,6 +20,7 @@ import { api } from "./api.ts";
 import { ArtifactDrafts, saveArtifactComment } from "./artifact-drafts.ts";
 import {
   artifactInitialRoute,
+  previousArtifactComments,
   previousPageComments,
 } from "./artifact-history.ts";
 import {
@@ -187,6 +188,7 @@ export function ArtifactReviewWindow({
     [sending, setSending] = useState(false);
   const [tick, setTick] = useState(0);
   const [historyOpen, setHistoryOpen] = useState(false);
+  const [allHistoryScope, setAllHistoryScope] = useState<string | null>(null);
   const mounted = useRef(true);
   const pendingBatch = useRef<string | undefined>(undefined);
   const posting = useRef(false);
@@ -227,9 +229,20 @@ export function ArtifactReviewWindow({
     artifactId,
     pageRoute,
   );
+  const allPreviousComments = previousArtifactComments(comments, artifactId);
+  const hasOtherHistory = allPreviousComments.length > previousComments.length;
+  const historyScope = JSON.stringify([artifactId, pageRoute]);
+  const showAllHistory =
+    historyOpen && hasOtherHistory && allHistoryScope === historyScope;
+  const displayedHistory = showAllHistory
+    ? allPreviousComments
+    : previousComments;
+  useEffect(() => {
+    setAllHistoryScope(null);
+  }, [historyScope, hasOtherHistory]);
   const visibleComments = [
     ...currentComments,
-    ...(historyOpen ? previousComments : []),
+    ...(historyOpen ? displayedHistory : []),
   ];
   const draftComments = comments.filter(
     (c) => c.delivery === "draft" && c.saved !== false && c.text.trim(),
@@ -475,7 +488,14 @@ export function ArtifactReviewWindow({
         .filter((c) => c.artifactId === artifactId)
         .map((c) => ({ id: c.id, anchor: c.anchor })),
     });
-  }, [connection, state.comments, tick, historyOpen, pageRoute]);
+  }, [
+    connection,
+    state.comments,
+    tick,
+    historyOpen,
+    pageRoute,
+    showAllHistory,
+  ]);
   useEffect(() => {
     if (!connection || ready) return;
     const timeout = setTimeout(
@@ -774,7 +794,7 @@ export function ArtifactReviewWindow({
                 : "Select text, point to an element, or comment on this page."}
             </p>
           </div>
-          {[currentComments, previousComments].map((group, groupIndex) => {
+          {[currentComments, displayedHistory].map((group, groupIndex) => {
             const cards = group.map((c, i) => (
               <article
                 key={c.id}
@@ -924,17 +944,48 @@ export function ArtifactReviewWindow({
                 )}
                 {cards}
               </div>
-            ) : group.length > 0 ? (
+            ) : allPreviousComments.length > 0 ? (
               <details
                 key="previous"
                 className="artifact-history"
                 open={historyOpen}
-                onToggle={(e) => setHistoryOpen(e.currentTarget.open)}
+                onToggle={(e) => {
+                  setHistoryOpen(e.currentTarget.open);
+                  if (!e.currentTarget.open) setAllHistoryScope(null);
+                }}
               >
-                <summary title={`Previous feedback for ${pageRoute}`}>
-                  Previous feedback ({group.length})
+                <summary
+                  title={
+                    showAllHistory
+                      ? "Previous feedback across this artifact's URLs"
+                      : `Previous feedback for ${pageRoute}`
+                  }
+                >
+                  {showAllHistory
+                    ? "All previous feedback"
+                    : "Previous feedback"}{" "}
+                  ({group.length})
                 </summary>
-                <p>Previously sent for this page. Not attached again.</p>
+                <p>
+                  {showAllHistory
+                    ? "Previously sent for this artifact. Not attached again."
+                    : previousComments.length
+                      ? "Previously sent for this page. Not attached again."
+                      : "No previous feedback for this page."}
+                </p>
+                {historyOpen && hasOtherHistory && (
+                  <button
+                    type="button"
+                    className="artifact-history-scope"
+                    onClick={() =>
+                      setAllHistoryScope(showAllHistory ? null : historyScope)
+                    }
+                  >
+                    {showAllHistory
+                      ? `This page only (${previousComments.length})`
+                      : `All previous feedback (${allPreviousComments.length})`}
+                  </button>
+                )}
                 {historyOpen && cards}
               </details>
             ) : null;
