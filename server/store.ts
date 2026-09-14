@@ -72,6 +72,7 @@ export class Store {
         "interrupted",
         "pi-backup",
         "pending-input",
+        "run-recovery",
       ])
         this.db
           .prepare("DELETE FROM records WHERE kind=? AND id=?")

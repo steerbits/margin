@@ -18,6 +18,7 @@ import { execFileSync } from "node:child_process";
 // Test hosts launched from a Margin agent must not inherit the real worker identity.
 for (const key of [
   "MARGIN_WORKER_TOKEN",
+  "MARGIN_RUNTIME_GENERATION",
   "MARGIN_WORKSPACE_ID",
   "MARGIN_WORKSPACE_PATH",
   "MARGIN_WORKSPACE_NAME",

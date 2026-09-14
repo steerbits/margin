@@ -6,6 +6,8 @@ import { dirname, join } from "node:path";
 import { EventEmitter } from "node:events";
 import {
   createAgentSession,
+  createBashToolDefinition,
+  defineTool,
   DefaultResourceLoader,
   getAgentDir,
   SessionManager,
@@ -36,6 +38,9 @@ import type {
 import { dispatchPluginEvent } from "./plugins.ts";
 import type { AgentBackend } from "./backend-api.ts";
 import { recoverInput, type PendingInput } from "./recovery.ts";
+import { RunRecovery, recoveryPrompt } from "./run-recovery.ts";
+import type { RuntimeOwner, RuntimeRecovery } from "./runtime-owner.ts";
+import { managedShell } from "./managed-shell.ts";
 
 export class LiveSession implements AgentBackend {
   events = new EventEmitter();
@@ -53,6 +58,8 @@ export class LiveSession implements AgentBackend {
   private childOperations = 0;
   private pluginOperations = 0;
   private disposing = false;
+  private recoveryRun: RunRecovery;
+  private autoResume = false;
   private submitting?: { comments: Comment[]; note: string };
   constructor(
     public info: SessionInfo,
@@ -61,20 +68,25 @@ export class LiveSession implements AgentBackend {
     private dataDir: string,
     private appRoot: string,
     private plugins: ServerPlugin[],
+    private runtime?: { storage: RuntimeOwner; recovery: RuntimeRecovery },
   ) {
+    this.recoveryRun = new RunRecovery(store, info.id, runtime?.recovery);
     this.ui = new UiBridge(() => {
       if (this.disposing) return;
+      this.trackWaiting();
       this.store.put("composer", this.info.id, this.ui.editorText);
       this.changed();
     });
     this.ui.editorText = store.get<string>("composer", info.id) ?? "";
     this.messages = store.get<Message[]>("transcript", info.id) ?? [];
     this.ready = this.initialize();
-    this.ready.catch((e) => {
-      this.busy = false;
-      this.ui.notify(errorText(e), "error");
-      this.changed();
-    });
+    void this.ready
+      .then(() => this.resumeInterruptedRun())
+      .catch((e) => {
+        this.busy = false;
+        this.ui.notify(errorText(e), "error");
+        this.changed();
+      });
   }
   private async initialize() {
     this.models = await createModels(this.dataDir);
@@ -162,10 +174,6 @@ export class LiveSession implements AgentBackend {
           pending.batchId,
           pending.persistedUserId ? "accepted" : "rejected",
         );
-      this.ui.notify(
-        "The previous run was interrupted. Saved messages and feedback are available; continue when ready. Pending tool interactions cannot resume after a server restart.",
-        "warning",
-      );
     }
     const result = await createAgentSession({
       cwd: this.project.path,
@@ -175,6 +183,15 @@ export class LiveSession implements AgentBackend {
       resourceLoader: loader,
       sessionManager: manager,
       customTools: [
+        defineTool(
+          createBashToolDefinition(this.project.path, {
+            operations: managedShell(
+              this.shellOwner(),
+              settings.getShellPath(),
+            ),
+            commandPrefix: settings.getShellCommandPrefix(),
+          }),
+        ),
         presentArtifactTool(this.store, this.info.id, this.project),
         ...this.plugins.flatMap(
           (p) => p.tools?.(this.pluginContext(p.id)) ?? [],
@@ -229,15 +246,93 @@ export class LiveSession implements AgentBackend {
         },
       },
     });
-    this.busy = false;
+    if (interrupted) {
+      const savedTools = new Set(
+        manager
+          .getBranch()
+          .flatMap((entry) =>
+            entry.type === "message" && entry.message.role === "toolResult"
+              ? [entry.message.toolCallId]
+              : [],
+          ),
+      );
+      const decision = this.recoveryRun.prepare(
+        this.store.get<PendingInput>("pending-input", this.info.id),
+        (id) => !!manager.getEntry(id),
+        savedTools,
+      );
+      this.autoResume = decision.resume;
+      const cause = this.runtime?.recovery.previous?.reason;
+      this.ui.notify(
+        decision.resume
+          ? `The previous runtime stopped (${decision.reason}). Saved work is being continued automatically once.`
+          : `The previous run was interrupted${cause ? ` (${cause})` : ""}. ${decision.reason}`,
+        "warning",
+      );
+    }
+    this.busy = this.autoResume;
     this.refreshMessages();
     this.persist();
     this.changed();
     this.pluginEvent("session.ready");
   }
+  private shellOwner() {
+    return this.runtime
+      ? {
+          storage: this.runtime.storage,
+          generation: this.runtime.recovery.generation,
+        }
+      : undefined;
+  }
+  private assertOwnership() {
+    this.runtime?.storage.assert(this.runtime.recovery.generation);
+  }
+  private trackWaiting() {
+    this.recoveryRun.waiting(
+      this.ui.dialogs.size > 0,
+      this.childOperations > 0 || this.pluginOperations > 0,
+    );
+  }
+  private async resumeInterruptedRun() {
+    if (!this.autoResume) return;
+    this.autoResume = false;
+    if (this.disposing || !this.recoveryRun.active) return;
+    try {
+      this.assertOwnership();
+      // Startup extensions can ask new questions or start background work.
+      // Never answer those implicitly or overlap their operations.
+      if (
+        this.ui.dialogs.size ||
+        this.childOperations ||
+        this.pluginOperations
+      ) {
+        this.ui.notify(
+          "Automatic continuation paused for startup questions or background/plugin work. Continue when ready.",
+          "warning",
+        );
+        return;
+      }
+      await this.agent.prompt(recoveryPrompt, { expandPromptTemplates: false });
+    } catch (error) {
+      this.ui.notify(errorText(error), "error");
+    } finally {
+      this.recoveryRun.finish();
+      this.busy = false;
+      this.refreshMessages();
+      this.persist();
+      this.changed();
+    }
+  }
   private onEvent(event: AgentSessionEvent) {
     const e = event as unknown as Record<string, any>;
-    if (e.type === "agent_start") this.busy = true;
+    if (e.type === "agent_start") {
+      this.assertOwnership();
+      this.busy = true;
+    }
+    if (e.type === "tool_execution_start") {
+      this.assertOwnership();
+      this.recoveryRun.toolStarted(e.toolCallId);
+    }
     if (e.type === "message_update" && e.message?.role === "assistant")
       this.live = {
         id: `stream:${this.info.id}`,
@@ -266,6 +361,20 @@ export class LiveSession implements AgentBackend {
               persistedUserId: entry.id,
             });
         }
+        // Only a durable native toolResult closes the uncertain-effects window,
+        // not tool_execution_end (which occurs before result persistence).
+        if (
+          e.message?.role === "toolResult" &&
+          this.agent.sessionManager
+            .getBranch()
+            .some(
+              (entry) =>
+                entry.type === "message" &&
+                entry.message.role === "toolResult" &&
+                entry.message.toolCallId === e.message.toolCallId,
+            )
+        )
+          this.recoveryRun.toolPersisted(e.message.toolCallId);
         this.refreshMessages();
         this.persist();
         this.changed();
@@ -310,6 +419,7 @@ export class LiveSession implements AgentBackend {
       this.ui.statuses.retry = `Retrying (${e.attempt}/${e.maxAttempts})…`;
     if (e.type === "auto_retry_end") delete this.ui.statuses.retry;
     if (e.type === "agent_settled") {
+      this.recoveryRun.finish();
       this.busy = false;
       this.live = undefined;
       this.liveTools.clear();
@@ -330,6 +440,14 @@ export class LiveSession implements AgentBackend {
       this.plugins,
       { type, sessionId: this.info.id, projectId: this.project.id, data },
       (id) => this.pluginContext(id),
+      () => {
+        this.pluginOperations++;
+        this.trackWaiting();
+        return () => {
+          this.pluginOperations--;
+          this.trackWaiting();
+        };
+      },
     );
   }
   private refreshMessages() {
@@ -375,10 +493,12 @@ export class LiveSession implements AgentBackend {
     const p = this.plugins.find((p) => p.id === pluginId);
     if (!p?.action) throw new Error("Plugin action not found.");
     this.pluginOperations++;
+    this.trackWaiting();
     try {
       return await p.action(action, input, this.pluginContext(p.id));
     } finally {
       this.pluginOperations--;
+      this.trackWaiting();
     }
   }
   snapshot(): Snapshot {
@@ -419,6 +539,7 @@ export class LiveSession implements AgentBackend {
     };
   }
   async send(batch: FeedbackBatch) {
+    this.assertOwnership();
     const existing = this.store.batch(this.info.id, batch.id);
     if (existing) return { status: existing.status };
     if (this.busy || this.ui.dialogs.size)
@@ -459,6 +580,7 @@ export class LiveSession implements AgentBackend {
       note: batch.note,
     });
     this.store.markBatch(this.info.id, batch.id, "submitting");
+    this.recoveryRun.begin(batch.id);
     this.busy = true;
     this.persist();
     this.changed();
@@ -510,6 +632,7 @@ export class LiveSession implements AgentBackend {
         if (!accepted) this.store.markBatch(this.info.id, batch.id, "rejected");
       })
       .finally(() => {
+        this.recoveryRun.finish();
         this.submitting = undefined;
         this.busy = false;
         this.refreshMessages();
@@ -561,6 +684,11 @@ export class LiveSession implements AgentBackend {
     this.changed();
   }
   async stop() {
+    // Persist explicit Stop before awaiting cancellation; a crash during abort
+    // must not transform the user's Stop into an automatic continuation.
+    this.autoResume = false;
+    this.recoveryRun.cancel();
+    this.store.put("interrupted", this.info.id, false);
     this.ui.cancelAll();
     if (this.agent) {
       this.agent.abortCompaction();
@@ -570,6 +698,7 @@ export class LiveSession implements AgentBackend {
     this.busy = false;
     this.live = undefined;
     this.refreshMessages();
+    this.persist();
     this.changed();
   }
   async reload() {
@@ -662,6 +791,13 @@ export class LiveSession implements AgentBackend {
           modelRuntime: this.models,
           model,
           tools: options.tools ?? [],
+          customTools: [
+            defineTool(
+              createBashToolDefinition(this.project.path, {
+                operations: managedShell(this.shellOwner()),
+              }),
+            ),
+          ],
           resourceLoader: loader,
           sessionManager: SessionManager.create(
             this.project.path,
@@ -670,11 +806,14 @@ export class LiveSession implements AgentBackend {
         });
         const child: BackgroundAgent = {
           prompt: async (text) => {
+            this.assertOwnership();
             this.childOperations++;
+            this.trackWaiting();
             try {
               await session.prompt(text);
             } finally {
               this.childOperations--;
+              this.trackWaiting();
             }
           },
           subscribe: (listener) =>

@@ -48,11 +48,22 @@ export function dispatchPluginEvent(
   plugins: ServerPlugin[],
   event: PluginEvent,
   context: (id: string) => PluginContext,
+  track?: () => () => void,
 ) {
   for (const p of plugins)
     if (p.onEvent)
       Promise.resolve()
-        .then(() => p.onEvent!(event, context(p.id)))
+        .then(() => {
+          const done = track?.();
+          try {
+            const result = p.onEvent!(event, context(p.id));
+            if (result instanceof Promise) return result.finally(done);
+            done?.();
+          } catch (error) {
+            done?.();
+            throw error;
+          }
+        })
         .catch((e) =>
           context(p.id).notify(
             `Plugin ${p.id}: ${e instanceof Error ? e.message : String(e)}`,

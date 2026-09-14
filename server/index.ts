@@ -11,6 +11,8 @@ import { installArtifactRoutes } from "./artifact-routes.ts";
 import { readSessionPreview } from "./session-preview.ts";
 import { SessionActivityTracker } from "./session-activity.ts";
 import { snapshotStream } from "./snapshot-stream.ts";
+import { RuntimeOwner } from "./runtime-owner.ts";
+import { runtimeLog } from "./runtime-log.ts";
 import { deleteSavedSession } from "./delete-session.ts";
 import { LiveSession, errorText } from "./sessions.ts";
 import { createModels, listModels } from "./models.ts";
@@ -63,6 +65,32 @@ const dataDir = resolve(
   process.env.MARGIN_DATA_DIR ?? join(appRoot, ".margin-data"),
 );
 await mkdir(dataDir, { recursive: true });
+// Claim exclusive runtime ownership before loading plugins or creating agents.
+const runtimeOwner = new RuntimeOwner(dataDir);
+const reservation = workerToken
+  ? (process.env.MARGIN_RUNTIME_GENERATION ?? "")
+  : runtimeOwner.reserve().generation;
+const runtimeIdentity = runtimeOwner.claim(reservation);
+const assertOwnership = () => runtimeOwner.assert(runtimeIdentity.generation);
+process.on("uncaughtExceptionMonitor", () => {
+  runtimeLog(dataDir, {
+    event: "uncaught-error",
+    generation: runtimeIdentity.generation,
+    pid: process.pid,
+    reason: "uncaught runtime error",
+  });
+});
+const memoryTimer = setInterval(() => {
+  const memory = process.memoryUsage();
+  runtimeLog(dataDir, {
+    event: "memory",
+    generation: runtimeIdentity.generation,
+    pid: process.pid,
+    heapBytes: memory.heapUsed,
+    rssBytes: memory.rss,
+  });
+}, 30000);
+memoryTimer.unref();
 const workspaceAccess = new WorkspaceAccess(execution, appRoot, dataDir);
 const store = new Store(join(dataDir, "margin.sqlite"));
 const history = new CheckpointHistory(appRoot, dataDir);
@@ -136,7 +164,10 @@ const backends = backendRegistry([
     label: "Pi",
     models: async () => listModels(await createModels(dataDir)),
     create: (info, project, h) =>
-      new LiveSession(info, project, h.store, h.dataDir, h.appRoot, h.plugins),
+      new LiveSession(info, project, h.store, h.dataDir, h.appRoot, h.plugins, {
+        storage: runtimeOwner,
+        recovery: runtimeIdentity,
+      }),
   },
   ...plugins.flatMap((p) => p.backends ?? []),
 ]);
@@ -234,6 +265,7 @@ if (
   store.put("project", p.id, p);
 }
 function getLive(id: string) {
+  assertOwnership();
   if (deleting.has(id)) throw new Error("Conversation is being deleted.");
   let l = live.get(id);
   const info = store.get<SessionInfo>("session", id);
@@ -291,6 +323,11 @@ async function availableModels() {
   return results.flat();
 }
 if (workerToken) {
+  app.post("/api/worker/shutdown", (_req, res) => {
+    runtimeOwner.update(runtimeIdentity.generation, { expectedStop: true });
+    res.json({ ok: true });
+    setImmediate(() => void shutdown());
+  });
   app.get("/api/worker/status", (_req, res) =>
     res.json({
       busy:
@@ -604,6 +641,13 @@ app.get(
     const stream = snapshotStream<import("../shared/types.ts").Snapshot>(res, {
       serialize: (snapshot) =>
         `data: ${JSON.stringify({ type: "snapshot", snapshot: observe(snapshot) })}\n\n`,
+      onStall: (queuedBytes) =>
+        runtimeLog(dataDir, {
+          event: "stream-stalled",
+          generation: runtimeIdentity.generation,
+          pid: process.pid,
+          queuedBytes,
+        }),
       onClose: () => {
         clearInterval(heartbeat);
         unsubscribe();
@@ -663,6 +707,7 @@ async function sendBatch(
       "Rebuild and restart Margin to activate the restored source before sending more work.",
     );
   const l = getLive(id);
+  await l.ready;
   if (
     l.info.projectId === marginProject().id &&
     process.env.MARGIN_TEST_MODE !== "1"
@@ -899,17 +944,29 @@ const server = app.listen(port, "127.0.0.1", () => {
   listeningPort = (server.address() as import("node:net").AddressInfo).port;
   console.log(
     workerToken
-      ? `MARGIN_WORKER_READY ${JSON.stringify({ port: listeningPort, projectId: boundProjectId })}`
+      ? `MARGIN_WORKER_READY ${JSON.stringify({ port: listeningPort, projectId: boundProjectId, pid: process.pid, generation: runtimeIdentity.generation })}`
       : `Margin is running at http://127.0.0.1:${listeningPort}`,
   );
 });
+let shuttingDown = false;
 async function shutdown() {
+  if (shuttingDown) return;
+  shuttingDown = true;
+  runtimeOwner.update(runtimeIdentity.generation, { expectedStop: true });
+  runtimeLog(dataDir, {
+    event: "shutdown",
+    generation: runtimeIdentity.generation,
+    pid: process.pid,
+    expected: true,
+  });
+  clearInterval(memoryTimer);
   server.close();
   artifactPreviews.close();
   nativeDirectoryPicker.close();
   for (const l of live.values()) await l.dispose();
   for (const p of plugins) await p.dispose?.();
   store.close();
+  runtimeOwner.close();
   process.exit(0);
 }
 process.once("SIGINT", () => void shutdown());

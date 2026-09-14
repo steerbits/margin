@@ -276,6 +276,16 @@ test("workspace-worker summaries, renames, deep links and deletion preserve stab
     },
   });
   expect(sent.ok(), await sent.text()).toBe(true);
+  // Customize selects Margin's workspace; its sidebar intentionally excludes
+  // chats in this external project. Verify background completion across
+  // workspaces first, then inspect unread state without opening the chat.
+  await expect
+    .poll(async () => {
+      const summaries = await (await page.request.get("/api/sessions")).json();
+      return summaries.sessions.find((s: any) => s.id === id)?.activity?.status;
+    })
+    .toBe("finished");
+  await page.goto(`/workspaces/${project.id}`);
   await expect(
     page.locator(`[data-session-id="${id}"] .conversation-unread`),
   ).toHaveCount(1);
