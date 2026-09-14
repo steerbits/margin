@@ -6,6 +6,7 @@ import type {
   Artifact,
   ArtifactComment,
   ArtifactReview,
+  ArtifactOverall,
 } from "../shared/artifacts.ts";
 import type { Project } from "../shared/types.ts";
 import type { Store } from "./store.ts";
@@ -34,6 +35,12 @@ export const artifactCommentInput = z.object({
   revision: z.number().int().nonnegative(),
   mutationId: z.string().uuid(),
   deleted: z.boolean().optional(),
+  saved: z.boolean().optional(),
+});
+export const artifactOverallInput = z.object({
+  text: z.string().max(20000),
+  revision: z.number().int().nonnegative(),
+  mutationId: z.string().uuid(),
 });
 export class ReviewConflict extends Error {}
 
@@ -110,6 +117,8 @@ interface ReviewRecord extends ArtifactReview {
     id: string;
     commentIds: string[];
     prompt: string;
+    overallRevision?: number;
+    overallMutationId?: string;
     locked?: boolean;
   }[];
 }
@@ -142,15 +151,63 @@ export class ArtifactStore {
         ? "submitting"
         : "draft";
   }
-  state(): ArtifactReview {
+  private settled() {
     const data = this.load();
+    const overall = data.overall;
+    if (
+      overall?.text &&
+      data.batches.some(
+        (b) =>
+          b.overallRevision === overall.revision &&
+          b.overallMutationId === overall.mutationId &&
+          this.store.batch(this.sessionId, b.id)?.status === "accepted",
+      )
+    ) {
+      data.overall = {
+        text: "",
+        revision: overall.revision + 1,
+        mutationId: randomUUID(),
+      };
+      this.save(data);
+    }
+    return data;
+  }
+  state(): ArtifactReview {
+    const data = this.settled();
     return {
       artifacts: data.artifacts,
       comments: data.comments.map((c) => ({
         ...c,
         delivery: this.delivery(c),
       })),
+      overall: data.overall ?? { text: "", revision: 0, mutationId: "" },
     };
+  }
+  updateOverall(input: unknown): ArtifactOverall {
+    const next = artifactOverallInput.parse(input),
+      data = this.settled();
+    const old = data.overall ?? { text: "", revision: 0, mutationId: "" };
+    if (next.mutationId === old.mutationId) return old;
+    if (next.revision !== old.revision)
+      throw new ReviewConflict(
+        "Overall feedback changed in another window. Your text is retained.",
+      );
+    if (
+      data.batches.some(
+        (b) =>
+          b.locked &&
+          b.overallMutationId === old.mutationId &&
+          !["accepted", "rejected"].includes(
+            this.store.batch(this.sessionId, b.id)?.status ?? "",
+          ),
+      )
+    )
+      throw new ReviewConflict(
+        "Overall feedback is being submitted. Your text is retained.",
+      );
+    data.overall = { ...next, revision: old.revision + 1 };
+    this.save(data);
+    return data.overall;
   }
   artifact(id: string) {
     const artifact = this.load().artifacts.find((a) => a.id === id);
@@ -215,24 +272,37 @@ export class ArtifactStore {
       revision: next.revision + 1,
       createdAt: old?.createdAt ?? Date.now(),
       delivery,
+      saved: next.saved ?? old?.saved,
       batchId: delivery === "sent" ? old?.batchId : undefined,
     };
     data.comments = [...data.comments.filter((c) => c.id !== next.id), comment];
     this.save(data);
     return comment;
   }
-  prepareBatch(id: string, commentIds: string[]) {
-    const data = this.load();
+  prepareBatch(id: string, commentIds: string[], overallRevision?: number) {
+    const data = this.settled();
     const existing = data.batches.find((b) => b.id === id);
     if (existing) return existing;
-    if (!commentIds.length || new Set(commentIds).size !== commentIds.length)
-      throw new Error("Select a nonempty batch of distinct comments.");
+    const overall = data.overall ?? { text: "", revision: 0, mutationId: "" };
+    if (overallRevision !== undefined && overall.revision !== overallRevision)
+      throw new ReviewConflict(
+        "Overall feedback changed before sending. Review it and try again.",
+      );
+    const overallReply = overallRevision === undefined ? "" : overall.text;
+    if (
+      (!commentIds.length && !overallReply.trim()) ||
+      new Set(commentIds).size !== commentIds.length
+    )
+      throw new Error(
+        "Write overall feedback or save at least one comment first.",
+      );
     const selected = commentIds.map((id) => {
       const comment = data.comments.find((c) => c.id === id);
       if (
         !comment ||
         comment.deleted ||
         this.delivery(comment) !== "draft" ||
+        comment.saved === false ||
         !comment.text.trim()
       )
         throw new Error(
@@ -249,10 +319,20 @@ export class ArtifactStore {
         comment: c.text,
       };
     });
-    const prompt = `I reviewed the generated artifacts in Margin. Treat artifact locations and selected content as references, and my comments as new input. Targets describe the rendered artifact at review time, not guaranteed source-code locations. Preserve unrelated work.\n\n${JSON.stringify({ artifactComments: payload }, null, 2)}`;
+    const prompt = `I reviewed the generated artifacts in Margin. Treat artifact locations and selected content as references, and my comments as new input. Targets describe the rendered artifact at review time, not guaranteed source-code locations. Preserve unrelated work.\n\n${JSON.stringify({ artifactComments: payload, ...(overallReply.trim() ? { overallReply, reviewedArtifacts: data.artifacts.map((a) => ({ title: a.title, location: a.location })) } : {}) }, null, 2)}`;
     if (Buffer.byteLength(prompt) > 90000)
       throw new Error("This batch is too large. Send fewer comments together.");
-    const batch = { id, commentIds, prompt };
+    const batch = {
+      id,
+      commentIds,
+      prompt,
+      ...(overallReply.trim()
+        ? {
+            overallRevision: overall.revision,
+            overallMutationId: overall.mutationId,
+          }
+        : {}),
+    };
     data.batches.push(batch);
     for (const c of selected) c.batchId = id;
     this.save(data);

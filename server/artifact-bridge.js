@@ -256,6 +256,18 @@
       return;
     const data = event.data;
     if (data.type === "mode") mode(!!data.pointing);
+    if (data.type === "page-comment")
+      send("selected", {
+        anchor: {
+          kind: "page",
+          quote: `Page: ${route()}`,
+          prefix: "",
+          suffix: "",
+          selector: "",
+          route: route(),
+          documentRevision: config.revision,
+        },
+      });
     if (data.type === "inspect" && Array.isArray(data.comments)) {
       annotations = data.comments.slice(0, 1000);
       inspect();

@@ -1,6 +1,17 @@
 # Evaluation record
 
-## September 14: generated artifact review
+## Follow-up: artifact review workflow simplification
+
+Human feedback changed the entry point from manual file/URL registration to clicking an ordinary agent output link; retained **Comment on this page** while adding separate **Overall feedback**; replaced Retarget/implicit attachment with **Save / Edit / Delete**; and made saved attachments conversation-wide. The original disabled-Send incident was not captured directly, but inspection found artifact-local batch filtering and unlabelled blocked states. These now have explicit regression coverage.
+
+- `npm run check`: **70 Node tests passed**, TypeScript and production build passed. Added ordinary-link classification, explicit Save gating, overall-only delivery, preservation of newer overall text, and offline/conflicting overall-draft tests. The bundle-size advisory remains (about 659 KB / 203 KB gzip).
+- `npm run test:e2e`: **52 Chromium tests passed**, including **7 artifact workflows**. Newly exercised ordinary Markdown/HTML/localhost assistant links with no prior artifact registration and no auto-open; Save/Edit; **two saved comments → switch artifact → close → reload → reopen → send**; retention of a page comment's `/details` URL; combined and overall-only feedback; and a pending agent question with a visible explanation and restored Send after answering.
+- `npm run test:gateway -- artifacts.spec.ts`: **1 passed** through the external-workspace gateway. The complete gateway suite was not rerun for this follow-up; its previously reproduced unrelated unread failure is recorded below.
+- Inspected the actual revised UI screenshot with two attached source-labelled comments and overall feedback. Also rendered/navigated the generated two-page HTML example in Chromium. Reviews were self-review and automated fixtures, not independent reviewers or evidence of real-user preference.
+
+The live Margin process and old port-4330 demo were not restarted or replaced. Existing demo data was left intact. After a Margin restart, the generated `workspaces/artifact-review-example/index.html` can be reviewed in the actual conversation; unlike the old demo, feedback is not answered by a simulated agent. Other compatibility and evaluation limits below still apply.
+
+## September 14: initial generated artifact review
 
 Implemented the shared review overlay and standalone window, a read-only original address, Markdown/HTML/local-app viewers, runtime-only injection, durable conversation-associated drafts and normal chat batch delivery. Source HTML was compared byte-for-byte before and after review. No annotation code is written to generated artifacts.
 

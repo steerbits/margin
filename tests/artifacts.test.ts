@@ -21,6 +21,11 @@ import {
 } from "../server/artifacts.ts";
 import { ArtifactPreviews } from "../server/artifact-preview.ts";
 import { ArtifactDrafts } from "../src/artifact-drafts.ts";
+import { OverallFeedbackDraft } from "../src/artifact-overall.ts";
+import {
+  artifactLocationFromLink,
+  artifactOutputLink,
+} from "../shared/artifact-links.ts";
 import type { ArtifactComment } from "../shared/artifacts.ts";
 
 function fixture() {
@@ -311,6 +316,139 @@ test("runtime app proxy preserves paths/CSP, strips credentials, and refuses cro
     previews.close();
     app.closeAllConnections();
     await new Promise<void>((r) => app.close(() => r()));
+    f.close();
+  }
+});
+test("ordinary output links are wrapped, while external, unsafe and Margin URLs are not", () => {
+  const origin = "http://127.0.0.1:4317";
+  assert.equal(
+    artifactLocationFromLink("reports/a%20b.md#section", origin),
+    "reports/a b.md",
+  );
+  assert.equal(
+    artifactLocationFromLink("/project/report.html", origin),
+    "/project/report.html",
+  );
+  assert.equal(
+    artifactLocationFromLink("file:///project/report.md", origin),
+    "/project/report.md",
+  );
+  assert.equal(
+    artifactLocationFromLink("http://localhost:3000/settings", origin),
+    "http://localhost:3000/settings",
+  );
+  for (const link of [
+    "https://example.com/report.md",
+    "http://127.0.0.1:4317/test.html",
+    "http://localhost:4317/",
+    "//example.com/a.html",
+    "javascript:alert(1)",
+    "file://remote/a.md",
+    "#section",
+    "notes.ts",
+    "data:text/html,test",
+    "bad%00.md",
+  ])
+    assert.equal(artifactLocationFromLink(link, origin), undefined);
+  assert.match(
+    artifactOutputLink("report.md", "session", origin)!,
+    /^\/review\/session\?location=report.md$/,
+  );
+});
+test("explicit Save gates comments, and overall feedback can be sent alone without losing newer text", () => {
+  const f = fixture();
+  try {
+    let c = f.service.update({ ...f.draft, text: "unfinished", saved: false });
+    assert.throws(() => f.service.prepareBatch(randomUUID(), [c.id]));
+    c = f.service.update({ ...c, saved: true, mutationId: randomUUID() });
+    const note = f.service.updateOverall({
+      text: 'Overall "thought"',
+      revision: 0,
+      mutationId: randomUUID(),
+    });
+    const batch = f.service.prepareBatch(randomUUID(), [c.id], note.revision);
+    assert.equal(
+      JSON.parse(batch.prompt.slice(batch.prompt.indexOf("{"))).overallReply,
+      note.text,
+    );
+    f.service.lock(batch.id);
+    assert.throws(
+      () =>
+        f.service.updateOverall({
+          ...note,
+          text: "mid-submit",
+          mutationId: randomUUID(),
+        }),
+      ReviewConflict,
+    );
+    f.service.reject(batch.id);
+    assert.equal(f.service.state().overall?.text, note.text);
+    const noteOnly = f.service.prepareBatch(randomUUID(), [], note.revision);
+    // A new note written before the old batch locks must not be cleared when the old batch is accepted.
+    const newer = f.service.updateOverall({
+      ...note,
+      text: "Newer thought",
+      mutationId: randomUUID(),
+    });
+    f.store.markBatch(f.sessionId, noteOnly.id, "accepted");
+    assert.equal(f.service.state().overall?.text, newer.text);
+    assert.throws(
+      () => f.service.prepareBatch(randomUUID(), [], note.revision),
+      ReviewConflict,
+    );
+    const latest = f.service.prepareBatch(randomUUID(), [], newer.revision);
+    f.store.markBatch(f.sessionId, latest.id, "accepted");
+    assert.equal(f.service.state().overall?.text, "");
+    assert.ok(f.service.state().overall!.revision > newer.revision);
+  } finally {
+    f.close();
+  }
+});
+test("overall feedback recovers offline text and handles another window's change explicitly", async () => {
+  const f = fixture(),
+    storage = memoryStorage();
+  try {
+    const offline = new OverallFeedbackDraft(
+      f.sessionId,
+      storage,
+      async () => {
+        throw new Error("offline");
+      },
+      () => {},
+    );
+    offline.edit("My unfinished overall feedback");
+    await assert.rejects(offline.flush());
+    const other = f.service.updateOverall({
+      text: "Other window's version",
+      revision: 0,
+      mutationId: randomUUID(),
+    });
+    const recovered = new OverallFeedbackDraft(
+      f.sessionId,
+      storage,
+      async (value) => {
+        try {
+          return f.service.updateOverall(value);
+        } catch (e) {
+          throw Object.assign(e as Error, {
+            conflict: e instanceof ReviewConflict,
+          });
+        }
+      },
+      () => {},
+    );
+    recovered.observe(other);
+    await assert.rejects(recovered.flush());
+    assert.equal(recovered.text, "My unfinished overall feedback");
+    assert.equal(recovered.otherText, "Other window's version");
+    recovered.keepMine();
+    await recovered.flush();
+    assert.equal(
+      f.service.state().overall?.text,
+      "My unfinished overall feedback",
+    );
+    assert.equal(Object.keys(storage).length, 0);
+  } finally {
     f.close();
   }
 });

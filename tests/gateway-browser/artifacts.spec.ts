@@ -46,16 +46,20 @@ test("artifact review works through a workspace gateway and delivers feedback to
         .getByRole("heading", { name: "Gateway artifact" }),
     ).toBeVisible();
     await page
-      .getByRole("button", { name: "Page comment", exact: true })
+      .getByRole("button", { name: "Comment on this page", exact: true })
       .click();
     await page
       .getByLabel("Feedback 1", { exact: true })
       .fill("This belongs to the external workspace.");
+    await page
+      .locator(".artifact-comment")
+      .getByRole("button", { name: "Save", exact: true })
+      .click();
     await expect(page.locator(".artifact-send")).toContainText(
       "Saved in this conversation",
     );
     await page
-      .getByRole("button", { name: "Send 1 comment", exact: true })
+      .getByRole("button", { name: "Send feedback", exact: true })
       .click();
     await expect(page.locator(".artifact-comment-meta")).toContainText("Sent");
     const state = await (

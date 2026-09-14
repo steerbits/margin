@@ -1,15 +1,27 @@
-import ReactMarkdown from "react-markdown";
+import ReactMarkdown, { defaultUrlTransform } from "react-markdown";
+import { artifactOutputLink } from "../shared/artifact-links.ts";
 import remarkGfm from "remark-gfm";
 import rehypeHighlight from "rehype-highlight";
 import { memo } from "react";
 import { requestArtifactReview } from "./ArtifactReview.tsx";
 // Keep DOM text nodes stable while comment/UI state changes, preserving live browser selections.
-export const Markdown = memo(function Markdown({ text }: { text: string }) {
+export const Markdown = memo(function Markdown({
+  text,
+  artifactSessionId,
+}: {
+  text: string;
+  artifactSessionId?: string;
+}) {
   return (
     <ReactMarkdown
       remarkPlugins={[remarkGfm]}
       rehypePlugins={[rehypeHighlight]}
       skipHtml
+      urlTransform={(url) =>
+        (artifactSessionId &&
+          artifactOutputLink(url, artifactSessionId, location.origin)) ||
+        defaultUrlTransform(url)
+      }
       components={{
         a: ({ node, ...props }) => (
           <a

@@ -47,6 +47,11 @@ export function installArtifactRoutes(
       res.json({
         ...store.state(),
         busy: snapshot.busy || snapshot.dialogs.length > 0,
+        sendBlockReason: snapshot.dialogs.length
+          ? "Answer the agent's question in chat before sending. Your feedback is saved."
+          : snapshot.busy
+            ? "The agent is working. Your feedback is saved; send when it is ready."
+            : null,
       });
     }),
   );
@@ -59,6 +64,10 @@ export function installArtifactRoutes(
   app.put(
     "/api/sessions/:id/artifacts/comments",
     route((req, res, store) => res.json(store.update(req.body))),
+  );
+  app.put(
+    "/api/sessions/:id/artifacts/overall",
+    route((req, res, store) => res.json(store.updateOverall(req.body))),
   );
   app.post(
     "/api/sessions/:id/artifacts/:artifactId/preview",
@@ -84,13 +93,14 @@ export function installArtifactRoutes(
   app.post(
     "/api/sessions/:id/artifacts/send",
     route(async (req, res, store) => {
-      const { id, commentIds } = z
+      const { id, commentIds, overallRevision } = z
         .object({
           id: z.string().uuid(),
-          commentIds: z.array(z.string().uuid()).min(1).max(200),
+          commentIds: z.array(z.string().uuid()).max(200),
+          overallRevision: z.number().int().nonnegative().optional(),
         })
         .parse(req.body);
-      const batch = store.prepareBatch(id, commentIds);
+      const batch = store.prepareBatch(id, commentIds, overallRevision);
       store.lock(id);
       try {
         const result = await host.send(String(req.params.id), {

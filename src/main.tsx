@@ -36,6 +36,9 @@ async function start() {
           initialArtifactId={
             new URLSearchParams(location.search).get("artifact") ?? undefined
           }
+          initialLocation={
+            new URLSearchParams(location.search).get("location") ?? undefined
+          }
           standalone
         />
       ) : (

@@ -26,12 +26,20 @@ export interface ArtifactComment {
   mutationId: string;
   createdAt: number;
   deleted?: boolean;
+  /** False while composing. Missing means a legacy saved comment. */
+  saved?: boolean;
   batchId?: string;
   delivery: "draft" | "submitting" | "sent";
+}
+export interface ArtifactOverall {
+  text: string;
+  revision: number;
+  mutationId: string;
 }
 export interface ArtifactReview {
   artifacts: Artifact[];
   comments: ArtifactComment[];
+  overall?: ArtifactOverall;
 }
 export interface PreviewConnection {
   url: string;

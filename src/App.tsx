@@ -1809,7 +1809,10 @@ export function App() {
                                     }
                                   }}
                                 >
-                                  <Markdown text={m.text} />
+                                  <Markdown
+                                    text={m.text}
+                                    artifactSessionId={snapshot.session.id}
+                                  />
                                 </div>
                                 {m.error && (
                                   <p className="error-text" role="alert">
@@ -2295,6 +2298,7 @@ function UserMessage({ text }: { text: string }) {
   if (text.startsWith("I reviewed the generated artifacts in Margin.")) {
     try {
       const b = JSON.parse(text.slice(text.indexOf("{"))) as {
+        overallReply?: string;
         artifactComments: {
           artifact: { title: string; location: string };
           target: { route: string; quote: string };
@@ -2308,6 +2312,7 @@ function UserMessage({ text }: { text: string }) {
             {b.artifactComments.length} artifact comment
             {b.artifactComments.length === 1 ? "" : "s"} sent
           </div>
+          {b.overallReply && <p>{b.overallReply}</p>}
           <details>
             <summary>View artifact feedback</summary>
             {b.artifactComments.map((c, i) => (

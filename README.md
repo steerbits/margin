@@ -59,7 +59,9 @@ Tool rows show their outcome as text as well as color. Gray is normal running/su
 
 ## Review generated artifacts
 
-Open **Artifacts** in a conversation to review a generated Markdown/HTML file or a running HTTP localhost app in a large browser-like overlay. Its read-only address bar shows the original location. Select text or choose **Point to comment**, collect saved drafts, and send feedback without returning to chat. **Open in new window** shares the same review; **Open original** omits annotation code. The agent can register outputs using `present_artifact` and include a review link in its reply.
+**Click a generated Markdown/HTML file or HTTP localhost app link in the agent's reply** to open it in a large browser-like review overlay. Ordinary output links work without manually registering a path/URL; the agent can also use `present_artifact`. The **Artifacts** toolbar button reopens this conversation's reviews. Nothing opens automatically before you click.
+
+Select text, choose **Point to comment**, or use **Comment on this page**. **Save** attaches a comment; **Edit** reopens it. Add optional **Overall feedback**, then **Send feedback** with the displayed attached-comment count. Page feedback retains its original URL, while overall feedback applies to the review. Saved comments from other artifacts in the same conversation stay attached when you switch pages or reopen the window. **Open in new window** shares the review; **Open original** omits annotation code.
 
 Feedback stays in private Margin conversation storage, never in generated source files. Runtime-only injection leaves HTML and app code unchanged. Drafts survive closing/reloading, failed saves, and target changes; only explicit deletion removes annotations. Sending waits until the agent is ready. PDF/image viewers, arbitrary websites and self-improvement are deferred. See [artifact review](docs/artifact-review.md) for storage, proxy restrictions and verified workflows.
 

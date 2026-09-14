@@ -18,6 +18,10 @@ import type {
 import { artifactReviewUrl } from "../shared/artifacts.ts";
 import { api } from "./api.ts";
 import { ArtifactDrafts, saveArtifactComment } from "./artifact-drafts.ts";
+import {
+  OverallFeedbackDraft,
+  saveOverallFeedback,
+} from "./artifact-overall.ts";
 import "./ArtifactReview.css";
 
 export function requestArtifactReview(href: string) {
@@ -32,6 +36,7 @@ export function requestArtifactReview(href: string) {
       detail: {
         sessionId: match[1],
         artifactId: url.searchParams.get("artifact") ?? undefined,
+        location: url.searchParams.get("location") ?? undefined,
       },
     }),
   );
@@ -39,15 +44,18 @@ export function requestArtifactReview(href: string) {
 export function ArtifactLauncher({ sessionId }: { sessionId: string }) {
   const [open, setOpen] = useState(false),
     [artifactId, setArtifactId] = useState<string>();
+  const [sourceLocation, setSourceLocation] = useState<string>();
   useEffect(() => {
     const listener = (event: Event) => {
       const e = event as CustomEvent<{
         sessionId: string;
         artifactId?: string;
+        location?: string;
       }>;
       if (e.detail.sessionId !== sessionId) return;
       e.preventDefault();
       setArtifactId(e.detail.artifactId);
+      setSourceLocation(e.detail.location);
       setOpen(true);
     };
     window.addEventListener("margin:artifact-review", listener);
@@ -55,7 +63,13 @@ export function ArtifactLauncher({ sessionId }: { sessionId: string }) {
   }, [sessionId]);
   return (
     <>
-      <button onClick={() => setOpen(true)}>
+      <button
+        onClick={() => {
+          setArtifactId(undefined);
+          setSourceLocation(undefined);
+          setOpen(true);
+        }}
+      >
         <FileText size={16} />
         Artifacts
       </button>
@@ -63,6 +77,7 @@ export function ArtifactLauncher({ sessionId }: { sessionId: string }) {
         <ArtifactReviewWindow
           sessionId={sessionId}
           initialArtifactId={artifactId}
+          initialLocation={sourceLocation}
           onClose={() => setOpen(false)}
         />
       )}
@@ -73,15 +88,19 @@ export function ArtifactLauncher({ sessionId }: { sessionId: string }) {
 export function ArtifactReviewWindow({
   sessionId,
   initialArtifactId,
+  initialLocation,
   onClose,
   standalone = false,
 }: {
   sessionId: string;
   initialArtifactId?: string;
+  initialLocation?: string;
   onClose?: () => void;
   standalone?: boolean;
 }) {
-  const [state, setState] = useState<ArtifactReview & { busy: boolean }>({
+  const [state, setState] = useState<
+    ArtifactReview & { busy: boolean; sendBlockReason?: string | null }
+  >({
     artifacts: [],
     comments: [],
     busy: true,
@@ -97,16 +116,13 @@ export function ArtifactReviewWindow({
   >();
   const [error, setError] = useState(""),
     [loaded, setLoaded] = useState(false);
-  const [input, setInput] = useState(""),
-    [adding, setAdding] = useState(false),
-    [registering, setRegistering] = useState(false);
+  const [connected, setConnected] = useState(false);
   const [pointing, setPointing] = useState(false),
     [ready, setReady] = useState(false);
   const [currentRoute, setCurrentRoute] = useState(""),
     [revision, setRevision] = useState("");
   const [status, setStatus] = useState<Record<string, string>>({});
-  const [activeId, setActiveId] = useState(""),
-    [retargetId, setRetargetId] = useState("");
+  const [activeId, setActiveId] = useState("");
   const [deleteId, setDeleteId] = useState(""),
     [sending, setSending] = useState(false);
   const [tick, setTick] = useState(0);
@@ -119,36 +135,64 @@ export function ArtifactReviewWindow({
       () => setTick((n) => n + 1),
     );
   const queue = drafts.current;
+  const overallRef = useRef<OverallFeedbackDraft | null>(null);
+  if (!overallRef.current)
+    overallRef.current = new OverallFeedbackDraft(
+      sessionId,
+      localStorage,
+      (value) => saveOverallFeedback(sessionId, value),
+      () => setTick((n) => n + 1),
+    );
+  const overall = overallRef.current;
+  overall.observe(state.overall);
   const dialog = useRef<HTMLDialogElement>(null),
     frame = useRef<HTMLIFrameElement>(null);
   const saveTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
   const artifact = state.artifacts.find((a) => a.id === artifactId);
-  const comments = queue
-    .merge(state.comments)
-    .filter((c) => !c.deleted && c.artifactId === artifactId);
+  const comments = queue.merge(state.comments).filter((c) => !c.deleted);
   const draftComments = comments.filter(
-    (c) => c.delivery === "draft" && c.text.trim(),
+    (c) => c.delivery === "draft" && c.saved !== false && c.text.trim(),
   );
-  const latest = useRef({ artifact, comments, pointing, retargetId });
-  latest.current = { artifact, comments, pointing, retargetId };
+  const unfinished = comments.filter(
+    (c) => c.delivery === "draft" && c.saved === false && c.text.trim(),
+  );
+  const latest = useRef({ artifact, comments, pointing });
+  latest.current = { artifact, comments, pointing };
   async function refresh() {
-    const next = await api<ArtifactReview & { busy: boolean }>(
-      `/sessions/${sessionId}/artifacts`,
-    );
+    const next = await api<
+      ArtifactReview & { busy: boolean; sendBlockReason?: string | null }
+    >(`/sessions/${sessionId}/artifacts`);
     setState(next);
     setLoaded(true);
+    setConnected(true);
     setArtifactId((id) => id || next.artifacts.at(-1)?.id || "");
   }
   useEffect(() => {
     let disposed = false;
-    const update = () => {
-      if (!disposed) void refresh().catch((e) => setError(e.message));
+    const failed = (e: Error) => {
+      if (!disposed) {
+        setError(e.message);
+        setConnected(false);
+      }
     };
-    update();
+    const update = () => {
+      if (!disposed) void refresh().catch(failed);
+    };
+    void (async () => {
+      if (initialLocation) {
+        const added = await api<Artifact>(`/sessions/${sessionId}/artifacts`, {
+          location: initialLocation,
+        });
+        if (disposed) return;
+        setArtifactId(added.id);
+      }
+      await refresh();
+    })().catch(failed);
     const timer = setInterval(update, 1500);
     void queue.flush().catch(() => {});
+    void overall.flush().catch(() => {});
     const leaving = (e: BeforeUnloadEvent) => {
-      if (queue.dirty) {
+      if (queue.dirty || overall.dirty) {
         e.preventDefault();
         e.returnValue = "";
       }
@@ -160,6 +204,7 @@ export function ArtifactReviewWindow({
       clearTimeout(saveTimer.current);
       window.removeEventListener("beforeunload", leaving);
       void queue.flush().catch(() => {});
+      void overall.flush().catch(() => {});
     };
   }, []);
   useEffect(() => {
@@ -178,16 +223,35 @@ export function ArtifactReviewWindow({
     queue.edit(comment);
     clearTimeout(saveTimer.current);
     saveTimer.current = setTimeout(() => {
-      void queue.flush().catch(() => {});
+      void Promise.all([queue.flush(), overall.flush()]).catch(() => {});
     }, 300);
+  }
+  function editOverall(text: string) {
+    overall.edit(text);
+    clearTimeout(saveTimer.current);
+    saveTimer.current = setTimeout(() => {
+      void Promise.all([queue.flush(), overall.flush()]).catch(() => {});
+    }, 300);
+  }
+  async function saveComment(comment: ArtifactComment) {
+    if (!comment.text.trim()) return;
+    edit({ ...comment, saved: true });
+    try {
+      await queue.flush();
+    } catch {
+      /* Recovery journal remains available. */
+    }
   }
   function select(anchor: ArtifactAnchor) {
     const current = latest.current;
     if (!current.artifact) return;
-    const existing =
-      current.comments.find(
-        (c) => c.id === current.retargetId && c.delivery === "draft",
-      ) ?? current.comments.find((c) => c.delivery === "draft" && !c.text);
+    const existing = current.comments.find(
+      (c) =>
+        c.artifactId === current.artifact!.id &&
+        c.delivery === "draft" &&
+        c.saved === false &&
+        !c.text,
+    );
     const comment: ArtifactComment = existing
       ? { ...existing, anchor }
       : {
@@ -198,11 +262,11 @@ export function ArtifactReviewWindow({
           revision: 0,
           mutationId: crypto.randomUUID(),
           delivery: "draft",
+          saved: false,
           createdAt: Date.now(),
         };
     edit(comment);
     setActiveId(comment.id);
-    setRetargetId("");
     requestAnimationFrame(() =>
       document
         .querySelector<HTMLTextAreaElement>(
@@ -259,17 +323,19 @@ export function ArtifactReviewWindow({
           setRevision(data.revision.slice(0, 100));
         post("mode", { pointing: latest.current.pointing });
         post("inspect", {
-          comments: latest.current.comments.map((c) => ({
-            id: c.id,
-            anchor: c.anchor,
-          })),
+          comments: latest.current.comments
+            .filter((c) => c.artifactId === connection.artifactId)
+            .map((c) => ({
+              id: c.id,
+              anchor: c.anchor,
+            })),
         });
       } else if (
         data.type === "selected" &&
         data.anchor &&
         typeof data.anchor.quote === "string" &&
         data.anchor.quote.length <= 10000 &&
-        ["element", "text"].includes(data.anchor.kind)
+        ["element", "text", "page"].includes(data.anchor.kind)
       )
         select(data.anchor);
       else if (
@@ -289,7 +355,9 @@ export function ArtifactReviewWindow({
   }, [connection]);
   useEffect(() => {
     post("inspect", {
-      comments: comments.map((c) => ({ id: c.id, anchor: c.anchor })),
+      comments: comments
+        .filter((c) => c.artifactId === artifactId)
+        .map((c) => ({ id: c.id, anchor: c.anchor })),
     });
   }, [connection, state.comments, tick]);
   useEffect(() => {
@@ -303,35 +371,17 @@ export function ArtifactReviewWindow({
     );
     return () => clearTimeout(timeout);
   }, [connection, ready]);
-  async function register(e: React.FormEvent) {
-    e.preventDefault();
-    setRegistering(true);
-    setError("");
-    try {
-      const added = await api<Artifact>(`/sessions/${sessionId}/artifacts`, {
-        location: input,
-      });
-      await refresh();
-      setArtifactId(added.id);
-      setAdding(false);
-      setInput("");
-    } catch (e) {
-      setError((e as Error).message);
-    } finally {
-      setRegistering(false);
-    }
-  }
   async function send() {
     setSending(true);
     setError("");
     try {
-      await queue.flush();
+      await Promise.all([queue.flush(), overall.flush()]);
       const ids = queue
         .merge(state.comments)
         .filter(
           (c) =>
             !c.deleted &&
-            c.artifactId === artifactId &&
+            c.saved !== false &&
             c.delivery === "draft" &&
             c.text.trim(),
         )
@@ -339,6 +389,7 @@ export function ArtifactReviewWindow({
       await api(`/sessions/${sessionId}/artifacts/send`, {
         id: crypto.randomUUID(),
         commentIds: ids,
+        overallRevision: overall.revision,
       });
       await refresh();
     } catch (e) {
@@ -393,6 +444,27 @@ export function ArtifactReviewWindow({
         ? decodeURI(currentRoute.replace(/^\//, ""))
         : artifact.location
     : "No artifact selected";
+  const sendBlockReason =
+    !loaded || !connected
+      ? "Connecting to the conversation. Your feedback is kept."
+      : state.busy
+        ? (state.sendBlockReason ??
+          "The agent is working. Your feedback is saved; send when ready.")
+        : overall.conflict
+          ? "Choose which overall feedback to keep before sending."
+          : unfinished.length
+            ? `Save ${unfinished.length === 1 ? "your unfinished comment" : `your ${unfinished.length} unfinished comments`} to attach ${unfinished.length === 1 ? "it" : "them"} before sending.`
+            : !draftComments.length && !overall.text.trim()
+              ? "Save a comment or write overall feedback to send."
+              : "Sends to this conversation";
+  const canSend =
+    loaded &&
+    connected &&
+    !state.busy &&
+    !sending &&
+    !unfinished.length &&
+    !overall.conflict &&
+    (!!draftComments.length || !!overall.text.trim());
   const content = (
     <>
       <header className="artifact-chrome">
@@ -467,7 +539,6 @@ export function ArtifactReviewWindow({
           value={artifactId}
           onChange={(e) => {
             setArtifactId(e.target.value);
-            setRetargetId("");
           }}
         >
           {!artifact && <option value="">Choose an artifact</option>}
@@ -477,7 +548,6 @@ export function ArtifactReviewWindow({
             </option>
           ))}
         </select>
-        <button onClick={() => setAdding(!adding)}>+ Open file or app</button>
         <div className="artifact-mode">
           <button
             aria-pressed={!pointing}
@@ -504,53 +574,35 @@ export function ArtifactReviewWindow({
         <button
           disabled={!artifact}
           onClick={() =>
-            select({
-              kind: "page",
-              quote: artifact?.title ?? "",
-              prefix: "",
-              suffix: "",
-              selector: "",
-              route:
-                currentRoute ||
-                (artifact?.kind === "app"
-                  ? new URL(artifact.location).pathname
-                  : "/" + artifact?.location),
-              documentRevision: revision,
-            })
+            ready
+              ? post("page-comment")
+              : select({
+                  kind: "page",
+                  quote: `Page: ${currentRoute || (artifact?.kind === "app" ? new URL(artifact.location).pathname : "/" + artifact?.location)}`,
+                  prefix: "",
+                  suffix: "",
+                  selector: "",
+                  route:
+                    currentRoute ||
+                    (artifact?.kind === "app"
+                      ? new URL(artifact.location).pathname
+                      : "/" + artifact?.location),
+                  documentRevision: revision,
+                })
           }
         >
           <MessageSquarePlus size={14} />
-          Page comment
+          Comment on this page
         </button>
       </div>
-      {(adding || (loaded && !state.artifacts.length)) && (
-        <form className="artifact-add" onSubmit={register}>
-          <label htmlFor="artifact-location">Generated file or local app</label>
-          <input
-            id="artifact-location"
-            placeholder="reports/summary.md or http://127.0.0.1:3000"
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            autoFocus
-          />
-          <button className="primary" disabled={!input.trim() || registering}>
-            {registering ? "Opening…" : "Open for review"}
-          </button>
-          <small>
-            Only files inside this workspace and generated local apps. Original
-            files are never modified.
-          </small>
-        </form>
-      )}
-      {(error || queue.error || queue.warning) && (
+      {(error || queue.error || queue.warning || overall.error) && (
         <div className="artifact-notice" role="status">
-          <span>{queue.error || error || queue.warning}</span>
+          <span>{queue.error || overall.error || error || queue.warning}</span>
           <button
             onClick={() => {
               setError("");
               queue.warning = "";
-              void queue
-                .flush()
+              void Promise.all([queue.flush(), overall.flush()])
                 .then(refresh)
                 .catch(() => {});
             }}
@@ -580,7 +632,7 @@ export function ArtifactReviewWindow({
               <p>
                 {artifact
                   ? "Connecting without changing your source files."
-                  : "Open a Markdown file, an HTML page, or your running local app. Select a passage or point to an element, then send your thoughts together."}
+                  : "Click a Markdown, HTML, or local-app link in the agent’s reply. It opens here, ready for feedback—no paths or URLs to paste."}
               </p>
             </div>
           )}
@@ -588,14 +640,12 @@ export function ArtifactReviewWindow({
         <aside className="artifact-feedback" aria-label="Artifact feedback">
           <div className="artifact-feedback-heading">
             <h2>
-              Feedback <span>{comments.length}</span>
+              Comments <span>{draftComments.length} attached</span>
             </h2>
             <p>
-              {retargetId
-                ? "Select the replacement target in the artifact."
-                : pointing
-                  ? "Click an element to comment, not activate it."
-                  : "Select text, or use Point to comment."}
+              {pointing
+                ? "Click an element to comment, not activate it."
+                : "Select text, point to an element, or comment on this page."}
             </p>
           </div>
           <div className="artifact-comment-list">
@@ -626,23 +676,42 @@ export function ArtifactReviewWindow({
                       ? "Sent"
                       : c.delivery === "submitting"
                         ? "Sending…"
-                        : "Draft"}
+                        : c.saved === false || !c.text
+                          ? "Writing"
+                          : "Saved"}
                   </span>
                   <small>
-                    {status[c.id] === "changed"
-                      ? "Original target changed"
-                      : status[c.id] === "other-route"
-                        ? "On another screen"
-                        : status[c.id] === "found"
-                          ? "Target found"
-                          : "Saved context"}
+                    {c.artifactId !== artifactId
+                      ? "Other artifact"
+                      : status[c.id] === "changed"
+                        ? "Original target changed"
+                        : status[c.id] === "other-route"
+                          ? "On another screen"
+                          : status[c.id] === "found"
+                            ? "Target found"
+                            : "Saved context"}
                   </small>
                 </div>
+                <button
+                  className="artifact-comment-source"
+                  onClick={() => setArtifactId(c.artifactId)}
+                >
+                  {c.anchor.kind === "page"
+                    ? "Page"
+                    : c.anchor.kind === "text"
+                      ? "Text"
+                      : "Element"}{" "}
+                  ·{" "}
+                  {state.artifacts.find((a) => a.id === c.artifactId)?.title ??
+                    "Artifact"}
+                </button>
                 <button
                   className="artifact-quote"
                   onClick={() => {
                     setActiveId(c.id);
-                    post("locate", { anchor: c.anchor });
+                    if (c.artifactId !== artifactId)
+                      setArtifactId(c.artifactId);
+                    else post("locate", { anchor: c.anchor });
                   }}
                   title="Locate original target"
                 >
@@ -651,32 +720,48 @@ export function ArtifactReviewWindow({
                 <small className="artifact-target-path" title={c.anchor.route}>
                   {c.anchor.route}
                 </small>
-                {c.delivery === "draft" ? (
+                {c.delivery === "draft" && (c.saved === false || !c.text) ? (
                   <textarea
                     aria-label={`Feedback ${i + 1}`}
                     maxLength={20000}
                     placeholder="What would you change or explore?"
                     value={c.text}
                     disabled={sending}
-                    onChange={(e) => edit({ ...c, text: e.target.value })}
+                    onChange={(e) =>
+                      edit({ ...c, text: e.target.value, saved: false })
+                    }
                     onFocus={() => setActiveId(c.id)}
                   />
                 ) : (
                   <p className="artifact-comment-text">{c.text}</p>
                 )}
                 <div className="artifact-comment-actions">
-                  {c.delivery === "draft" && (
-                    <button
-                      disabled={!ready || sending}
-                      onClick={() => {
-                        setRetargetId(c.id);
-                        setPointing(true);
-                        post("mode", { pointing: true });
-                      }}
-                    >
-                      Retarget
-                    </button>
-                  )}
+                  {c.delivery === "draft" &&
+                    (c.saved === false || !c.text ? (
+                      <button
+                        disabled={!c.text.trim() || sending}
+                        onClick={() => void saveComment(c)}
+                      >
+                        Save
+                      </button>
+                    ) : (
+                      <button
+                        disabled={sending}
+                        onClick={() => {
+                          edit({ ...c, saved: false });
+                          setActiveId(c.id);
+                          requestAnimationFrame(() =>
+                            document
+                              .querySelector<HTMLTextAreaElement>(
+                                `[data-artifact-comment="${c.id}"] textarea`,
+                              )
+                              ?.focus(),
+                          );
+                        }}
+                      >
+                        Edit
+                      </button>
+                    ))}
                   {deleteId === c.id ? (
                     <>
                       <span>Delete annotation?</span>
@@ -698,23 +783,74 @@ export function ArtifactReviewWindow({
             ))}
           </div>
           <footer className="artifact-send">
+            <label htmlFor="artifact-overall">Overall feedback</label>
+            <textarea
+              id="artifact-overall"
+              aria-label="Overall feedback"
+              maxLength={20000}
+              value={overall.text}
+              disabled={sending}
+              placeholder="Thoughts about the whole review…"
+              onChange={(e) => editOverall(e.target.value)}
+            />
+            {overall.conflict && (
+              <div className="artifact-overall-conflict">
+                <p>Other window’s version:</p>
+                <pre>{overall.otherText || "(empty)"}</pre>
+                <button
+                  onClick={() => {
+                    overall.keepMine();
+                    void overall.flush().catch(() => {});
+                  }}
+                >
+                  Keep my text
+                </button>
+                <button onClick={() => overall.useOther()}>
+                  Use other version
+                </button>
+              </div>
+            )}
+            {!!overall.recovered.length && (
+              <details>
+                <summary>
+                  Recovered overall drafts ({overall.recovered.length})
+                </summary>
+                {overall.recovered.map((r) => (
+                  <div key={r.key}>
+                    <pre>{r.value.text}</pre>
+                    <button
+                      onClick={() => {
+                        overall.restore(r);
+                        void overall.flush().catch(() => {});
+                      }}
+                    >
+                      Append to my feedback
+                    </button>
+                    <button onClick={() => overall.removeRecovery(r)}>
+                      Delete recovered version
+                    </button>
+                  </div>
+                ))}
+              </details>
+            )}
+            <span className="artifact-attached-count">
+              {draftComments.length} comment
+              {draftComments.length === 1 ? "" : "s"} attached
+              {unfinished.length ? ` · ${unfinished.length} unfinished` : ""}
+            </span>
             <span role="status">
-              {queue.dirty ? "Saving drafts…" : "Saved in this conversation"}
+              {queue.dirty || overall.dirty
+                ? "Saving recovery drafts…"
+                : "Saved in this conversation"}
             </span>
             <button
               className="primary"
-              disabled={state.busy || sending || !draftComments.length}
+              disabled={!canSend}
               onClick={() => void send()}
             >
-              {sending
-                ? "Sending…"
-                : `Send ${draftComments.length || ""} comment${draftComments.length === 1 ? "" : "s"}`}
+              {sending ? "Sending…" : "Send feedback"}
             </button>
-            <small>
-              {state.busy
-                ? "Agent is working. Keep reviewing; send when ready."
-                : "Agent is ready · sends to this conversation"}
-            </small>
+            <small role="status">{sendBlockReason}</small>
           </footer>
         </aside>
       </div>

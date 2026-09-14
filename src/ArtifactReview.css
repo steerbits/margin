@@ -354,6 +354,49 @@
   color: #888;
   font-size: 10px;
 }
+.artifact-send label {
+  font-size: 12px;
+  font-weight: 600;
+}
+.artifact-send textarea {
+  width: 100%;
+  min-height: 70px;
+  max-height: 180px;
+  border: 1px solid #e4e4e8;
+  border-radius: 7px;
+  padding: 9px;
+  background: #fafafa;
+  font-size: 13px;
+  line-height: 1.55;
+}
+.artifact-send .artifact-attached-count {
+  color: #4d5b76;
+  font-size: 12px;
+}
+.artifact-comment-source {
+  display: block;
+  text-align: left;
+  padding: 0 0 7px;
+  font-size: 11px;
+  color: #586c96;
+}
+.artifact-overall-conflict {
+  padding: 8px;
+  background: #fff5da;
+  border-radius: 6px;
+  font-size: 11px;
+}
+.artifact-overall-conflict p {
+  margin: 0;
+}
+.artifact-send pre {
+  max-height: 100px;
+  overflow: auto;
+  font-size: 11px;
+}
+.artifact-overall-conflict button {
+  font-size: 11px;
+}
 .artifact-send button {
   font-size: 13px;
 }
@@ -436,15 +479,21 @@
     display: none;
   }
   .artifact-send {
-    flex-direction: row;
-    align-items: center;
     padding: 8px;
+    gap: 5px;
+  }
+  .artifact-send textarea {
+    min-height: 46px;
+    max-height: 75px;
   }
   .artifact-send small {
-    display: none;
+    display: block;
   }
-  .artifact-send button {
-    margin-left: auto;
+  .artifact-feedback {
+    height: 52%;
+  }
+  .artifact-canvas {
+    min-height: 30%;
   }
   .artifact-controls {
     padding: 7px;

@@ -58,7 +58,7 @@ export function installFixtures(
     { root: string; vite: import("vite").ViteDevServer }
   >();
   const appScript = (updated = false) => `export function render() {
-    document.querySelector('#app').innerHTML = '<h1>${updated ? "Updated dashboard" : "Review dashboard"}</h1><p>A local app with real interactions.</p><button id="open">Open settings</button><output id="hits">0</output><dialog id="settings"><h2>Settings</h2><button id="save">${updated ? "Apply changes" : "Save"}</button></dialog>';
+    document.querySelector('#app').innerHTML = '<h1>${updated ? "Updated dashboard" : "Review dashboard"}</h1><p>A local app with real interactions.</p><a href="/details">Details</a> <button id="open">Open settings</button><output id="hits">0</output><dialog id="settings"><h2>Settings</h2><button id="save">${updated ? "Apply changes" : "Save"}</button></dialog>';
     document.querySelector('#open').onclick = () => document.querySelector('#settings').showModal();
     document.querySelector('#save').addEventListener('pointerdown', () => document.querySelector('#hits').textContent = String(Number(document.querySelector('#hits').textContent) + 1));
   } render(); if (import.meta.hot) import.meta.hot.accept();`;
@@ -100,6 +100,27 @@ export function installFixtures(
         vite.httpServer!.address() as import("node:net").AddressInfo
       ).port;
       artifactFixtures.set(id, { root, vite });
+      if (req.body.rawLinks) {
+        l.agent.sessionManager.appendMessage({
+          role: "assistant",
+          content: [
+            {
+              type: "text",
+              text: `Here are the generated outputs:\n\n[Read generated report](artifact-fixture/${id}/report.md)\n\n[Open HTML output](${join(root, "page.html")})\n\n[Open local dashboard](http://127.0.0.1:${port}/)\n\n[External documentation](https://example.com/docs.md)`,
+            },
+          ],
+          api: "openai-codex-responses",
+          provider: "openai-codex",
+          model: "fixture",
+          usage,
+          stopReason: "stop",
+          timestamp: Date.now(),
+        });
+        l.messages = transcript(l.agent.sessionManager.getBranch());
+        l.changed();
+        res.json({ root, appUrl: `http://127.0.0.1:${port}/` });
+        return;
+      }
       const artifacts = new ArtifactStore(store, id);
       const markdown = artifacts.register(l.project, {
         location: join(root, "report.md"),
