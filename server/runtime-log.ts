@@ -79,6 +79,22 @@ export function exitReason(
   if (signal) return `terminated by ${signal}`;
   return `runtime exited (code ${code ?? "unknown"})`;
 }
+export class WorkerDiagnostics {
+  tail = "";
+  private oom = false;
+  append(text: string, stderr = false) {
+    const combined = this.tail + text;
+    // A fatal stack can exceed the retained tail. Preserve its classification,
+    // not its raw text, even after later stack frames displace the first line.
+    if (stderr && exitReason(combined, null, null) === "out of memory")
+      this.oom = true;
+    this.tail = combined.slice(-4000);
+  }
+  reason(code: number | null, signal: string | null) {
+    return this.oom ? "out of memory" : exitReason(this.tail, code, signal);
+  }
+}
+
 /** readline can itself retain an unbounded, newline-free plugin log. */
 export function boundedLines(onLine: (line: string) => void, limit = 8192) {
   let buffer = "",

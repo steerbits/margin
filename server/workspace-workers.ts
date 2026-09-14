@@ -5,7 +5,7 @@ import { mkdir, realpath, mkdtemp } from "node:fs/promises";
 import { join, dirname, resolve } from "node:path";
 import { homedir } from "node:os";
 import { RuntimeOwner, processState } from "./runtime-owner.ts";
-import { boundedLines, exitReason, runtimeLog } from "./runtime-log.ts";
+import { boundedLines, WorkerDiagnostics, runtimeLog } from "./runtime-log.ts";
 import type { Project } from "../shared/types.ts";
 import { withinPath } from "./execution.ts";
 import { ccoLaunchPlan } from "../scripts/start-cco.ts";
@@ -157,13 +157,13 @@ export class WorkspaceWorkers {
       generation,
       launcherPid: child.pid,
     });
-    let diagnostics = "",
-      runtimePid: number | undefined;
+    const diagnostics = new WorkerDiagnostics();
+    let runtimePid: number | undefined;
     let finished = false;
-    const append = (text: string) => {
-      diagnostics = (diagnostics + text).slice(-4000);
-    };
-    child.stderr?.on("data", (chunk) => append(String(chunk)));
+    const append = (text: string) => diagnostics.append(text);
+    child.stderr?.on("data", (chunk) =>
+      diagnostics.append(String(chunk), true),
+    );
     let monitor: ReturnType<typeof setInterval> | undefined;
     const cleanup = () => {
       if (monitor) clearInterval(monitor);
@@ -176,7 +176,7 @@ export class WorkspaceWorkers {
     const checkRuntime = () => {
       if (finished || !runtimePid || processState(runtimePid) !== "dead")
         return;
-      const reason = exitReason(diagnostics, child.exitCode, child.signalCode);
+      const reason = diagnostics.reason(child.exitCode, child.signalCode);
       const expected = !!owner.current()?.expectedStop;
       owner.update(generation, { reason });
       runtimeLog(workerData, {
@@ -211,7 +211,11 @@ export class WorkspaceWorkers {
             launcherPid: child.pid,
             reason: "worker startup failed",
           });
-          owner.update(generation, { reservationFailed: true });
+          try {
+            owner.update(generation, { reservationFailed: true });
+          } catch {
+            /* Do not turn startup failure handling into an unhandled exception. */
+          }
           // The caller closes this owner on failure.
           if (monitor) clearInterval(monitor);
           this.monitors.delete(cleanup);
@@ -234,7 +238,7 @@ export class WorkspaceWorkers {
         void this.terminate(child).finally(() =>
           finish(
             new Error(
-              `cco did not finish starting for ${project.name}. ${diagnostics.trim()}`,
+              `cco did not finish starting for ${project.name}. ${diagnostics.tail.trim()}`,
             ),
           ),
         );
@@ -288,7 +292,7 @@ export class WorkspaceWorkers {
       });
       child.once("exit", (code, signal) => {
         this.children.delete(child);
-        const reason = exitReason(diagnostics, code, signal);
+        const reason = diagnostics.reason(code, signal);
         runtimeLog(workerData, {
           event: "launcher-exit",
           generation,
@@ -302,7 +306,7 @@ export class WorkspaceWorkers {
         if (!settled)
           finish(
             new Error(
-              `cco exited (${code}) for ${project.name}. ${diagnostics.trim()} Margin has not started an unsandboxed agent.`,
+              `cco exited (${code}) for ${project.name}. ${diagnostics.tail.trim()} Margin has not started an unsandboxed agent.`,
             ),
           );
         else if (!finished) {

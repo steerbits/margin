@@ -3,7 +3,8 @@
 // This file intentionally uses only Node built-ins and does not load Pi.
 import { spawn } from "node:child_process";
 let child;
-let started = false;
+let started = false,
+  completed = false;
 const terminate = () => {
   if (process.platform !== "win32") {
     try {
@@ -19,7 +20,8 @@ const terminate = () => {
 process.on("disconnect", terminate);
 process.on("SIGTERM", terminate);
 process.on("SIGINT", terminate);
-process.once("message", ({ command, cwd, env, shell }) => {
+process.on("message", ({ command, cwd, env, shell, release }) => {
+  if (release && completed) process.exit(0);
   if (started || !process.connected) return;
   started = true;
   child = spawn(shell, ["-c", command], {
@@ -28,15 +30,16 @@ process.once("message", ({ command, cwd, env, shell }) => {
     stdio: ["ignore", "inherit", "inherit"],
   });
   child.once("error", () => {
+    completed = true;
     process.send?.({ error: "Could not start the configured shell." });
-    process.exitCode = 1;
-    setTimeout(() => process.exit(1), 100);
   });
   child.once("exit", (code) => {
+    completed = true;
     process.send?.({ code });
-    // Allow already-written foreground output to drain. Deliberately launched
-    // background services retain their existing behavior after a completed tool.
-    setTimeout(() => process.exit(0), 100);
+    // Stay alive until the host has drained tool output and acknowledges
+    // release. IPC loss still kills the command group throughout that window.
+    // Intentionally launched quiet background services retain their existing
+    // behavior after a completed tool (they are not resumed/replayed here).
   });
 });
 // An orphan before the command arrives must not become an idle leaked guardian.

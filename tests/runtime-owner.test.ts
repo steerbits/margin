@@ -8,7 +8,12 @@ import {
   processState,
   type ProcessState,
 } from "../server/runtime-owner.ts";
-import { boundedLines, exitReason, runtimeLog } from "../server/runtime-log.ts";
+import {
+  boundedLines,
+  WorkerDiagnostics,
+  exitReason,
+  runtimeLog,
+} from "../server/runtime-log.ts";
 function fixture() {
   const dir = mkdtempSync(join(tmpdir(), "margin-runtime-owner-"));
   const states = new Map<number, ProcessState>();
@@ -118,6 +123,18 @@ test("structured lifecycle logs are private, bounded and distinguish OOM from si
   } finally {
     f.close();
   }
+});
+test("OOM classification survives split stderr chunks and a stack longer than the retained tail", () => {
+  const diagnostics = new WorkerDiagnostics();
+  diagnostics.append("FATAL ERROR: JavaScript heap out of", true);
+  diagnostics.append(" memory\n", true);
+  diagnostics.append("more stack frames\n".repeat(5000), true);
+  assert.equal(diagnostics.reason(134, null), "out of memory");
+  assert.ok(diagnostics.tail.length <= 4000);
+  assert.ok(!diagnostics.tail.includes("FATAL ERROR"));
+  const ordinary = new WorkerDiagnostics();
+  ordinary.append("plugin started\n", true);
+  assert.equal(ordinary.reason(1, null), "runtime exited (code 1)");
 });
 test("newline-free stdout is discarded at a fixed bound and the next ready line survives", () => {
   const lines: string[] = [];

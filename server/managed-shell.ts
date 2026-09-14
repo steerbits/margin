@@ -44,25 +44,54 @@ export function managedShell(
         return await new Promise<{ exitCode: number | null }>(
           (resolve, reject) => {
             let result: { code?: number | null; error?: string } | undefined;
-            let settled = false;
+            let settled = false,
+              releaseRequested = false;
+            let drainTimer: ReturnType<typeof setTimeout> | undefined;
+            const releaseAfterIdle = () => {
+              if (drainTimer) clearTimeout(drainTimer);
+              drainTimer = setTimeout(() => {
+                if (settled || releaseRequested) return;
+                releaseRequested = true;
+                guardian.send({ release: true }, (error) => {
+                  if (error) {
+                    kill(guardian);
+                    finish(error);
+                  }
+                });
+              }, 100);
+            };
             const finish = (error?: Error) => {
               if (settled) return;
               settled = true;
+              if (drainTimer) clearTimeout(drainTimer);
               guardian.stdout?.destroy();
               guardian.stderr?.destroy();
               if (error) reject(error);
               else if (signal?.aborted) reject(new Error("aborted"));
               else if (timedOut) reject(new Error(`timeout:${timeout}`));
+              else if (!releaseRequested)
+                reject(
+                  new Error(
+                    "Managed shell was interrupted before its output settled.",
+                  ),
+                );
               else if (!result || result.error)
                 reject(
                   new Error(result?.error ?? "Managed shell was interrupted."),
                 );
               else resolve({ exitCode: result.code ?? null });
             };
-            guardian.stdout?.on("data", onData);
-            guardian.stderr?.on("data", onData);
+            const output = (data: Buffer) => {
+              onData(data);
+              if (result && !releaseRequested) releaseAfterIdle();
+            };
+            guardian.stdout?.on("data", output);
+            guardian.stderr?.on("data", output);
             guardian.on("message", (message) => {
               result = message as typeof result;
+              // Match Pi's post-exit output grace without abandoning the
+              // guardian while descendants are still producing tool output.
+              releaseAfterIdle();
             });
             guardian.once("error", (error) => finish(error));
             guardian.once("exit", () => {

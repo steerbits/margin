@@ -1,5 +1,7 @@
 # Margin run interruptions: diagnosis
 
+> Historical baseline, captured before the fix. The implemented behavior and before/after verification are documented in [Runtime recovery](runtime-recovery.md). Source line references and probe observations below describe that baseline.
+
 ## Bottom line
 
 There is strong evidence that the reported interruptions are workspace-runtime **out-of-memory crashes**, followed by Margin automatically launching a replacement worker. An isolated test reproduces unbounded memory accumulation in the current live-update path when the browser connection stops consuming data.
