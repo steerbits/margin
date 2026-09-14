@@ -144,6 +144,11 @@ test("capture refuses parent symlinks into excluded data before saving protected
     rmSync(join(f.root, "src"), { recursive: true });
     symlinkSync(join(f.data, "private"), join(f.root, "src"), "dir");
     assert.throws(() => f.history.save("Do not leak"), /symbolic link/i);
+    assert.equal(
+      existsSync(join(f.data, "history/operation.lock")),
+      false,
+      "A failed checkpoint must release its lock",
+    );
   } finally {
     f.close();
   }
@@ -207,6 +212,37 @@ test("startup acknowledgement obeys the same history-operation lock", () => {
     f.close();
   }
 });
+test("a live history lock blocks safely and a dead owner's lock recovers without restarting the server", () => {
+  const f = fixture();
+  try {
+    f.history.save("Initial checkpoint");
+    const lock = join(f.data, "history/operation.lock");
+    writeFileSync(lock, String(process.pid));
+    assert.throws(
+      () => f.history.save("While another operation runs"),
+      /Another history operation is running/,
+    );
+    assert.equal(
+      readFileSync(lock, "utf8"),
+      String(process.pid),
+      "Never remove a potentially live operation's lock",
+    );
+    const exitedPid = execFileSync(
+      process.execPath,
+      ["-e", "console.log(process.pid)"],
+      { encoding: "utf8" },
+    ).trim();
+    writeFileSync(lock, exitedPid);
+    assert.equal(
+      f.history.save("Retry without restart").name,
+      "Retry without restart",
+    );
+    assert.equal(existsSync(lock), false);
+  } finally {
+    f.close();
+  }
+});
+
 test("an edit arriving while the before-restore checkpoint is saved is not overwritten", () => {
   const f = fixture();
   try {

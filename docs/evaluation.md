@@ -1,5 +1,14 @@
 # Evaluation record
 
+## Follow-up: backdrop dismissal, save shortcut and history-lock investigation
+
+Implemented the two explicit interaction requests: outside-click dismissal (without dismissing on a drag out of the editor) and ⌘Enter/Ctrl+Enter to save the focused comment without sending it. Plain Enter remains multiline. Existing recovery is retained on dismissal, including an offline comment and overall feedback. Collapsing sent comments, closing after accepted Send, and hiding the empty Artifacts launcher remain recommendations pending the human's decision—not implemented behavior.
+
+- TypeScript passed; **71 Node tests passed** and **8 focused artifact Chromium tests passed**. The browser fixture build passed. Full browser/gateway regressions were not rerun for this follow-up.
+- Added checkpoint tests: a capture failure releases its lock; a potentially live owner remains protected; a confirmed-dead owner's lock is recovered on retry without a server restart. These do not reproduce the reported persistent block.
+- Traced the reported error to the shared pre-send source-workspace code-history guard, not comment storage. No `operation.lock` remained in the live data tree to identify its original owner. The exact incident is unresolved; no live lock was deleted and no server was restarted.
+- Confirmed `.margin-data/` and the example `workspaces/` files are Git-ignored, with no tracked entries. Artifact registration stores references in private conversation SQLite records; files remain in their original locations and recovery drafts remain browser data.
+
 ## Follow-up: artifact review workflow simplification
 
 Human feedback changed the entry point from manual file/URL registration to clicking an ordinary agent output link; retained **Comment on this page** while adding separate **Overall feedback**; replaced Retarget/implicit attachment with **Save / Edit / Delete**; and made saved attachments conversation-wide. The original disabled-Send incident was not captured directly, but inspection found artifact-local batch filtering and unlabelled blocked states. These now have explicit regression coverage.

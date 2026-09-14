@@ -89,6 +89,52 @@ test("artifact Markdown selection persists across close/reload and sends precise
     "Explore retention before adding more charts.",
   );
 });
+test("Command/Ctrl+Enter saves only the focused artifact comment, while Enter stays multiline", async ({
+  page,
+}) => {
+  const { id } = await seed(page);
+  await page
+    .getByRole("button", { name: "Comment on this page", exact: true })
+    .click();
+  const editor = page.getByLabel("Feedback 1", { exact: true });
+  await editor.fill("First line");
+  await editor.press("End");
+  await editor.press("Enter");
+  await editor.pressSequentially("Second line");
+  await expect(editor).toHaveValue("First line\nSecond line");
+  await editor.press("Meta+Enter");
+  await expect(editor).toHaveCount(0);
+  await expect(page.locator(".artifact-attached-count")).toHaveText(
+    "1 comment attached",
+  );
+  await saved(page);
+  await page
+    .locator(".artifact-comment")
+    .getByRole("button", { name: "Edit", exact: true })
+    .click();
+  await editor.fill("Revised via Control+Enter");
+  await editor.press("Control+Enter");
+  await expect(editor).toHaveCount(0);
+  await saved(page);
+  const review = await (
+    await page.request.get(`/api/sessions/${id}/artifacts`)
+  ).json();
+  expect(review.comments).toHaveLength(1);
+  expect(review.comments[0]).toMatchObject({
+    text: "Revised via Control+Enter",
+    saved: true,
+    delivery: "draft",
+  });
+  const chat = await (await page.request.get(`/api/sessions/${id}`)).json();
+  expect(
+    chat.messages.some(
+      (m: { role: string; text: string }) =>
+        m.role === "user" &&
+        m.text.startsWith("I reviewed the generated artifacts"),
+    ),
+  ).toBe(false);
+});
+
 test("artifact runtime proxy supports real modal interactions and Vite HMR without losing a draft or activating a pointed button", async ({
   page,
 }) => {
@@ -378,12 +424,32 @@ test("artifact unfinished drafts recover after failed network saves and explicit
   await expect(page.locator(".artifact-notice")).toContainText(
     "Not saved to Margin yet",
   );
-  await page.getByLabel("Close artifact review").click();
+  await page
+    .getByLabel("Overall feedback", { exact: true })
+    .fill("Keep the overall thought too.");
+  // A drag starting inside the editor must not count as clicking the backdrop.
+  const bounds = await page
+    .getByLabel("Feedback 1", { exact: true })
+    .boundingBox();
+  await page.mouse.move(bounds!.x + 15, bounds!.y + 15);
+  await page.mouse.down();
+  await page.mouse.move(4, 4);
+  await page.mouse.up();
+  await expect(
+    page.getByRole("dialog", { name: "Artifact review", exact: true }),
+  ).toBeVisible();
+  await page.mouse.click(4, 4);
+  await expect(
+    page.getByRole("dialog", { name: "Artifact review", exact: true }),
+  ).toHaveCount(0);
   await page.unroute("**/artifacts/comments");
   await page.getByRole("button", { name: "Artifacts", exact: true }).click();
   await expect(page.getByLabel("Feedback 1", { exact: true })).toHaveValue(
     "Do not lose this unfinished comment",
   );
+  await expect(
+    page.getByLabel("Overall feedback", { exact: true }),
+  ).toHaveValue("Keep the overall thought too.");
   await saved(page);
   await page
     .locator(".artifact-comment")

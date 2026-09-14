@@ -41,6 +41,22 @@ export function requestArtifactReview(href: string) {
     }),
   );
 }
+function isReviewBackdrop(event: {
+  target: EventTarget;
+  currentTarget: HTMLDialogElement;
+  clientX: number;
+  clientY: number;
+}) {
+  if (event.target !== event.currentTarget) return false;
+  const bounds = event.currentTarget.getBoundingClientRect();
+  return (
+    event.clientX < bounds.left ||
+    event.clientX > bounds.right ||
+    event.clientY < bounds.top ||
+    event.clientY > bounds.bottom
+  );
+}
+
 export function ArtifactLauncher({ sessionId }: { sessionId: string }) {
   const [open, setOpen] = useState(false),
     [artifactId, setArtifactId] = useState<string>();
@@ -148,6 +164,7 @@ export function ArtifactReviewWindow({
   const dialog = useRef<HTMLDialogElement>(null),
     frame = useRef<HTMLIFrameElement>(null);
   const saveTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
+  const pressedBackdrop = useRef(false);
   const artifact = state.artifacts.find((a) => a.id === artifactId);
   const comments = queue.merge(state.comments).filter((c) => !c.deleted);
   const draftComments = comments.filter(
@@ -731,6 +748,17 @@ export function ArtifactReviewWindow({
                       edit({ ...c, text: e.target.value, saved: false })
                     }
                     onFocus={() => setActiveId(c.id)}
+                    onKeyDown={(e) => {
+                      if (
+                        (e.metaKey || e.ctrlKey) &&
+                        e.key === "Enter" &&
+                        !e.nativeEvent.isComposing
+                      ) {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        if (!sending && !e.repeat) void saveComment(c);
+                      }
+                    }}
                   />
                 ) : (
                   <p className="artifact-comment-text">{c.text}</p>
@@ -740,6 +768,8 @@ export function ArtifactReviewWindow({
                     (c.saved === false || !c.text ? (
                       <button
                         disabled={!c.text.trim() || sending}
+                        title="Save comment (⌘Enter or Ctrl+Enter)"
+                        aria-keyshortcuts="Meta+Enter Control+Enter"
                         onClick={() => void saveComment(c)}
                       >
                         Save
@@ -863,6 +893,17 @@ export function ArtifactReviewWindow({
       ref={dialog}
       className="artifact-window"
       aria-label="Artifact review"
+      onPointerDown={(e) => {
+        pressedBackdrop.current = e.button === 0 && isReviewBackdrop(e);
+      }}
+      onPointerCancel={() => {
+        pressedBackdrop.current = false;
+      }}
+      onClick={(e) => {
+        const dismiss = pressedBackdrop.current && isReviewBackdrop(e);
+        pressedBackdrop.current = false;
+        if (dismiss) onClose?.();
+      }}
       onCancel={(e) => {
         e.preventDefault();
         onClose?.();
