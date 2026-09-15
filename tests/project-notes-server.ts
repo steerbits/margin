@@ -28,7 +28,24 @@ for (const key of [
 ])
   delete process.env[key];
 const source = resolve(import.meta.dirname, "..");
+mkdirSync(join(source, ".margin-data"), { recursive: true });
 const root = realpathSync(mkdtempSync(join(tmpdir(), "margin-notes-e2e-app-")));
+// Browser fixtures need a model catalog, never the developer's real login.
+process.env.PI_CODING_AGENT_DIR = join(root, "fixture-pi");
+mkdirSync(process.env.PI_CODING_AGENT_DIR);
+writeFileSync(
+  join(process.env.PI_CODING_AGENT_DIR, "auth.json"),
+  JSON.stringify({
+    openai: { type: "api_key", key: "unused-browser-fixture-key" },
+    "openai-codex": {
+      type: "oauth",
+      access: "unused-browser-fixture-token",
+      refresh: "unused-browser-fixture-token",
+      expires: Date.now() + 3_600_000,
+    },
+  }),
+  { mode: 0o600 },
+);
 process.on("exit", () => rmSync(root, { recursive: true, force: true }));
 for (const path of [
   "src",
@@ -71,6 +88,7 @@ if (process.env.MARGIN_GATEWAY_TEST === "1") {
 set -e
 while [[ $# -gt 0 ]]; do
   case "$1" in
+    --backend) shift 2;;
     --env) export "$2"; shift 2;;
     --add-dir=*|--allow-readonly=*) shift;;
     --command) shift; exec "$@";;
@@ -80,8 +98,12 @@ done
 `,
   );
   chmodSync(fake, 0o755);
+  mkdirSync(join(root, "vendor", "cco"), { recursive: true });
+  symlinkSync(fake, join(root, "vendor", "cco", "cco"));
   process.env.PATH = `${bin}:${process.env.PATH}`;
-  process.env.MARGIN_WORKSPACE_PARENT = join(root, "external-projects");
+  const externalParent = realpathSync(mkdtempSync(join(tmpdir(), "margin-external-projects-")));
+  process.env.MARGIN_WORKSPACE_PARENT = externalParent;
+  process.on("exit", () => rmSync(externalParent, { recursive: true, force: true }));
   const originalLog = console.log;
   console.log = (...args) => {
     const link = String(args[0]).match(

@@ -9,3 +9,6 @@ playwright-report/
 workspaces/
 .margin-restore-*
 *.log
+docker-trial-backup/
+preparation.json
+docker-reference-workbench/

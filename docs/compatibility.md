@@ -1,6 +1,6 @@
 # Pi 0.85.1 compatibility
 
-Default `npm start` now wraps the complete server with cco; `start:native` is the explicit direct launch. This does not change the SDK UI mappings below. See [the selected cco policy](sandboxing-proposal.md) for writable paths, shared scope across sessions, and the normal-Terminal verification requirement.
+Default `npm start` uses bundled cco for each workspace worker; `start:native` is the explicit direct launch. This does not change the SDK UI mappings below. See [the selected cco policy](sandboxing-proposal.md) for writable paths, shared scope across sessions, and the normal-Terminal verification requirement.
 
 This matrix is based on the pinned SDK's `ExtensionUIContext`, session events, native tools, and runtime behavior. Margin binds extensions with `mode: "rpc"` and `hasUI` enabled by the supplied UI context. This indicates dialog-capable UI, not terminal-component support.
 

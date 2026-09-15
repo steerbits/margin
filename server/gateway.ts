@@ -21,6 +21,7 @@ import type { ModelInfo, Project, SessionInfo } from "../shared/types.ts";
 import { installSettingsRoutes, readSettings } from "./settings.ts";
 import { createModels } from "./models.ts";
 import { ProviderAccounts, installProviderAccountRoutes } from "./provider-accounts.ts";
+import { withinPath } from "./execution.ts";
 
 // This process handles browser requests and worker lifecycle. It deliberately
 // imports neither Pi sessions nor executable server plugins.
@@ -53,6 +54,8 @@ function register(path: string): Project {
   const canonical = access.requireDirectory(path);
   const existing = registry.projects().find((p) => p.path === canonical);
   if (existing) return projectView(existing);
+  if (canonical !== appRoot && withinPath(canonical, appRoot))
+    throw new Error("Choose a workspace folder outside Margin's source folder, such as ~/Projects. Use Customize Margin to edit the app itself.");
   const project = {
     id: randomUUID(),
     name: basename(canonical),
@@ -135,6 +138,9 @@ function sessionProject(id: string) {
 }
 
 const port = Number(process.env.PORT ?? 4317);
+// The disposable installation can coexist with another Margin on the same host.
+// Cookies are shared across ports, so the trial launcher supplies a distinct name.
+const launcherCookie = process.env.MARGIN_LAUNCHER_COOKIE ?? "margin_launcher";
 const app = express();
 app.set("case sensitive routing", true);
 app.disable("x-powered-by");
@@ -169,8 +175,8 @@ app.use((req, res, next) => {
       req.headers.cookie
         ?.split(";")
         .map((v) => v.trim())
-        .find((v) => v.startsWith("margin_launcher="))
-        ?.slice("margin_launcher=".length) ?? "";
+        .find((v) => v.startsWith(`${launcherCookie}=`))
+        ?.slice(launcherCookie.length + 1) ?? "";
     if (req.path !== "/api/connect" && !auth.accepts(cookie))
       return res.status(401).json({
         error:
@@ -187,7 +193,7 @@ app.post("/api/connect", (req, res) => {
       error:
         "This connection link is invalid. Use the link printed in Terminal.",
     });
-  res.cookie("margin_launcher", req.body.token, {
+  res.cookie(launcherCookie, req.body.token, {
     httpOnly: true,
     sameSite: "strict",
     path: "/",
@@ -344,12 +350,10 @@ app.post("/api/workspaces/choose", async (req, res) => {
     if (!res.writableEnded) abort.abort();
   });
   const last = registry.get<string>("preference", "workspace-directory");
-  const initialDirectory =
-    last && access.canOpen(last)
-      ? last
-      : access.canOpen(workspaceParent)
-        ? workspaceParent
-        : homedir();
+  const initialDirectory = [last, workspaceParent, homedir()].find(
+    (path): path is string => !!path && access.canOpen(path) &&
+      !withinPath(access.requireDirectory(path), appRoot),
+  ) ?? homedir();
   const path = await directoryPicker.choose(initialDirectory, abort.signal);
   if (res.destroyed) return;
   if (path === null) return res.json({ project: null });
@@ -367,9 +371,14 @@ app.post("/api/workspaces", async (req, res) => {
     .object({ name: z.string().trim().min(1).max(100) })
     .strict()
     .parse(req.body);
+  if (withinPath(workspaceParent, appRoot))
+    throw new Error("Set MARGIN_WORKSPACE_PARENT to a folder outside Margin's source folder.");
   mkdirSync(workspaceParent, { recursive: true });
+  const parent = access.requireDirectory(workspaceParent);
+  if (withinPath(parent, appRoot))
+    throw new Error("The workspace parent resolves inside Margin. Choose an external folder.");
   const created = await createWorkspace(
-    access.requireDirectory(workspaceParent),
+    parent,
     name,
   );
   registry.put("project", created.id, created);

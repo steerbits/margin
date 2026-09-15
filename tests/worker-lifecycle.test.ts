@@ -36,9 +36,11 @@ function fixture(wrapper = false) {
   // This shim exercises real processes and HTTP, not OS sandbox enforcement.
   writeFileSync(
     fake,
-    `#!/bin/bash\nset -e\nwhile [[ $# -gt 0 ]]; do\ncase "$1" in\n--env) export "$2"; shift 2;;\n--add-dir=*|--allow-readonly=*) shift;;\n--command) shift; ${wrapper ? '"$@" &\nsleep 1\nexit 0' : 'exec "$@"'};;\n*) exit 97;;\nesac\ndone\n`,
+    `#!/bin/bash\nset -e\nwhile [[ $# -gt 0 ]]; do\ncase "$1" in\n--backend) shift 2;;\n--env) export "$2"; shift 2;;\n--add-dir=*|--allow-readonly=*) shift;;\n--command) shift; ${wrapper ? '"$@" &\nsleep 1\nexit 0' : 'exec "$@"'};;\n*) exit 97;;\nesac\ndone\n`,
   );
   chmodSync(fake, 0o755);
+  mkdirSync(join(app, "vendor", "cco"), { recursive: true });
+  symlinkSync(fake, join(app, "vendor", "cco", "cco"));
   writeFileSync(
     join(app, "server/index.ts"),
     `

@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdtemp, mkdir, writeFile, chmod, rm } from "node:fs/promises";
+import { mkdtemp, mkdir, writeFile, chmod, rm, copyFile, symlink, realpath } from "node:fs/promises";
 import { spawnSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -16,7 +16,8 @@ test("cco launch wraps the Node SDK server with ordinary defaults and Pi state",
     "/home/me/.pi",
     {},
   );
-  assert.equal(plan.command, "cco");
+  assert.equal(plan.command, "/app/vendor/cco/cco");
+  assert.deepEqual(plan.args.slice(0, 2), ["--backend", "native"]);
   assert.equal(plan.cwd, "/app");
   assert.ok(plan.args.includes("--add-dir=/home/me/.pi"));
   assert.deepEqual(plan.args.slice(-4), [
@@ -71,10 +72,15 @@ test("execution information is explicit, and invalid configuration does not sile
   assert.throws(() => parseLaunchOptions(["--safe"], "/app"));
 });
 test("a cco failure is propagated without launching a native server", async () => {
-  const root = await mkdtemp(join(tmpdir(), "margin-cco-launch-"));
+  const root = await realpath(await mkdtemp(join(tmpdir(), "margin-cco-launch-")));
   try {
-    const bin = join(root, "bin");
-    await mkdir(bin);
+    const bin = join(root, "vendor", "cco");
+    await mkdir(bin, { recursive: true });
+    await mkdir(join(root, "scripts"));
+    await mkdir(join(root, "server"));
+    for (const file of ["scripts/start-cco.ts", "scripts/installation.ts", "server/execution.ts", "package.json"])
+      await copyFile(resolve(file), join(root, file));
+    await symlink(resolve("node_modules"), join(root, "node_modules"), "dir");
     const fake = join(bin, "cco");
     await writeFile(fake, "#!/bin/sh\nexit 71\n");
     await chmod(fake, 0o755);
@@ -82,7 +88,7 @@ test("a cco failure is propagated without launching a native server", async () =
       process.execPath,
       [
         resolve("node_modules/tsx/dist/cli.mjs"),
-        resolve("scripts/start-cco.ts"),
+        join(root, "scripts/start-cco.ts"),
         "--project",
         root,
       ],
@@ -97,7 +103,7 @@ test("a cco failure is propagated without launching a native server", async () =
         timeout: 10000,
       },
     );
-    assert.equal(result.status, 71);
+    assert.equal(result.status, 71, result.stderr + result.stdout);
     assert.match(result.stderr, /not fallen back to native/);
   } finally {
     await rm(root, { recursive: true, force: true });

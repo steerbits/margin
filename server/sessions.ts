@@ -117,7 +117,7 @@ export class LiveSession implements AgentBackend {
       );
     if (!model)
       throw new Error(
-        "No authenticated Pi models found. In a terminal, run pi, use /login, then retry or restart Margin.",
+        "No authenticated Pi models found. Connect a provider in Settings, or run npm run pi and use /login from this Margin folder.",
       );
     const settings = SettingsManager.create(this.project.path, getAgentDir());
     // Adding a project explicitly selects the local workspace whose Pi resources are loaded.

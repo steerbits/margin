@@ -8,7 +8,7 @@
 4. Follow Pi's prompts. For browser authorization, click **Open sign-in page**, authorize on the provider's site, and return to Margin. If the callback cannot reach this machine, paste the final redirect URL/code in the fallback field. For device login, open the verification page and enter the displayed code; Margin checks completion automatically.
 5. After credentials are saved, models refresh automatically. Pick a default model and thinking effort, then **Save**. Start a conversation.
 
-If terminal Pi is already authenticated, Margin reuses that login. No second provider sign-in is required when both run as the same OS user with the same Pi configuration directory. Other people installing Margin connect **their own accounts**; credentials are not bundled with Margin or stored in Git.
+Margin uses private Pi storage for this installation. Use Settings to sign in, or run the bundled Pi CLI with npm run pi; a separate global terminal Pi login is not reused automatically. Other people installing Margin connect **their own accounts**; credentials are not bundled with Margin or stored in Git.
 
 ## Model pickers
 
@@ -45,8 +45,8 @@ Provider behavior is delegated to Pi. For example, its Copilot login can enable 
 
 ## Storage and account changes
 
-- Pi owns token exchange, credential-file locking, persistence and OAuth refresh. Credentials normally live in `~/.pi/agent/auth.json`, created by Pi with owner-only permissions. `PI_CODING_AGENT_DIR` changes the shared configuration directory.
-- Account actions save **immediately**, separately from Margin's conversation-default Save/Cancel. Reconnecting replaces that provider's one saved credential. Removing a login requires confirmation and removes it from terminal Pi too; this is local credential removal, not provider-side token revocation.
+- Pi owns token exchange, credential-file locking, persistence and OAuth refresh. Credentials normally live in `.margin-data/pi/auth.json`, created by Pi with owner-only permissions. The launcher sets `PI_CODING_AGENT_DIR` to the configured Margin data directory’s `pi/` child.
+- Account actions save **immediately**, separately from Margin's conversation-default Save/Cancel. Reconnecting replaces that provider's one saved credential. Removing a login requires confirmation and removes it from this installation’s Pi CLI too; this is local credential removal, not provider-side token revocation.
 - Existing chats retain their selected model. Subsequent requests can use changed credentials or fail after removal. Environment variables and externally configured credentials may still provide access after removing the saved login.
 - Access/refresh tokens are never returned to the browser or copied into Margin's database. API keys and pasted codes travel from the browser to the authenticated local server for submission, but are not kept in localStorage, sessionStorage or chat history. Login links and device user codes are necessarily visible while signing in.
 - Settings accepts literal API keys. Pi's advanced shell-command/environment key expressions remain a Terminal/config-file setup, not an executable web input.

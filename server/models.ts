@@ -24,7 +24,7 @@ export function readOnlyCredentials(authPath: string): CredentialStore {
       })),
     modify: async () => {
       throw new Error(
-        "Read-only login mode cannot refresh credentials. Run pi /login or restart Margin without MARGIN_AUTH_READ_ONLY.",
+        "Read-only login mode cannot refresh credentials. Run npm run pi, then /login or restart Margin without MARGIN_AUTH_READ_ONLY.",
       );
     },
     delete: async () => {

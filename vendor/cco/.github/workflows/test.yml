@@ -1,0 +1,44 @@
+name: Test
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+
+jobs:
+  test-linux:
+    strategy:
+      matrix:
+        include:
+          - runner: ubuntu-22.04
+            arch: x86_64
+          - runner: ubuntu-22.04-arm
+            arch: aarch64
+    runs-on: ${{ matrix.runner }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install bubblewrap
+        run: sudo apt-get update && sudo apt-get install -y bubblewrap
+
+      - name: Verify architecture
+        run: |
+          echo "Expected: ${{ matrix.arch }}"
+          echo "Actual: $(uname -m)"
+          test "$(uname -m)" = "${{ matrix.arch }}"
+
+      - name: Run all tests
+        run: make test
+
+  test-macos:
+    runs-on: macos-14
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Run all tests
+        run: make test

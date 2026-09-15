@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "engines": {
-    "node": ">=22.13"
+    "node": ">=22.19.0"
   },
   "scripts": {
     "dev": "tsx scripts/start-margin.ts --dev",
@@ -12,18 +12,19 @@
     "history": "tsx scripts/checkpoint-cli.ts",
     "start": "tsx scripts/start-margin.ts",
     "start:sandbox": "tsx scripts/start-margin.ts",
-    "start:native": "NODE_ENV=production tsx server/index.ts",
-    "dev:native": "tsx watch server/index.ts",
+    "start:native": "NODE_ENV=production tsx scripts/start-native.ts",
+    "dev:native": "tsx watch scripts/start-native.ts",
     "test": "tsx --test tests/*.test.ts",
     "test:e2e": "playwright test --config tests/project-notes.playwright.config.ts",
     "check": "npm run test && npm run build",
     "probe": "tsx scripts/probe.ts",
     "test:sandbox": "tsx scripts/check-cco.ts",
     "start:single-sandbox": "tsx scripts/start-cco.ts",
-    "test:gateway": "playwright test --config tests/gateway.playwright.config.ts"
+    "test:gateway": "playwright test --config tests/gateway.playwright.config.ts",
+    "pi": "tsx scripts/local-pi.ts"
   },
   "dependencies": {
-    "@earendil-works/pi-ai": "^0.85.1",
+    "@earendil-works/pi-ai": "0.85.1",
     "@earendil-works/pi-coding-agent": "0.85.1",
     "express": "^5.1.0",
     "lucide-react": "^0.468.0",

@@ -1,0 +1,35 @@
+# Development logs and private notes
+claude.local.md
+CLAUDE.md
+PROJECT_LOG.md
+devlog/
+
+# Local workspace directories
+projects/
+shell-snapshots/
+statsig/
+todos/
+
+# Credential staging area
+.claudito_creds/
+
+# Claudito home directory
+.claudito/
+
+# Extracted system config for Docker build (no credentials)
+.claude-system/
+
+# System files
+.DS_Store
+Thumbs.db
+
+# IDE/Editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Logs
+*.log
+.claude/

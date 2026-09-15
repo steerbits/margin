@@ -2,6 +2,7 @@ import { spawn } from "node:child_process";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { bundledCco } from "./installation.ts";
 
 // Disposable fixtures live under the app, rather than /tmp (a normal cco write exception).
 const appRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -33,8 +34,8 @@ console.log(JSON.stringify(results,null,2));process.exit(Object.values(results).
 try {
   const code = await new Promise<number>((done) => {
     const child = spawn(
-      "cco",
-      ["--command", "node", probe, inside, sentinel, deletion],
+      bundledCco(appRoot),
+      ["--backend", "native", "--command", process.execPath, probe, inside, sentinel, deletion],
       { cwd: inside, stdio: "inherit" },
     );
     child.once("error", (e) => {

@@ -1,5 +1,6 @@
 import { mkdir } from "node:fs/promises";
-import { resolve } from "node:path";
+import { join, resolve } from "node:path";
+import { configureInstallation } from "./installation.ts";
 import {
   createAgentSession,
   DefaultResourceLoader,
@@ -7,7 +8,8 @@ import {
   SessionManager,
 } from "@earendil-works/pi-coding-agent";
 import { createModels } from "../server/models.ts";
-const dir = resolve(".margin-data/probe");
+const { dataDir } = configureInstallation(resolve(import.meta.dirname, ".."));
+const dir = join(dataDir, "probe");
 await mkdir(dir, { recursive: true });
 const modelRuntime = await createModels(dir);
 const available = await modelRuntime.getAvailable("openai-codex");

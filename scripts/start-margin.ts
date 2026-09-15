@@ -3,6 +3,7 @@ import { fileURLToPath } from "node:url";
 import { realpath } from "node:fs/promises";
 import { homedir } from "node:os";
 import { parseLaunchOptions } from "./start-cco.ts";
+import { configureInstallation } from "./installation.ts";
 
 const appRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const options = parseLaunchOptions(process.argv.slice(2), appRoot);
@@ -27,6 +28,9 @@ if (options.help) {
     throw new Error(
       "Start the Margin launcher from a normal Terminal, outside an existing Margin worker.",
     );
+  const installation = configureInstallation(appRoot);
+  console.log(`Private Pi configuration: ${installation.piDir}`);
+  console.log(`Bundled cco: ${installation.cco}`);
   process.env.NODE_ENV = options.dev ? "development" : "production";
   process.env.MARGIN_INITIAL_PROJECTS = JSON.stringify(
     await Promise.all(

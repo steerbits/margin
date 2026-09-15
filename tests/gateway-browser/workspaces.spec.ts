@@ -17,6 +17,26 @@ const link = () =>
     root: string;
   };
 const folders: string[] = [];
+test("new workspaces stay outside Margin while its source remains available", async ({ page }) => {
+  await page.goto(link().url);
+  const before = await (await page.request.get("/api/bootstrap")).json();
+  const nested = join(link().root, "accidental-project");
+  mkdirSync(nested);
+  const file = join(nested, "keep.txt");
+  writeFileSync(file, "keep this file");
+  const rejected = await page.request.post("/api/projects", { data: { path: nested } });
+  expect(rejected.status()).toBe(400);
+  expect((await rejected.json()).error).toContain("outside Margin");
+  expect(readFileSync(file, "utf8")).toBe("keep this file");
+  const created = await page.request.post("/api/workspaces", { data: { name: "Independent workspace" } });
+  expect(created.ok(), await created.text()).toBe(true);
+  const workspace = await created.json();
+  expect(workspace.path.startsWith(link().root + "/")).toBe(false);
+  expect(workspace.path.startsWith(before.workspaceParent + "/")).toBe(true);
+  const source = await page.request.post("/api/projects", { data: { path: link().root } });
+  expect(source.ok()).toBe(true);
+  expect((await source.json()).id).toBe(before.marginProjectId);
+});
 test.afterAll(() => {
   for (const folder of folders)
     rmSync(folder, { recursive: true, force: true });

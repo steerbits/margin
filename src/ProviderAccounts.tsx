@@ -195,7 +195,7 @@ export function ProviderAccountsPanel({
         </button>
       </div>
       <p className="settings-description">
-        Shared with terminal Pi on this server, across all workspaces. Account
+        Saved privately in this Margin installation, across all workspaces. Account
         changes apply immediately, independently of Save or Cancel below.
       </p>
       {loading && <p>Loading provider accounts…</p>}

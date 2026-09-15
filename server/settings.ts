@@ -60,7 +60,7 @@ export function newConversationSettings(
     : settingsModel(settings, models);
   if (!model)
     throw new Error(
-      "No available model. Connect a provider account in Settings (or use pi /login), then choose a model.",
+      "No available model. Connect a provider account in Settings (or use npm run pi, then /login), then choose a model.",
     );
   return {
     model,

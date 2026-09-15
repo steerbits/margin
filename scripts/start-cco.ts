@@ -4,6 +4,7 @@ import { dirname, join, resolve } from "node:path";
 import { homedir } from "node:os";
 import { fileURLToPath } from "node:url";
 import { withinPath } from "../server/execution.ts";
+import { bundledCco, configureInstallation } from "./installation.ts";
 
 export interface LaunchOptions {
   project: string;
@@ -49,7 +50,7 @@ export function ccoLaunchPlan(
   const writablePaths = [
     ...new Set([options.project, dataDir, piDir, ...options.extra]),
   ];
-  const args: string[] = [];
+  const args: string[] = ["--backend", "native"];
   for (const path of writablePaths)
     if (!withinPath(path, options.project)) args.push(`--add-dir=${path}`);
   // Needed when cco selects Docker and the runtime source is outside the project mount.
@@ -64,8 +65,9 @@ export function ccoLaunchPlan(
     NODE_ENV: options.dev ? "development" : "production",
     MARGIN_DATA_DIR: dataDir,
     MARGIN_CCO_INFO: JSON.stringify(launch),
+    PI_CODING_AGENT_DIR: piDir,
   };
-  for (const key of ["PORT", "MARGIN_AUTH_READ_ONLY", "PI_CODING_AGENT_DIR"])
+  for (const key of ["PORT", "MARGIN_AUTH_READ_ONLY"])
     if (environment[key] !== undefined) env[key] = environment[key]!;
   for (const [key, value] of Object.entries(env))
     args.push("--env", `${key}=${value}`);
@@ -76,7 +78,7 @@ export function ccoLaunchPlan(
   );
   if (options.dev) args.push("watch");
   args.push(join(appRoot, "server/index.ts"));
-  return { command: "cco", args, cwd: options.project, launch };
+  return { command: bundledCco(appRoot), args, cwd: options.project, launch };
 }
 
 export async function main(args = process.argv.slice(2)) {
@@ -97,13 +99,7 @@ export async function main(args = process.argv.slice(2)) {
   for (const path of [options.project, ...options.extra])
     if (!(await stat(path)).isDirectory())
       throw new Error(`Not a folder: ${path}`);
-  const dataDir = expand(
-    process.env.MARGIN_DATA_DIR ?? join(appRoot, ".margin-data"),
-  );
-  // Match cco's Pi mode grant; custom Pi directories are supported as well.
-  const piDir = expand(
-    process.env.PI_CODING_AGENT_DIR ?? join(homedir(), ".pi"),
-  );
+  const { dataDir, piDir } = configureInstallation(appRoot);
   const plan = ccoLaunchPlan(options, appRoot, dataDir, piDir, process.env);
   if (options.dryRun) {
     console.log(JSON.stringify(plan, null, 2));
@@ -128,7 +124,7 @@ export async function main(args = process.argv.slice(2)) {
   await new Promise<void>((done) => {
     child.once("error", (error) => {
       console.error(
-        `Could not start cco: ${error.message}. Install cco or run this command in your normal terminal.`,
+        `Could not start bundled cco: ${error.message}. Check the release files and run this command in your normal terminal.`,
       );
       process.exitCode = 1;
       done();

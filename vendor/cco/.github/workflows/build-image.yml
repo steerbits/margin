@@ -1,0 +1,230 @@
+name: Build and Push Docker Image
+
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+  schedule:
+    - cron: '0 2 * * *'  # Daily at 2 AM UTC for fresh Claude Code
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: nikvdp/cco
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        include:
+          - platform: linux/amd64
+            runner: ubuntu-22.04
+          - platform: linux/arm64
+            runner: ubuntu-22.04-arm
+    runs-on: ${{ matrix.runner }}
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 2
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+
+    - name: Log in to Container Registry
+      if: github.event_name != 'pull_request'
+      uses: docker/login-action@v3
+      with:
+        registry: ${{ env.REGISTRY }}
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Extract metadata
+      id: meta
+      uses: docker/metadata-action@v5
+      with:
+        images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+        tags: |
+          type=ref,event=branch
+          type=ref,event=pr
+          type=sha,prefix={{branch}}-
+          type=raw,value=latest,enable={{is_default_branch}}
+          type=raw,value={{sha}}
+          type=raw,value={{sha}}-{{arch}}
+          type=raw,value=latest-{{arch}},enable={{is_default_branch}}
+
+    - name: Prepare build cache sources
+      id: cache_sources
+      run: |
+        # Get current commit SHA (short)
+        CURRENT_SHA=$(git rev-parse --short HEAD)
+        
+        # Try to get previous commit SHA (short), handle first commit case
+        if git rev-parse --short HEAD~1 >/dev/null 2>&1; then
+          PREV_SHA=$(git rev-parse --short HEAD~1)
+        else
+          echo "No previous commit found (likely first commit)"
+          PREV_SHA=""
+        fi
+        
+        # Get architecture suffix for tags
+        ARCH_SUFFIX=$(echo "${{ matrix.platform }}" | cut -d'/' -f2)
+        
+        # Define potential cache sources in order of preference
+        CACHE_SOURCES=()
+        
+        echo "Checking for cache sources for architecture: ${ARCH_SUFFIX}"
+        
+        # 1. Try current commit (arch-specific) - useful for rebuilds
+        if docker manifest inspect ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${CURRENT_SHA}-${ARCH_SUFFIX} >/dev/null 2>&1; then
+          echo "✓ Found cache for current commit: ${CURRENT_SHA}-${ARCH_SUFFIX}"
+          CACHE_SOURCES+=("type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${CURRENT_SHA}-${ARCH_SUFFIX}")
+        else
+          echo "✗ No cache found for current commit: ${CURRENT_SHA}-${ARCH_SUFFIX}"
+        fi
+        
+        # 2. Try previous commit (arch-specific) if it exists
+        if [[ -n "$PREV_SHA" ]]; then
+          if docker manifest inspect ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${PREV_SHA}-${ARCH_SUFFIX} >/dev/null 2>&1; then
+            echo "✓ Found cache for previous commit: ${PREV_SHA}-${ARCH_SUFFIX}"
+            CACHE_SOURCES+=("type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${PREV_SHA}-${ARCH_SUFFIX}")
+          else
+            echo "✗ No cache found for previous commit: ${PREV_SHA}-${ARCH_SUFFIX}"
+          fi
+        fi
+        
+        # 3. Try latest as fallback (arch-specific)
+        if docker manifest inspect ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest-${ARCH_SUFFIX} >/dev/null 2>&1; then
+          echo "✓ Found cache for latest: latest-${ARCH_SUFFIX}"
+          CACHE_SOURCES+=("type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest-${ARCH_SUFFIX}")
+        else
+          echo "✗ No cache found for latest: latest-${ARCH_SUFFIX}"
+        fi
+        
+        # 4. Always include GitHub Actions cache as final fallback
+        CACHE_SOURCES+=("type=gha")
+        echo "✓ Added GitHub Actions cache as fallback"
+        
+        # Convert array to comma-separated string
+        IFS=','
+        CACHE_FROM="${CACHE_SOURCES[*]}"
+        
+        echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+        echo "Final cache sources: ${CACHE_FROM}"
+        echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+        echo "cache_from=${CACHE_FROM}" >> $GITHUB_OUTPUT
+
+    - name: Build and push Docker image
+      id: build
+      uses: docker/build-push-action@v5
+      with:
+        context: .
+        platforms: ${{ matrix.platform }}
+        labels: ${{ steps.meta.outputs.labels }}
+        cache-from: ${{ steps.cache_sources.outputs.cache_from }}
+        cache-to: type=gha,mode=max
+        outputs: type=image,name=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }},push-by-digest=true,name-canonical=true,push=${{ github.event_name != 'pull_request' }}
+        build-args: |
+          HOST_UID=1000
+          HOST_GID=1000
+          CACHE_BUST=${{ github.run_number }}
+
+    - name: Export digest
+      if: github.event_name != 'pull_request'
+      run: |
+        mkdir -p /tmp/digests
+        digest="${{ steps.build.outputs.digest }}"
+        touch "/tmp/digests/${digest#sha256:}"
+
+    - name: Push architecture-specific tags
+      if: github.event_name != 'pull_request'
+      run: |
+        # Get architecture suffix
+        ARCH_SUFFIX=$(echo "${{ matrix.platform }}" | cut -d'/' -f2)
+        
+        # Get current commit SHA (short)
+        CURRENT_SHA=$(git rev-parse --short HEAD)
+        
+        echo "Creating architecture-specific tags for ${ARCH_SUFFIX}"
+        echo "Digest: ${{ steps.build.outputs.digest }}"
+        
+        # Pull the image by digest with error handling
+        if ! docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ steps.build.outputs.digest }}; then
+          echo "Failed to pull image by digest, skipping architecture-specific tagging"
+          exit 0
+        fi
+        
+        # Tag with architecture-specific tags
+        docker tag ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ steps.build.outputs.digest }} \
+          ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${CURRENT_SHA}-${ARCH_SUFFIX}
+        
+        # Push architecture-specific tag
+        echo "Pushing ${CURRENT_SHA}-${ARCH_SUFFIX}"
+        docker push ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${CURRENT_SHA}-${ARCH_SUFFIX}
+        
+        # If on master branch, also push latest-arch tag
+        if [[ "${{ github.ref }}" == "refs/heads/master" ]]; then
+          echo "On master branch, also pushing latest-${ARCH_SUFFIX}"
+          docker tag ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ steps.build.outputs.digest }} \
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest-${ARCH_SUFFIX}
+          docker push ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest-${ARCH_SUFFIX}
+        fi
+        
+        echo "Architecture-specific tagging completed for ${ARCH_SUFFIX}"
+
+    - name: Upload digest
+      if: github.event_name != 'pull_request'
+      uses: actions/upload-artifact@v4
+      with:
+        name: digests-${{ strategy.job-index }}
+        path: /tmp/digests/*
+        if-no-files-found: error
+        retention-days: 1
+
+  merge:
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-22.04
+    needs:
+      - build
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Download digests
+        uses: actions/download-artifact@v4
+        with:
+          path: /tmp/digests
+          pattern: digests-*
+          merge-multiple: true
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=ref,event=branch
+            type=ref,event=pr
+            type=sha,prefix={{branch}}-
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=raw,value={{sha}}
+
+      - name: Create manifest list and push
+        working-directory: /tmp/digests
+        run: |
+          docker buildx imagetools create $(jq -cr '.tags | map("-t " + .) | join(" ")' <<< "$DOCKER_METADATA_OUTPUT_JSON") \
+            $(printf '${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@sha256:%s ' *)

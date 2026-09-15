@@ -107,7 +107,7 @@ export class ProviderAccounts {
   private writable() {
     if (this.readOnly)
       throw new AccountError(
-        "Account changes are disabled by MARGIN_AUTH_READ_ONLY. Restart Margin without it, or use pi /login in Terminal.",
+        "Account changes are disabled by MARGIN_AUTH_READ_ONLY. Restart Margin without it, or use npm run pi, then /login in Terminal.",
       );
     if (this.removing || this.attempt?.running)
       throw new AccountError(
@@ -202,7 +202,7 @@ export class ProviderAccounts {
               ? "Sign-in cancelled."
               : error instanceof AccountError
                 ? error.message
-                : "Sign-in failed. Check your account eligibility, network connection, and Pi credential-file permissions, then try again. For browser login, close any other Pi login using its callback port. You can also use pi /login in Terminal.";
+                : "Sign-in failed. Check your account eligibility, network connection, and Pi credential-file permissions, then try again. For browser login, close any other Pi login using its callback port. You can also use npm run pi, then /login in Terminal.";
       }
     } finally {
       clearTimeout(timer);

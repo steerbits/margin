@@ -10,12 +10,12 @@ Use the pinned **Customize Margin** area for example prompts, installed plugin c
 
 The workspace sidebar currently lists **local project folders**. A conversation runs with its selected folder as Pi's working directory. These entries are not containers or isolated worktrees.
 
-- The source folder `inline-commenting-pi-codex-grill-frame-explore` is displayed as **Margin**. Use **Customize Margin** or select **Margin** in the project dropdown to work on the app.
-- `tool-smoke` is a scratch folder created for the original live edit test. Existing conversations there are retained; do not delete the folder merely to clean up the picker.
+- The application's source folder is displayed as **Margin**. Use **Customize Margin** or select **Margin** in the project dropdown to work on the app.
+- Existing workspaces, including scratch projects, retain their saved conversations. Treat their folders as user files.
 
 Click **New workspace** to open the macOS folder dialog. Select an existing folder or use the dialog's **New Folder** button, then choose **Open workspace**. There is no separate creation form or Margin shortcut in the chooser; **Customize Margin** opens the app source. Cancel keeps your current workspace. Folder creation and location selection happen in the native dialog.
 
-The chooser starts near your previous selection, or `~/Projects` if it exists, otherwise your home folder. `MARGIN_WORKSPACE_PARENT` can supply the initial location. This native chooser currently targets macOS; other platforms can pre-register folders with `npm start -- --project /path/to/project`.
+New workspaces belong outside Margin's source folder, normally under `~/Projects`, and can have their own Git repositories. The chooser uses your last external location, `~/Projects` if it exists, or your home folder. `MARGIN_WORKSPACE_PARENT` can supply another external location. Existing nested workspaces remain accessible so their chats and paths keep working; they are excluded from Margin's Git tracking. Use **Customize Margin** for the app itself.
 
 Unavailable registered folders are omitted from the picker and sidebar. Their saved chats and notes remain stored and return when their folders are available again.
 
@@ -35,15 +35,19 @@ Recently opened chats render immediately from an in-memory cache while their liv
 
 ## Run
 
-Requires Node 22.13+ and cco. Connect a provider in Settings after launching, or reuse an existing Pi login. This prototype pins `@earendil-works/pi-coding-agent` to **0.85.1**; it does not replace your global Pi installation.
+The first installer targets native **macOS** with Node **22.19+** (Node 24 LTS recommended), npm, and Git. Clone this repository into its own folder, then run:
 
 ```sh
-npm ci --ignore-scripts
-npm run build
-npm start
+bash install.sh --start
 ```
 
-Click the connection link printed in Terminal. It opens **http://127.0.0.1:4317** and connects this browser; later refreshes and restarts retain the connection. `npm start` launches a local gateway and starts one cco-wrapped Pi server per active workspace. Run it from a normal Terminal; a process already inside a restrictive sandbox cannot expand its inherited permissions. For development, `npm run dev` provides Vite browser updates; restart after backend/plugin changes. Explicit legacy direct-launch commands remain `npm run start:native` and `npm run dev:native`; `npm run start:single-sandbox` retains the former single cco server launcher.
+The installer installs locked dependencies, builds Margin, verifies the real filesystem sandbox, and starts the app. Pi **0.85.1** and a pinned cco copy are included; no separate global Pi or cco installation is required. It leaves global Node/Git/Pi installations alone and refuses to replace existing dependency/build directories. Later starts use `bash start.sh`.
+
+To create a fresh source copy first, use `bash install.sh --destination /path/to/new-margin --port 49422 --start`. The destination must not exist. This copies source and Git history; saved conversations, local environment files, credentials, and workspaces are omitted. A source repository that still tracks workspace files must have those files untracked first.
+
+**Existing users:** update this repository in place. Keep `.margin-data/`, `.git/`, `workspaces/`, local configuration, and external projects. No chat or path migration is required. The launcher now uses private Pi configuration under `.margin-data/pi/` (or the configured data directory's `pi/` child). Your old global Pi login stays untouched; connect your provider once in Settings after restarting this version. See [preservation and updates](docs/installation.md).
+
+Click the connection link printed in Terminal. The default address is **http://127.0.0.1:4317**. The launcher starts one sandboxed Pi server per active workspace. Run it from a normal Terminal; a restrictive parent sandbox cannot expand its inherited permissions. Development still uses `npm run dev`; restart after backend/plugin changes. The explicit legacy `start:native` command is not an installation fallback.
 
 1. Open a project using the folder button, or select an existing project.
 2. Open the gear beside **Connected** (or **Ready**). Expand **Provider accounts** to sign in or enter an API key, then choose a default model and thinking effort. Start a conversation. Until you choose a default, Margin prefers an available OpenAI Codex model.
@@ -51,9 +55,9 @@ Click the connection link printed in Terminal. It opens **http://127.0.0.1:4317*
 4. Select text in a completed reply and choose **Comment**. Selections can cross formatting, table cells, or code. The button beneath a reply comments on the whole reply.
 5. Save several draft comments, add an optional overall reply, and send them together. Sent comments remain anchored to the original reply when Pi produces a revision.
 
-**Settings**, in the top-right header, saves new-conversation defaults across all workspaces and restarts. Choose a provider/model and a supported thinking effort, or leave **Automatic** / **Pi default** to retain the existing startup behavior. **Save** affects new chats only, including chats started from Customize Margin; **Cancel** and Escape discard edits. Settings are stored in Margin’s database, not your global Pi settings. An unavailable selected model produces an error rather than silently switching providers. **Provider accounts** is expandable (opened automatically when no models are available). Account changes save immediately to Pi, independently of the conversation-default Save/Cancel controls. Default skill remains deferred.
+**Settings**, in the top-right header, saves new-conversation defaults across all workspaces and restarts. Choose a provider/model and a supported thinking effort, or leave **Automatic** / **Pi default** to retain the existing startup behavior. **Save** affects new chats only, including chats started from Customize Margin; **Cancel** and Escape discard edits. Settings are stored in Margin’s database, separately from the private Pi configuration. An unavailable selected model produces an error rather than silently switching providers. **Provider accounts** is expandable (opened automatically when no models are available). Account changes save immediately to Pi, independently of the conversation-default Save/Cancel controls. Default skill remains deferred.
 
-The welcome screen’s **Default from Settings** uses the latest saved defaults. Selecting another model there overrides just the next chat; if it cannot support the default effort, Pi chooses its normal supported effort. The **Thinking** dropdown beside the model selects effort for the current conversation. It shows only supported levels, persists with the session, and is disabled while Pi is working. Neither conversation control changes your saved Margin or global Pi defaults.
+The welcome screen’s **Default from Settings** uses the latest saved defaults. Selecting another model there overrides just the next chat; if it cannot support the default effort, Pi chooses its normal supported effort. The **Thinking** dropdown beside the model selects effort for the current conversation. It shows only supported levels, persists with the session, and is disabled while Pi is working. Neither conversation control changes your saved Margin or private Pi defaults.
 
 Inline comments are sent as a normal user message: a short instruction followed by JSON with `inlineComments` (original `messageId`, `quotedPassage`, and `comment`) and `overallReply`. Visual highlighting and offsets stay in Margin; the model receives the quotations and feedback.
 
@@ -69,6 +73,27 @@ The agent receives a JSON manifest containing the message and each file's name, 
 
 After updating, build and restart Margin with your usual launch command, then refresh the browser.
 
+## Installation instructions for a coding agent
+
+When asked to install this project:
+
+1. Read this README and `install.sh`. Use a standalone Git clone so Customize Margin retains repository history.
+2. Confirm macOS, usable Node/npm, and Git. Use existing compatible tools. If a prerequisite is missing, explain the exact missing tool and help install it within the user's authorization.
+3. For a fresh checkout, run `bash install.sh --start`, or use `--destination` with a new folder. Never overwrite an existing destination or delete a partial install to make a retry pass.
+4. If your host blocks native sandbox execution, `--prepare-only` can finish dependencies/build. Report it as **prepared, sandbox not verified**, and give the user `bash /absolute/path/start.sh` to run in a normal Terminal. Do not use `start:native`, a fake cco, or disabled protections as a fallback.
+5. Have the user complete sign-in in **Settings → Provider accounts**. Do not request tokens in chat, copy global credentials automatically, or silently switch billing providers.
+6. Verify the connection link, first reply, a simple workspace file, and saved chat/notes after a restart. Report exactly which checks passed and what remains manual.
+
+Existing installations are an update task. Preserve their data and Git history; do not use `git reset --hard`, `git clean`, or delete saved data, workspaces, uploads, or configuration to solve an installation problem. The installer refuses to replace existing dependencies/builds. Investigate the actual failure and use a fresh disposable checkout for validation.
+
+This minimal release retains normal project/global skill discovery and inherited provider environment variables. Private saved Pi configuration does not isolate every host resource. Docker is deferred; use [Docker installation notes](docs/docker-installation-notes.md) when explicitly asked to adapt it.
+
+## Preparing a GitHub repository
+
+Keep the existing `.git` directory and publish the reviewed source branch; moving to a different folder is unnecessary. Saved data, workspaces, dependencies, generated builds, local environment files, and backup archives are excluded from Git. Check `git status` before committing, including any custom files outside these standard directories. Ignore rules do not remove files already tracked by Git. Workspace tracking should be empty (`git ls-files workspaces`); each project manages its own repository independently.
+
+A normal source push does not back up local `refs/margin/checkpoints/` or private data. Keep those backups separately. Do not use a mirror push to publish personal checkpoint refs.
+
 ## Review generated artifacts
 
 **Click a generated Markdown/HTML file or HTTP localhost app link in the agent's reply** to open it in a large browser-like review overlay. Ordinary output links work without manually registering a path/URL; the agent can also use `present_artifact`. The **Artifacts** toolbar button appears once the conversation has artifacts and reopens its reviews. Nothing opens automatically before you click.
@@ -81,13 +106,13 @@ After updating the source, run `npm run build`, finish active agent work, restar
 
 ## Skills and authentication
 
-Margin uses Pi's own skill discovery, including `~/.pi/agent/skills/`, project `.pi/skills/`, and configured sources. The picker applies the selected skill to the **next message**; its instructions then remain in Pi's conversation. Reload skills with the refresh icon next to the picker. The bundled **Shape with me** skill lives in `skills/shape-with-me/SKILL.md` (skill identifier: `shape-with-me`). It is the default for a new chat’s first message; adding or choosing another skill does not change that default. If it is deleted or unavailable, new chats select **No skill**. Sending a message clears the picker, while the invoked instructions remain in the conversation. As before, your own Pi skills can be added without changing the app.
+Margin uses Pi's own skill discovery, including `.margin-data/pi/skills/`, project `.pi/skills/`, and configured sources. The picker applies the selected skill to the **next message**; its instructions then remain in Pi's conversation. Reload skills with the refresh icon next to the picker. The bundled **Shape with me** skill lives in `skills/shape-with-me/SKILL.md` (skill identifier: `shape-with-me`). It is the default for a new chat’s first message; adding or choosing another skill does not change that default. If it is deleted or unavailable, new chats select **No skill**. Sending a message clears the picker, while the invoked instructions remain in the conversation. As before, your own Pi skills can be added without changing the app.
 
 **Shape with me** combines clarification questions and automated evaluation with a compact default approach, concrete previews and alternatives, and an invitation to bring a real case that might reveal missing assumptions. It also summarizes what feedback actually changed in chat. The former **Think with me** skill has been removed.
 
-Open **Settings → Provider accounts**, search/select a provider, and choose one of the login methods exposed by Pi. Browser authorization, device codes, authorization-code/redirect-URL fallback, and API-key/configuration prompts use one generic SDK adapter. This includes ChatGPT/Codex, Claude, xAI/Grok, GitHub Copilot, OpenRouter, Kimi Code, and Pi's API-key providers. Providers configured through your global Pi model configuration are discovered too; project-only provider extensions are not loaded by the gateway. See [provider account setup](docs/provider-accounts.md).
+Open **Settings → Provider accounts**, search/select a provider, and choose one of the login methods exposed by Pi. Browser authorization, device codes, authorization-code/redirect-URL fallback, and API-key/configuration prompts use one generic SDK adapter. This includes ChatGPT/Codex, Claude, xAI/Grok, GitHub Copilot, OpenRouter, Kimi Code, and Pi's API-key providers. Providers configured through the private Pi model configuration are discovered too; project-only provider extensions are not loaded by the gateway. See [provider account setup](docs/provider-accounts.md).
 
-Credentials stay in Pi's server-side authentication storage, normally `~/.pi/agent/auth.json`, and remain shared with terminal Pi. `pi` → `/login` still works; refresh accounts/models afterwards. Reconnecting replaces that provider's saved login; **Remove saved login…** requires confirmation and also affects terminal Pi. External/environment credentials may still provide access after removal. Account changes do not change existing conversations' model selections, and Margin does not silently switch providers when a request fails.
+Credentials stay in Pi's server-side authentication storage, normally `.margin-data/pi/auth.json`, and stay private to this installation. `npm run pi` → `/login` still works; refresh accounts/models afterwards. Reconnecting replaces that provider's saved login; **Remove saved login…** requires confirmation and also affects the bundled Pi CLI. External/environment credentials may still provide access after removal. Account changes do not change existing conversations' model selections, and Margin does not silently switch providers when a request fails.
 
 `openai-codex` uses eligible ChatGPT/Codex subscriptions; `openai` is a separate API-key provider. Pi currently documents Claude Pro/Max third-party authentication as drawing from **separately billed extra usage**, not included plan limits. OpenRouter browser sign-in creates an API key billed from credits; a consumer Gemini subscription is not a Gemini API key. Live Claude/Grok inference and real vendor sign-ins have not been verified by this change. See [Pi provider documentation](https://pi.dev/docs/latest/providers).
 
@@ -113,7 +138,7 @@ Use `npm run dev` while iterating. For the production server, rebuild with `npm 
 
 Background-agent primitives exist in the plugin API, but the default main agent does **not** have a built-in subagent spawning tool. Installing a compatible Pi extension or adding a plugin that exposes that tool is still necessary for model-driven delegation.
 
-For a new skill, add `~/.pi/agent/skills/my-skill/SKILL.md` for global use, or `<project>/.pi/skills/my-skill/SKILL.md` for one project, then use **Reload skills**. Give the file `name` and `description` frontmatter followed by its instructions.
+For a new skill, add `.margin-data/pi/skills/my-skill/SKILL.md` for all workspaces in this installation, or `<project>/.pi/skills/my-skill/SKILL.md` for one project, then use **Reload skills**. Give the file `name` and `description` frontmatter followed by its instructions.
 
 Margin runs Pi and server plugins inside each workspace's cco-wrapped Node process. The small local gateway handles browser authentication, Pi provider-account setup, folder selection, storage registration, and worker lifecycle; it does not execute agent sessions or server plugins. Native cco defaults allow reading the host filesystem and directly modifying the primary project, explicitly added folders, and normal state/temp paths; network behavior remains unchanged. There are no extra command approvals or Apply/Discard steps. A direct `start:native` launch only has inherited OS restrictions. Skill instructions to wait remain behavioral instructions, separate from cco's enforced boundary.
 
