@@ -37,6 +37,10 @@ The guardian stays active while post-shell-exit output is still arriving. Normal
 
 This is not a general OS process sandbox or an exactly-once guarantee for external effects. Deliberately detached/reparented processes, custom tools or extensions that bypass the default Bash tool, and quiet background services intentionally left running after a completed command retain their own lifecycle behavior. Saved tool results are not proof that every external side effect is reversible.
 
+## Laptop sleep and network failures
+
+Sleep is not evidence that a runtime died. Browser wake reconnection and bounded recovery from model-network failures inside a living worker are described in [laptop sleep recovery](sleep-recovery.md). They do not start a replacement worker or reset the crash-recovery budget below.
+
 ## When automatic continuation happens
 
 An unexpectedly interrupted **active** run can receive one automatic continuation prompt when its conversation is loaded, after safe worker takeover. The prompt tells Pi to continue the original task from saved history/current files, verify existing results, and not blindly repeat actions or expand scope. It does not submit newer composer drafts or draft feedback.

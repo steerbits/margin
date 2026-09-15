@@ -78,6 +78,31 @@ test("offline browser catches up to a completed run without reload, resend, or l
   ).toHaveLength(count);
 });
 
+test("wake reattaches to an active run without starting a second one", async ({
+  page,
+}) => {
+  const id = await seed(page, { responseDelay: 3000 });
+  await page
+    .getByRole("textbox", { name: "Message Pi", exact: true })
+    .fill("One run only");
+  await page.getByRole("button", { name: "Send message", exact: true }).click();
+  await expect(
+    page.getByRole("button", { name: "Stop", exact: true }),
+  ).toBeVisible();
+  await wake(page);
+  await expect(page.locator(".connection")).toHaveText("Connected");
+  await expect(
+    page.getByRole("button", { name: "Stop", exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Revised direction" }),
+  ).toBeAttached();
+  const state = await (await page.request.get(`/api/sessions/${id}`)).json();
+  expect(
+    state.messages.filter((m: { role: string }) => m.role === "user"),
+  ).toHaveLength(2);
+});
+
 test("wake preserves a not-yet-saved inline comment and opens only one replacement stream", async ({
   page,
 }) => {
