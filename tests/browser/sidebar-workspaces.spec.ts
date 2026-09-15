@@ -329,9 +329,10 @@ test("real cross-workspace switching and search preserve drafts and discover a n
       .getByRole("button", { name: "Comment on reply", exact: true })
       .click();
     await page.getByLabel("Inline comment").fill("Keep this unsent comment");
+    const commentUrl = page.url();
     await search(page).fill(project.name);
     await search(page).press("Enter");
-    await expect(page).toHaveURL(new RegExp(`/chats/${seed.id}$`));
+    await expect(page).toHaveURL(commentUrl);
     await expect(page.getByLabel("Inline comment")).toHaveValue(
       "Keep this unsent comment",
     );
