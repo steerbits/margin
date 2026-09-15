@@ -103,6 +103,7 @@ test("two deduplicated sections have soft caps, expansion, tooltip context and l
   page,
 }) => {
   const data = await fixture(page);
+  await expect(page.locator(".section-active-count")).toHaveCount(0);
   await expect(other(page).locator("button")).toHaveCount(10);
   await expect(current(page).locator("button").first()).toHaveAttribute(
     "data-session-id",
@@ -160,10 +161,67 @@ test("two deduplicated sections have soft caps, expansion, tooltip context and l
   await expect(
     row(page, running.id).locator(".conversation-spinner"),
   ).toHaveCount(0);
+  await expect(page.locator(".section-active-count")).toHaveCount(0);
   await page.screenshot({
     path: ".margin-data/sidebar-workspaces-desktop.png",
     fullPage: true,
   });
+});
+
+test("active counts appear only when active rows are outside the list viewport", async ({
+  page,
+}) => {
+  const data = await fixture(page, 4, 6);
+  const localCount = page.locator(
+    ".current-workspace-chats .section-active-count",
+  );
+  const otherCount = page.locator(
+    ".other-workspace-chats .section-active-count",
+  );
+  await expect(localCount).toHaveCount(0);
+  await expect(otherCount).toHaveCount(0);
+
+  await page.setViewportSize({ width: 1440, height: 650 });
+  await expect(localCount).toHaveText("4 active");
+  await expect(otherCount).toHaveText("6 active");
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await expect(localCount).toHaveCount(0);
+  await expect(otherCount).toHaveCount(0);
+
+  // Inactive-row overflow alone is not a reason to show the count.
+  await other(page).evaluate((list) => {
+    list.scrollTop = list.scrollHeight;
+  });
+  await expect(otherCount).toHaveText("6 active");
+  await other(page).evaluate((list) => {
+    list.scrollTop = 0;
+  });
+  await expect(otherCount).toHaveCount(0);
+
+  await page
+    .locator(".current-workspace-chats")
+    .getByRole("button", { name: "Show all (8)" })
+    .click();
+  await expect(localCount).toHaveCount(0);
+  await current(page).evaluate((list) => {
+    list.scrollTop = list.scrollHeight;
+  });
+  await expect(localCount).toHaveText("4 active");
+  await page
+    .locator(".current-workspace-chats")
+    .getByRole("button", { name: "Show less" })
+    .click();
+  await expect(localCount).toHaveCount(0);
+
+  // Completing offscreen activity clears the cue, without requiring a scroll.
+  await other(page).evaluate((list) => {
+    list.scrollTop = list.scrollHeight;
+  });
+  await expect(otherCount).toHaveText("6 active");
+  for (const session of data.sessions)
+    if (session.projectId !== data.projects[0].id)
+      session.activity = { status: "finished" };
+  await expect(otherCount).toHaveCount(0);
 });
 
 test("all active chats remain in independently scrollable lists, including on short and mobile screens", async ({
@@ -177,6 +235,12 @@ test("all active chats remain in independently scrollable lists, including on sh
     { width: 390, height: 667 },
   ]) {
     await page.setViewportSize(viewport);
+    await expect(
+      page.locator(".current-workspace-chats .section-active-count"),
+    ).toHaveText("7 active");
+    await expect(
+      page.locator(".other-workspace-chats .section-active-count"),
+    ).toHaveText("13 active");
     const geometry = await page.evaluate(() => {
       const a = document.querySelector<HTMLElement>(
         ".current-workspace-chats .session-list",

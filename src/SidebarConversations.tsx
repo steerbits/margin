@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Search, X } from "lucide-react";
 import type { Project, SessionActivity, SessionInfo } from "../shared/types.ts";
 import {
@@ -16,6 +16,49 @@ const statusLabels = {
   failed: "Failed",
   stopped: "Stopped",
 };
+
+/** The count is an overflow cue, not a duplicate of already-visible indicators. */
+function ActiveConversationCount({
+  listId,
+  activeIds,
+}: {
+  listId: string;
+  activeIds: string[];
+}) {
+  const [hasHiddenActive, setHasHiddenActive] = useState(false);
+  const activeKey = JSON.stringify([...activeIds].sort());
+  useEffect(() => {
+    const list = document.getElementById(listId);
+    if (!list) return;
+    const ids = new Set<string>(JSON.parse(activeKey));
+    const rows = Array.from(
+      list.querySelectorAll<HTMLButtonElement>("[data-session-id]"),
+    ).filter((row) => ids.has(row.dataset.sessionId!));
+    const fullyVisible = new Set<Element>();
+    setHasHiddenActive(false);
+    const observer = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          if (entry.isIntersecting && entry.intersectionRatio >= 1)
+            fullyVisible.add(entry.target);
+          else fullyVisible.delete(entry.target);
+        }
+        setHasHiddenActive(rows.some((row) => !fullyVisible.has(row)));
+      },
+      { root: list, threshold: 1 },
+    );
+    for (const row of rows) observer.observe(row);
+    return () => observer.disconnect();
+  }, [listId, activeKey]);
+  return hasHiddenActive && activeIds.length > 0 ? (
+    <span
+      className="section-active-count"
+      title="Some active chats are out of view. Scroll to see them."
+    >
+      {activeIds.length} active
+    </span>
+  ) : null;
+}
 
 export function SidebarConversations({
   sessions,
@@ -123,7 +166,7 @@ export function SidebarConversations({
   ) {
     const visible = visibleConversations(items, limit, expanded, selected);
     const collapsed = visibleConversations(items, limit, false, selected);
-    const active = items.filter(isActiveConversation).length;
+    const activeIds = items.filter(isActiveConversation).map((s) => s.id);
     return (
       <section
         className={`sidebar-chat-section ${id}`}
@@ -131,9 +174,10 @@ export function SidebarConversations({
       >
         <div className="section-label" id={`${id}-heading`}>
           <span>{title}</span>
-          {active > 0 && (
-            <span className="section-active-count">{active} active</span>
-          )}
+          <ActiveConversationCount
+            listId={`${id}-list`}
+            activeIds={activeIds}
+          />
         </div>
         <nav className="session-list" id={`${id}-list`} aria-label={title}>
           {visible.map(row)}
