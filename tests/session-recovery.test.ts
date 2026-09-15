@@ -71,6 +71,7 @@ function fixture() {
     changed() {},
     agent: {
       sessionManager: manager,
+      autoRetryEnabled: true,
       async prompt(text: string, options: unknown) {
         prompts++;
         assert.ok(text.includes("previously requested task"));
@@ -96,6 +97,150 @@ function fixture() {
     },
   };
 }
+const usage = {
+  input: 0,
+  output: 0,
+  cacheRead: 0,
+  cacheWrite: 0,
+  totalTokens: 0,
+  cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+};
+function modelResult(f: ReturnType<typeof fixture>, error?: string) {
+  f.manager.appendMessage({
+    role: "assistant",
+    content: [{ type: "text", text: error ? "" : "Recovered result" }],
+    api: "openai-codex-responses",
+    provider: "openai-codex",
+    model: "fixture",
+    usage,
+    stopReason: error ? "error" : "stop",
+    errorMessage: error,
+    timestamp: Date.now(),
+  });
+  f.l.onEvent({ type: "agent_settled" });
+}
+const flush = async () => {
+  for (let i = 0; i < 15; i++) await Promise.resolve();
+};
+
+test("network wait stays active after SDK settlement, resumes once, and never sends newer drafts", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const f = fixture();
+  try {
+    const prompts: string[] = [];
+    f.l.agent.prompt = async (text: string) => {
+      prompts.push(text);
+      modelResult(f);
+    };
+    const run = f.l.runPrompt(async () =>
+      modelResult(f, "WebSocket idle timeout after 300000ms"),
+    );
+    await flush();
+    assert.equal(f.l.busy, true);
+    assert.equal(f.store.get("interrupted", "session"), true);
+    assert.match(f.l.ui.statuses.network, /Retrying in 15s/);
+    t.mock.timers.tick(15_000);
+    await run;
+    assert.equal(prompts.length, 1);
+    assert.match(prompts[0], /previously requested task/);
+    assert.doesNotMatch(prompts[0], /Do not send this new draft/);
+    assert.equal(
+      f.store.get("composer", "session"),
+      "Do not send this new draft",
+    );
+    assert.equal(f.l.busy, false);
+    assert.equal(f.l.ui.statuses.network, undefined);
+    assert.equal(f.l.messages.at(-1).text, "Recovered result");
+  } finally {
+    f.close();
+  }
+});
+
+test("Stop during network backoff cancels continuation and remains stopped after time advances", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const f = fixture();
+  try {
+    const run = f.l.runPrompt(async () => modelResult(f, "fetch failed"));
+    await flush();
+    await f.l.stop();
+    await run;
+    t.mock.timers.tick(100_000);
+    assert.equal(f.prompts(), 0);
+    assert.equal(f.l.busy, false);
+    assert.equal(
+      f.store.get<RecoverableRun>("run-recovery", "session")?.active,
+      false,
+    );
+  } finally {
+    f.close();
+  }
+});
+
+for (const condition of [
+  "uncertain-tool",
+  "new-question",
+  "background",
+  "retry-disabled",
+  "non-network",
+] as const) {
+  test(`adapter refuses network continuation for ${condition}`, async (t) => {
+    t.mock.timers.enable({ apis: ["setTimeout"] });
+    const f = fixture();
+    let question: Promise<unknown> | undefined;
+    try {
+      if (condition === "uncertain-tool") f.recoveryRun.toolStarted("call");
+      if (condition === "retry-disabled") f.l.agent.autoRetryEnabled = false;
+      const run = f.l.runPrompt(async () =>
+        modelResult(
+          f,
+          condition === "non-network" ? "401 unauthorized" : "fetch failed",
+        ),
+      );
+      await flush();
+      // Arrives after backoff started: the post-wait guard must catch it.
+      if (condition === "new-question")
+        question = f.l.ui.request("confirm", "A new question");
+      if (condition === "background") f.l.childOperations++;
+      t.mock.timers.tick(15_000);
+      await run;
+      assert.equal(f.prompts(), 0);
+      if (condition === "new-question") assert.equal(f.l.ui.dialogs.size, 1);
+    } finally {
+      f.l.ui.cancelAll();
+      await question;
+      f.close();
+    }
+  });
+}
+
+test("persistent network failure exhausts exactly three extra rounds with an actionable notice", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const f = fixture();
+  try {
+    let attempts = 0;
+    f.l.agent.prompt = async () => {
+      attempts++;
+      modelResult(f, "fetch failed");
+    };
+    const run = f.l.runPrompt(async () => modelResult(f, "fetch failed"));
+    await flush();
+    for (const ms of [15_000, 30_000, 60_000]) {
+      t.mock.timers.tick(ms);
+      await flush();
+    }
+    await run;
+    assert.equal(attempts, 3);
+    assert.equal(f.l.busy, false);
+    assert.ok(
+      f.l.ui.notices.some((n: any) => n.text.includes("retries are exhausted")),
+    );
+    t.mock.timers.tick(600_000);
+    assert.equal(attempts, 3);
+  } finally {
+    f.close();
+  }
+});
+
 test("adapter automatically prompts exactly once, keeps a new draft private and returns idle", async () => {
   const f = fixture();
   try {

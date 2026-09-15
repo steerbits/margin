@@ -32,6 +32,70 @@ function fixture() {
     },
   };
 }
+test("network retries have a durable cap, survive worker replacement, and only human sends reset it", () => {
+  const f = fixture();
+  try {
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      assert.equal(f.run.networkDecision(pending, () => true).attempt, attempt);
+      assert.equal(
+        f.run.networkDecision(pending, () => true, true).resume,
+        true,
+      );
+    }
+    assert.match(
+      f.run.networkDecision(pending, () => true).reason,
+      /exhausted/,
+    );
+    const next = f.reopen();
+    assert.equal(next.prepare(pending, () => true, new Set()).resume, true);
+    assert.match(next.networkDecision(pending, () => true).reason, /exhausted/);
+    next.begin("new-human-send");
+    assert.equal(
+      next.networkDecision(
+        { ...pending, batchId: "new-human-send" },
+        () => true,
+      ).attempt,
+      1,
+    );
+  } finally {
+    f.close();
+  }
+});
+for (const condition of [
+  "stop",
+  "tool",
+  "question",
+  "background",
+  "missing-input",
+  "unaccepted",
+  "wrong-batch",
+] as const) {
+  test(`network recovery refuses ${condition} before reserving or prompting`, () => {
+    const f = fixture();
+    try {
+      if (condition === "stop") f.run.cancel();
+      if (condition === "tool") f.run.toolStarted("uncertain");
+      if (condition === "question") f.run.waiting(true, false);
+      if (condition === "background") f.run.waiting(false, true);
+      const input = {
+        ...pending,
+        accepted: condition !== "unaccepted",
+        batchId: condition === "wrong-batch" ? "other" : "run",
+      };
+      assert.equal(
+        f.run.networkDecision(input, () => condition !== "missing-input", true)
+          .resume,
+        false,
+      );
+      assert.equal(
+        f.store.get<RecoverableRun>("run-recovery", "session")?.networkAttempts,
+        0,
+      );
+    } finally {
+      f.close();
+    }
+  });
+}
 test("safe interrupted work consumes a durable single recovery attempt before prompting", () => {
   const f = fixture();
   try {

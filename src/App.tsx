@@ -40,6 +40,7 @@ import type {
   ExecutionInfo,
 } from "../shared/types.ts";
 import { api } from "./api.ts";
+import { connectConversation } from "./conversation-connection.ts";
 import { ArtifactLauncher } from "./ArtifactReview.tsx";
 import {
   destinationUrl,
@@ -467,51 +468,44 @@ export function App() {
     }
     localStorage.setItem("margin.session", sessionId);
     if (!histories.get(sessionId)) void prefetchSession(sessionId);
-    let closed = false;
-    const stream = new EventSource(`/api/sessions/${sessionId}/events`);
-    stream.onerror = () => {
-      if (!closed) setConnected(false);
-    };
-    stream.onmessage = (e) => {
-      if (closed || deletedSessions.has(sessionId)) return;
-      const { snapshot: s } = JSON.parse(e.data) as { snapshot: Snapshot };
-      histories.put(s);
-      if (selectedId.current !== s.session.id) return;
-      setConnected(true);
-      setSnapshot(s);
-      snapshotRef.current = s;
-      if (!s.busy && !skillChosen.current) {
-        const choice = s.messages.some((m) => m.role === "user")
-          ? ""
-          : defaultSkill(s.skills);
-        setSkill(choice);
-        skillChoices.set(s.session.id, choice);
-        skillChosen.current = true;
-      } else
-        setSkill((current) =>
-          s.skills.some((x) => x.name === current) ? current : "",
+    return connectConversation({
+      sessionId,
+      onConnection: setConnected,
+      onSnapshot: (s) => {
+        if (deletedSessions.has(sessionId)) return;
+        histories.put(s);
+        if (selectedId.current !== s.session.id) return;
+        setSnapshot(s);
+        snapshotRef.current = s;
+        if (!s.busy && !skillChosen.current) {
+          const choice = s.messages.some((m) => m.role === "user")
+            ? ""
+            : defaultSkill(s.skills);
+          setSkill(choice);
+          skillChoices.set(s.session.id, choice);
+          skillChosen.current = true;
+        } else
+          setSkill((current) =>
+            s.skills.some((x) => x.name === current) ? current : "",
+          );
+        const pending = pendingDrafts.get(s.session.id);
+        const text = pendingDrafts.text(
+          s.session.id,
+          s.composer,
+          s.composerRevision,
         );
-      const pending = pendingDrafts.get(s.session.id);
-      const text = pendingDrafts.text(
-        s.session.id,
-        s.composer,
-        s.composerRevision,
-      );
-      setDraft(text);
-      draftRef.current = text;
-      dirty.current = !!pending;
-      setBoot((b) => ({
-        ...b,
-        sessions: [
-          s.session,
-          ...b.sessions.filter((x) => x.id !== s.session.id),
-        ],
-      }));
-    };
-    return () => {
-      closed = true;
-      stream.close();
-    };
+        setDraft(text);
+        draftRef.current = text;
+        dirty.current = !!pending;
+        setBoot((b) => ({
+          ...b,
+          sessions: [
+            s.session,
+            ...b.sessions.filter((x) => x.id !== s.session.id),
+          ],
+        }));
+      },
+    });
   }, [sessionId, loaded]);
   const navigationHandler = useRef<
     (next: AppRoute, index?: number) => Promise<void>

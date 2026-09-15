@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import type { Store } from "./store.ts";
 import type { PendingInput } from "./recovery.ts";
 import type { RuntimeRecovery } from "./runtime-owner.ts";
+import { networkRetryDelays } from "./network-recovery.ts";
 
 export interface RecoverableRun {
   version: 1;
@@ -9,6 +10,7 @@ export interface RecoverableRun {
   generation: string;
   active: boolean;
   attempts: number;
+  networkAttempts?: number;
   tools: string[];
   dialog: boolean;
   background: boolean;
@@ -37,6 +39,7 @@ export class RunRecovery {
       generation: this.generation,
       active: true,
       attempts: 0,
+      networkAttempts: 0,
       tools: [],
       dialog: false,
       background: false,
@@ -75,6 +78,48 @@ export class RunRecovery {
     if (!this.active) return;
     this.state!.active = false;
     this.save();
+  }
+  networkDecision(
+    pending: PendingInput | undefined,
+    entryExists: (id: string) => boolean,
+    reserve = false,
+  ): { resume: boolean; reason: string; attempt: number; delayMs: number } {
+    const run = this.state;
+    const attempt = (run?.networkAttempts ?? 0) + 1;
+    const no = (reason: string) => ({
+      resume: false,
+      reason,
+      attempt,
+      delayMs: 0,
+    });
+    if (!this.active) return no("The run is no longer active.");
+    if (run!.dialog || run!.background)
+      return no(
+        "A question or background/plugin operation needs attention. Review before continuing.",
+      );
+    if (run!.tools.length)
+      return no(
+        "A tool has no saved result and its effects are uncertain. Inspect the workspace before continuing; it has not been replayed.",
+      );
+    if (
+      !pending?.accepted ||
+      !pending.persistedUserId ||
+      pending.batchId !== run!.id ||
+      !entryExists(pending.persistedUserId)
+    )
+      return no(
+        "The original input could not be confirmed saved. Check the conversation before sending again.",
+      );
+    const delayMs = networkRetryDelays[attempt - 1];
+    if (delayMs === undefined)
+      return no(
+        "Automatic connection retries are exhausted. When the connection is available, send a message to continue from saved work.",
+      );
+    if (reserve) {
+      run!.networkAttempts = attempt;
+      this.save();
+    }
+    return { resume: true, reason: "", attempt, delayMs };
   }
   prepare(
     pending: PendingInput | undefined,

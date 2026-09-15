@@ -75,7 +75,7 @@ export function snapshotStream<T>(
   return {
     send,
     heartbeat: () => {
-      if (!blocked) write(": keepalive\n\n");
+      if (!blocked) write("event: heartbeat\ndata: {}\n\n");
     },
     close,
   };

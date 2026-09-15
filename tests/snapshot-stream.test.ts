@@ -46,7 +46,7 @@ test("backpressure retains only the latest snapshot, defers serialization and sk
   assert.deepEqual(res.writes, ["0", "10000"]);
   s.send(10001);
   s.heartbeat();
-  assert.deepEqual(res.writes.slice(-2), ["10001", ": keepalive\n\n"]);
+  assert.deepEqual(res.writes.slice(-2), ["10001", "event: heartbeat\ndata: {}\n\n"]);
   res.destroy();
   s.close();
   s.send(10002);

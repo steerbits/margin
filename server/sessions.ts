@@ -42,6 +42,12 @@ import { RunRecovery, recoveryPrompt } from "./run-recovery.ts";
 import type { RuntimeOwner, RuntimeRecovery } from "./runtime-owner.ts";
 import { managedShell } from "./managed-shell.ts";
 import { automaticModel, thinkingLevels } from "../shared/settings.ts";
+import {
+  isNetworkInterruption,
+  networkRecoveryPrompt,
+  networkRetryDelays,
+  waitForNetworkRetry,
+} from "./network-recovery.ts";
 
 export class LiveSession implements AgentBackend {
   events = new EventEmitter();
@@ -61,6 +67,7 @@ export class LiveSession implements AgentBackend {
   private disposing = false;
   private recoveryRun: RunRecovery;
   private autoResume = false;
+  private promptController?: AbortController;
   private submitting?: { comments: Comment[]; note: string };
   constructor(
     public info: SessionInfo,
@@ -322,12 +329,87 @@ export class LiveSession implements AgentBackend {
         );
         return;
       }
-      await this.agent.prompt(recoveryPrompt, { expandPromptTemplates: false });
+      await this.runPrompt(() =>
+        this.agent.prompt(recoveryPrompt, { expandPromptTemplates: false }),
+      );
     } catch (error) {
       this.ui.notify(errorText(error), "error");
     } finally {
       this.recoveryRun.finish();
       this.busy = false;
+      this.refreshMessages();
+      this.persist();
+      this.changed();
+    }
+  }
+  /** Own the whole accepted run, including offline waits. Browser subscriptions
+   * never invoke this method. All continuations use public SDK prompting and
+   * saved context, not replay of the original send or an in-flight tool.
+   */
+  private async runPrompt(start: () => Promise<void>) {
+    if (this.promptController) throw new Error("A run is already active.");
+    const controller = new AbortController();
+    this.promptController = controller;
+    const decision = (reserve = false) => {
+      this.trackWaiting();
+      return this.recoveryRun.networkDecision(
+        this.store.get<PendingInput>("pending-input", this.info.id),
+        (id) => !!this.agent.sessionManager.getEntry(id),
+        reserve,
+      );
+    };
+    try {
+      await start();
+      while (
+        !controller.signal.aborted &&
+        !this.disposing &&
+        this.recoveryRun.active
+      ) {
+        const last = this.agent.sessionManager
+          .getBranch()
+          .findLast((entry) => entry.type === "message");
+        if (last?.type !== "message" || !isNetworkInterruption(last.message))
+          break;
+        // Respect the person's existing Pi retry opt-out.
+        if (!this.agent.autoRetryEnabled) break;
+        const next = decision();
+        if (!next.resume) {
+          this.ui.notify(`Network recovery paused. ${next.reason}`, "warning");
+          break;
+        }
+        this.ui.statuses.network = `Model connection interrupted. Retrying in ${next.delayMs / 1000}s (${next.attempt}/${networkRetryDelays.length})… Stop cancels.`;
+        this.changed();
+        await waitForNetworkRetry(next.delayMs, controller.signal);
+        if (
+          controller.signal.aborted ||
+          this.disposing ||
+          !this.recoveryRun.active
+        )
+          break;
+        this.assertOwnership();
+        // Recheck after waiting, and reserve durably before any async prompt.
+        // A question, plugin operation, Stop, or a crash cannot reset the budget.
+        const reserved = decision(true);
+        if (!reserved.resume) {
+          this.ui.notify(
+            `Network recovery paused. ${reserved.reason}`,
+            "warning",
+          );
+          break;
+        }
+        this.ui.statuses.network = `Retrying model connection (${reserved.attempt}/${networkRetryDelays.length})…`;
+        this.changed();
+        await this.agent.prompt(networkRecoveryPrompt, {
+          expandPromptTemplates: false,
+        });
+      }
+    } finally {
+      delete this.ui.statuses.network;
+      this.promptController = undefined;
+      this.recoveryRun.finish();
+      this.busy = false;
+      this.live = undefined;
+      this.liveTools.clear();
       this.refreshMessages();
       this.persist();
       this.changed();
@@ -343,7 +425,8 @@ export class LiveSession implements AgentBackend {
       this.assertOwnership();
       this.recoveryRun.toolStarted(e.toolCallId);
     }
-    if (e.type === "message_update" && e.message?.role === "assistant")
+    if (e.type === "message_update" && e.message?.role === "assistant") {
+      delete this.ui.statuses.network;
       this.live = {
         id: `stream:${this.info.id}`,
         role: "assistant",
@@ -354,6 +437,7 @@ export class LiveSession implements AgentBackend {
           .join("\n"),
         streaming: true,
       };
+    }
     if (e.type === "message_end")
       queueMicrotask(() => {
         if (e.message?.role === "assistant") this.live = undefined;
@@ -429,8 +513,10 @@ export class LiveSession implements AgentBackend {
       this.ui.statuses.retry = `Retrying (${e.attempt}/${e.maxAttempts})…`;
     if (e.type === "auto_retry_end") delete this.ui.statuses.retry;
     if (e.type === "agent_settled") {
-      this.recoveryRun.finish();
-      this.busy = false;
+      // SDK retries have settled, but Margin may still own a network wait.
+      if (!this.promptController) this.recoveryRun.finish();
+      this.busy =
+        !!this.promptController && !this.promptController.signal.aborted;
       this.live = undefined;
       this.liveTools.clear();
       this.refreshMessages();
@@ -595,8 +681,8 @@ export class LiveSession implements AgentBackend {
     this.persist();
     this.changed();
     let accepted = false;
-    void this.agent
-      .prompt(prompt, {
+    void this.runPrompt(() =>
+      this.agent.prompt(prompt, {
         preflightResult: (ok) => {
           accepted = ok;
           this.store.markBatch(
@@ -636,7 +722,8 @@ export class LiveSession implements AgentBackend {
           this.submitting = undefined;
           this.changed();
         },
-      })
+      }),
+    )
       .catch((e) => {
         this.ui.notify(errorText(e), "error");
         if (!accepted) this.store.markBatch(this.info.id, batch.id, "rejected");
@@ -698,6 +785,7 @@ export class LiveSession implements AgentBackend {
     // must not transform the user's Stop into an automatic continuation.
     this.autoResume = false;
     this.recoveryRun.cancel();
+    this.promptController?.abort();
     this.store.put("interrupted", this.info.id, false);
     this.ui.cancelAll();
     if (this.agent) {
