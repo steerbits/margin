@@ -180,7 +180,13 @@ export function App() {
     scrollRef = useRef<HTMLDivElement>(null),
     railList = useRef<HTMLDivElement>(null);
   const composerEditor = useRef<HTMLTextAreaElement>(null);
-  const pendingComposerFocus = useRef<string | null>(null);
+  const [pendingComposerFocus, setPendingComposerFocus] = useState<string | null>(
+    null,
+  );
+  const [commentReveal, setCommentReveal] = useState<{
+    sessionId: string;
+    commentId: string | null;
+  } | null>(null);
   const commentEditor = useRef<HTMLTextAreaElement>(null);
   const pendingCommentFocus = useRef<{
     id: string;
@@ -249,6 +255,8 @@ export function App() {
     routeRef.current = next;
   }
   function applyRoute(next: AppRoute, data: Bootstrap) {
+    setPendingComposerFocus(null);
+    setCommentReveal(null);
     setRenameOpen(false);
     setDeleteTarget(null);
     setContextMenu(null);
@@ -304,6 +312,7 @@ export function App() {
     }
     setProjectId(project.id);
     activateSession(chat?.id ?? null);
+    setPendingComposerFocus(chat?.id ?? null);
     const nextPanel =
       next.kind === "chat" || next.kind === "workspace"
         ? next.panel
@@ -407,7 +416,6 @@ export function App() {
       });
     }
     selectedId.current = id;
-    if (pendingComposerFocus.current !== id) pendingComposerFocus.current = null;
     const cached = id ? histories.get(id) : undefined;
     const pending = id ? pendingDrafts.get(id) : undefined;
     setSnapshot(cached ?? null);
@@ -478,14 +486,16 @@ export function App() {
     if (
       !hubOpen &&
       sessionId &&
-      pendingComposerFocus.current === sessionId &&
+      pendingComposerFocus === sessionId &&
       snapshot?.session.id === sessionId &&
       composerEditor.current
     ) {
-      pendingComposerFocus.current = null;
-      composerEditor.current.focus({ preventScroll: true });
+      setPendingComposerFocus(null);
+      // Navigation focuses once, never on subsequent live snapshots or through a modal.
+      if (!document.querySelector("dialog:modal"))
+        composerEditor.current.focus({ preventScroll: true });
     }
-  }, [sessionId, hubOpen, snapshot?.session.id]);
+  }, [pendingComposerFocus, sessionId, hubOpen, snapshot?.session.id]);
   useEffect(() => {
     const warn = (event: BeforeUnloadEvent) => {
       if (!pendingDrafts.unsaved) return;
@@ -717,7 +727,6 @@ export function App() {
         sessionId: s.session.id,
         panel: workspacePanel(),
       });
-      pendingComposerFocus.current = s.session.id;
       applyRoute(routeRef.current, data);
       if (window.innerWidth <= 650) setSidebar(false);
       setError("");
@@ -741,7 +750,6 @@ export function App() {
     histories.put({ ...s, composer: prompt });
     const data = { ...boot, sessions: [s.session, ...boot.sessions] };
     setBoot(data);
-    pendingComposerFocus.current = s.session.id;
     await go({ kind: "chat", sessionId: s.session.id }, data);
   }
   async function chooseWorkspace() {
@@ -878,6 +886,7 @@ export function App() {
       setError("Finish or cancel your current comment first.");
       return;
     }
+    setCommentReveal(null);
     pendingCommentFocus.current = {
       id: "editing",
       restore: captureCommentPosition(scrollRef.current, anchor),
@@ -902,12 +911,20 @@ export function App() {
     if (route.kind === "chat")
       writeRoute({ ...route, panel: open ? "comments" : undefined });
     setPanel(null);
-    if (open && window.innerWidth <= 900)
-      requestAnimationFrame(() =>
-        document
-          .querySelector(".comment-rail")
-          ?.scrollIntoView({ behavior: "smooth", block: "start" }),
+    if (open && sessionId) {
+      // Cards are laid out by passage, which is not necessarily creation order.
+      const latest = allComments.reduce<Comment | undefined>(
+        (last, comment) =>
+          !last || comment.createdAt >= last.createdAt ? comment : last,
+        undefined,
       );
+      const commentId = editing
+        ? (editing.id ?? "editing")
+        : (latest?.id ?? null);
+      stickyBottom.current = false;
+      setActive(commentId);
+      setCommentReveal({ sessionId, commentId });
+    } else setCommentReveal(null);
   }
   function captureSelection() {
     const sel = window.getSelection();
@@ -1026,6 +1043,31 @@ export function App() {
       JSON.stringify(prev) === JSON.stringify(gaps) ? prev : gaps,
     );
   }, [snapshot?.messages, snapshot?.comments, editing, active, rail, sidebar]);
+  useLayoutEffect(() => {
+    if (!commentReveal || commentReveal.sessionId !== sessionId || !rail) return;
+    // Opening the rail reflows the thread; card gaps settle in a second render.
+    const frame = requestAnimationFrame(() => {
+      const scroller = scrollRef.current;
+      const target = commentReveal.commentId
+        ? railList.current?.querySelector<HTMLElement>(
+            `[data-comment-id="${CSS.escape(commentReveal.commentId)}"]`,
+          )
+        : railList.current?.closest<HTMLElement>(".comment-rail");
+      if (scroller && target)
+        scroller.scrollBy({
+          top:
+            target.getBoundingClientRect().top -
+            scroller.getBoundingClientRect().top -
+            16,
+          behavior: window.matchMedia("(prefers-reduced-motion: reduce)")
+            .matches
+            ? "instant"
+            : "smooth",
+        });
+      setCommentReveal(null);
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [commentReveal, commentGaps, sessionId, rail, panel]);
   const editingId = editing ? (editing.id ?? "editing") : null;
   useLayoutEffect(() => {
     if (!editingId) {
@@ -1528,7 +1570,8 @@ export function App() {
                   <button
                     className={rail ? "active-button" : ""}
                     disabled={!snapshot}
-                    onClick={() => showComments(!rail)}
+                    aria-expanded={rail}
+                    onClick={() => showComments(true)}
                   >
                     <MessageSquare size={16} />
                     Comments

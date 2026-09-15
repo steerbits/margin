@@ -88,6 +88,7 @@ export function SettingsDialog({
   return (
     <AppDialog
       title="Settings"
+      closeOnBackdrop
       onClose={() => {
         if (!saving) onClose();
       }}

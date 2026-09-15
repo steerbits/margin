@@ -5,13 +5,32 @@ import type { Project } from "../shared/types.ts";
 export function AppDialog({
   title,
   onClose,
+  closeOnBackdrop = false,
   children,
 }: {
   title: string;
   onClose: () => void;
+  closeOnBackdrop?: boolean;
   children: ReactNode;
 }) {
   const ref = useRef<HTMLDialogElement>(null);
+  const pointerStartedOutside = useRef(false);
+  function isBackdrop(event: {
+    target: EventTarget;
+    currentTarget: HTMLDialogElement;
+    clientX: number;
+    clientY: number;
+  }) {
+    if (event.target !== event.currentTarget) return false;
+    // Native dialogs receive backdrop events too; padding is still inside.
+    const rect = event.currentTarget.getBoundingClientRect();
+    return (
+      event.clientX < rect.left ||
+      event.clientX > rect.right ||
+      event.clientY < rect.top ||
+      event.clientY > rect.bottom
+    );
+  }
   useLayoutEffect(() => {
     const dialog = ref.current!;
     dialog.showModal();
@@ -22,6 +41,15 @@ export function AppDialog({
       ref={ref}
       className="management-dialog"
       aria-label={title}
+      onPointerDown={(event) => {
+        pointerStartedOutside.current = isBackdrop(event);
+      }}
+      onClick={(event) => {
+        const dismiss =
+          closeOnBackdrop && pointerStartedOutside.current && isBackdrop(event);
+        pointerStartedOutside.current = false;
+        if (dismiss) onClose();
+      }}
       onCancel={(event) => {
         event.preventDefault();
         onClose();
