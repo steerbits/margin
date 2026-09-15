@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { RefreshCw } from "lucide-react";
 import {
   defaultSettings,
@@ -13,6 +13,12 @@ import type { ModelInfo } from "../shared/types.ts";
 import { api } from "./api.ts";
 import { AppDialog } from "./WorkspacePicker.tsx";
 import { ProviderAccountsPanel } from "./ProviderAccounts.tsx";
+import { ModelOptions } from "./ModelOptions.tsx";
+import {
+  configureModelLabel,
+  modelLabel,
+  modelProviderLabel,
+} from "../shared/model-picker.ts";
 import "./SettingsDialog.css";
 
 export function SettingsDialog({
@@ -29,6 +35,9 @@ export function SettingsDialog({
   const [saving, setSaving] = useState(false);
   const [accountBusy, setAccountBusy] = useState(false);
   const [accountsOpen, setAccountsOpen] = useState(false);
+  const accountsRef = useRef<HTMLDetailsElement>(null);
+  const modelsChanged = useRef(onModelsChanged);
+  modelsChanged.current = onModelsChanged;
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   useEffect(() => {
@@ -38,6 +47,7 @@ export function SettingsDialog({
         if (!active) return;
         setDraft(view.settings);
         setModels(view.models);
+        modelsChanged.current?.(view.models);
         setAccountsOpen(view.models.length === 0);
         setLoaded(true);
       })
@@ -60,13 +70,13 @@ export function SettingsDialog({
   const pending = loading || saving || accountBusy;
   const runtimeDefault =
     (model?.backend ?? "pi") === "pi" ? "Pi default" : "Runtime default";
-  async function refresh(notify = false) {
+  async function refresh() {
     setLoading(true);
     setError("");
     try {
       const view = await api<SettingsView>("/settings");
       setModels(view.models);
-      if (notify) onModelsChanged?.(view.models);
+      modelsChanged.current?.(view.models);
       if (!loaded) setDraft(view.settings);
       setLoaded(true);
     } catch (e) {
@@ -83,6 +93,7 @@ export function SettingsDialog({
       }}
     >
       <details
+        ref={accountsRef}
         className="settings-accounts"
         open={accountsOpen}
         onToggle={(event) => setAccountsOpen(event.currentTarget.open)}
@@ -96,7 +107,7 @@ export function SettingsDialog({
           </span>
         </summary>
         <ProviderAccountsPanel
-          onChanged={() => refresh(true)}
+          onChanged={refresh}
           onBusyChange={setAccountBusy}
         />
       </details>
@@ -171,24 +182,17 @@ export function SettingsDialog({
                 }}
               >
                 <option value="">
-                  Automatic · prefer ChatGPT subscription
+                  {models.length
+                    ? "Automatic · prefer ChatGPT subscription"
+                    : configureModelLabel}
                 </option>
                 {invalidModel && (
-                  <option value={modelKey(draft.defaultModel)}>
-                    Unavailable · {draft.defaultModel!.provider} /{" "}
-                    {draft.defaultModel!.id}
+                  <option value={modelKey(draft.defaultModel)} disabled>
+                    {modelProviderLabel(draft.defaultModel!)} •{" "}
+                    {draft.defaultModel!.id} (unavailable)
                   </option>
                 )}
-                {models.map((m) => (
-                  <option key={modelKey(m)} value={modelKey(m)}>
-                    {m.name} · {m.provider}
-                    {m.subscription
-                      ? m.provider === "anthropic"
-                        ? " · extra usage"
-                        : " · subscription"
-                      : ""}
-                  </option>
-                ))}
+                <ModelOptions models={models} billing />
               </select>
             </label>
             <p id="settings-model-help" className="settings-help">
@@ -197,9 +201,23 @@ export function SettingsDialog({
                 : !models.length && loaded
                   ? "No authenticated models found. Connect a provider account above, then choose a model."
                   : !draft.defaultModel && model
-                    ? `Currently: ${model.name} · ${model.provider}.`
+                    ? `Currently: ${modelLabel(model)}.`
                     : "Provider accounts are separate; Margin will not silently switch providers if a selected model becomes unavailable."}
             </p>
+            {!models.length && loaded && (
+              <button
+                type="button"
+                className="text-link"
+                onClick={() => {
+                  setAccountsOpen(true);
+                  requestAnimationFrame(() =>
+                    accountsRef.current?.scrollIntoView({ block: "start" }),
+                  );
+                }}
+              >
+                Connect a provider
+              </button>
+            )}
             <label>
               Thinking effort
               <select

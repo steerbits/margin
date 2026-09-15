@@ -8,7 +8,7 @@ import {
   type Credential,
   type CredentialStore,
 } from "@earendil-works/pi-ai";
-import type { ModelInfo } from "../shared/types.ts";
+import type { ModelConnectionSource, ModelInfo } from "../shared/types.ts";
 
 // Optional mode for hosts that allow reading Pi credentials but cannot acquire its write lock.
 // No credential copies are persisted. Expired credentials must be refreshed by Pi externally.
@@ -41,10 +41,22 @@ export async function createModels(dataDir: string, signal?: AbortSignal) {
       : {}),
   });
 }
+export function modelConnectionSource(
+  runtime: Pick<ModelRuntime, "getProviderAuthStatus">,
+  provider: string,
+): ModelConnectionSource {
+  // Use Pi's resolved source, not a vendor allowlist or secret credential data.
+  const { source } = runtime.getProviderAuthStatus(provider);
+  if (source === "stored") return "saved";
+  if (source === "environment" || source === "runtime") return "key";
+  return "custom";
+}
 export function modelInfo(runtime: ModelRuntime, model: Model<Api>): ModelInfo {
   return {
     ...modelFields(model),
     backend: "pi",
+    providerName: runtime.getProvider(model.provider)?.name,
+    connectionSource: modelConnectionSource(runtime, model.provider),
     subscription: runtime.isUsingSubscription(model.provider),
     thinkingLevels: getSupportedThinkingLevels(model),
   };

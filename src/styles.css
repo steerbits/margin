@@ -1740,6 +1740,10 @@ p {
   max-width: 180px;
   color: #424242;
 }
+.model-footer select[aria-label="Model"] {
+  max-width: min(380px, calc(100% - 20px));
+  min-width: 0;
+}
 .welcome-icon {
   background: #f5f5f5;
   color: #333;

@@ -7,11 +7,15 @@ export type Json =
   | string
   | Json[]
   | { [key: string]: Json };
+export type ModelConnectionSource = "saved" | "key" | "custom";
 export interface ModelInfo {
   id: string;
   provider: string;
   name: string;
   subscription: boolean;
+  /** Non-secret presentation metadata; not part of model identity. */
+  providerName?: string;
+  connectionSource?: ModelConnectionSource;
   backend?: string;
   thinkingLevels?: ThinkingLevel[];
 }

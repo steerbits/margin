@@ -55,6 +55,8 @@ import { ChatStatus } from "./ChatStatus.tsx";
 import { ConversationMenu } from "./ConversationMenu.tsx";
 import { SidebarConversations } from "./SidebarConversations.tsx";
 import { SettingsDialog } from "./SettingsDialog.tsx";
+import { ModelOptions } from "./ModelOptions.tsx";
+import { configureModelLabel, modelLabel } from "../shared/model-picker.ts";
 import { ChatCache, ChatDrafts } from "./chat-cache.ts";
 import { useUnread } from "./use-unread.ts";
 import {
@@ -165,6 +167,8 @@ export function App() {
   );
   const [choosingWorkspace, setChoosingWorkspace] = useState(false),
     [newModel, setNewModel] = useState("");
+  const unavailableNewModel =
+    !!newModel && !boot.models.some((m) => modelKey(m) === newModel);
   const [hubOpen, setHubOpen] = useState(false);
   const choosingWorkspaceRef = useRef(false);
   const [panel, setPanel] = useState<string | null>(null),
@@ -682,6 +686,10 @@ export function App() {
     }
     setSending(true);
     try {
+      if (unavailableNewModel)
+        throw new Error(
+          "The selected model is unavailable. Choose another model or configure its provider in Settings.",
+        );
       await flushDraft();
       const s = await api<Snapshot>("/sessions", {
         projectId,
@@ -1684,7 +1692,10 @@ export function App() {
                           <span className="model-dot" />
                           <select
                             aria-label="Model"
-                            disabled={busy || !connected}
+                            disabled={
+                              busy || !connected || !boot.models.length
+                            }
+                            title={modelLabel(model)}
                             value={modelKey(model)}
                             onChange={(e) => {
                               const m = boot.models.find(
@@ -1697,12 +1708,32 @@ export function App() {
                                 }).catch(fail);
                             }}
                           >
-                            {boot.models.map((m) => (
-                              <option key={modelKey(m)} value={modelKey(m)}>
-                                {m.name}
+                            {!boot.models.length ? (
+                              <option value={modelKey(model)}>
+                                {configureModelLabel}
                               </option>
-                            ))}
+                            ) : (
+                              !boot.models.some(
+                                (m) => modelKey(m) === modelKey(model),
+                              ) && (
+                                <option value={modelKey(model)} disabled>
+                                  {modelLabel(model)} (unavailable)
+                                </option>
+                              )
+                            )}
+                            <ModelOptions
+                              models={boot.models}
+                              keyFor={modelKey}
+                            />
                           </select>
+                          {!boot.models.length && (
+                            <button
+                              className="text-link"
+                              onClick={() => setSettingsOpen(true)}
+                            >
+                              Open Settings
+                            </button>
+                          )}
                           {snapshot.thinking && (
                             <label className="thinking-choice">
                               <span>Thinking</span>
@@ -1829,20 +1860,31 @@ export function App() {
                       <label htmlFor="start-model">Start with a model</label>
                       <select
                         id="start-model"
-                        value={newModel}
+                        value={boot.models.length ? newModel : ""}
+                        disabled={!boot.models.length}
                         onChange={(e) => setNewModel(e.target.value)}
                       >
-                        <option value="">Default from Settings</option>
-                        {boot.models.map((m) => (
-                          <option key={modelKey(m)} value={modelKey(m)}>
-                            {m.name} · {m.provider}
+                        <option value="">
+                          {boot.models.length
+                            ? "Default from Settings"
+                            : configureModelLabel}
+                        </option>
+                        {unavailableNewModel && boot.models.length > 0 && (
+                          <option value={newModel} disabled>
+                            Selected model unavailable — choose another
                           </option>
-                        ))}
+                        )}
+                        <ModelOptions models={boot.models} keyFor={modelKey} />
                       </select>
                       <button
                         className="primary"
                         onClick={() => void createSession()}
-                        disabled={sending || !boot.models.length || !projectId}
+                        disabled={
+                          sending ||
+                          !boot.models.length ||
+                          !projectId ||
+                          unavailableNewModel
+                        }
                       >
                         <Plus size={16} />
                         Start a conversation
@@ -1850,8 +1892,13 @@ export function App() {
                     </div>
                     {!boot.models.length && (
                       <p className="setup-hint">
-                        Sign in through <code>pi</code> → <code>/login</code>,
-                        then{" "}
+                        <button
+                          className="text-link"
+                          onClick={() => setSettingsOpen(true)}
+                        >
+                          Open Settings
+                        </button>{" "}
+                        to connect a provider, or{" "}
                         <button
                           className="text-link"
                           onClick={() =>

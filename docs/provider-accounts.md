@@ -10,6 +10,20 @@
 
 If terminal Pi is already authenticated, Margin reuses that login. No second provider sign-in is required when both run as the same OS user with the same Pi configuration directory. Other people installing Margin connect **their own accounts**; credentials are not bundled with Margin or stored in Git.
 
+## Model pickers
+
+Chat, new-conversation and Settings model pickers share this order, with native horizontal separators between nonempty groups:
+
+1. **Saved Connections** — Pi's active credential is saved in its credential store, including saved API keys as well as browser/device logins.
+2. **Keys** — Pi resolves access from environment or runtime credentials rather than a saved connection.
+3. **Custom** — access comes from custom configuration/fallbacks; models from other backends without source metadata also appear here.
+
+Only models Pi reports as available are included; grouping does not hide environment/custom access or shorten a connected provider's catalog. Pi's resolved credential source determines the group, not a provider allowlist. For example, removing a saved login can move a provider to **Keys** if an environment credential remains. Empty groups are omitted.
+
+Labels consistently put the connection provider first: **Anthropic • Claude Sonnet** versus **OpenRouter • Anthropic: Claude Sonnet** (illustrative model names). Options sort by provider, then model, within each group without changing automatic-default priority or existing selections. Unavailable saved selections remain explicit rather than appearing silently switched. With no available models, the picker says **Configure a model in Settings**, with a route to provider setup.
+
+Native controls preserve platform keyboard/mobile behavior. Horizontal-rule appearance depends on browser/OS support; group labels remain on platforms that omit rules.
+
 ## Providers and billing
 
 The account list and login methods come from the installed Pi SDK, not a Margin allowlist. Pi 0.85.1 currently exposes 40 built-in providers: seven with browser/device OAuth, and 39 with API-key/token/configuration login (these overlap). Global `models.json` providers may add entries. Installing an SDK update may change this list; Margin does not promise future, incompatible prompt types will work without an update.

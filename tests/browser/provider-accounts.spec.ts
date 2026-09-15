@@ -245,7 +245,7 @@ test("Grok device sign-in works in Settings on mobile, refreshes models, and doe
   ).toHaveCount(1);
   await dialog
     .getByLabel("Default model")
-    .selectOption({ label: "Claude fixture · anthropic · extra usage" });
+    .selectOption({ label: "Anthropic • Claude fixture (extra usage)" });
   await dialog.getByRole("button", { name: "Cancel", exact: true }).click();
   expect(saves).toBe(0);
   expect(state.cancelled).toBe(0);

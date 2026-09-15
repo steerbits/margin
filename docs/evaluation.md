@@ -1,5 +1,17 @@
 # Evaluation record
 
+## Follow-up: grouped provider-first model pickers
+
+Replaced flat options in chat, new-conversation and Settings with **Saved Connections → Keys → Custom**, native group headers and `<hr>` separators. Added non-secret provider-name/auth-source metadata from Pi, shared provider-first labels, stable within-group sorting, empty-state Settings navigation and explicit unavailable-selection markers. All previously available environment/custom models remain accessible; ordering does not change automatic-default priority or existing chats. Memoized option rendering avoids re-sorting a large catalog on each composer keystroke.
+
+- `npm run check`: **177 Node tests passed**, TypeScript and production build passed. The existing bundle advisory remains (about 688 KB / 212 KB gzip).
+- **19 focused Chromium tests passed** (model pickers, Settings, provider accounts and composer UX), plus **2 focused gateway tests passed** (account guards and multi-workspace defaults). Complete browser/gateway suites were not rerun.
+- New unit coverage checks group order, omission of empty groups, provider/model sorting, unchanged model identities/input ordering, routed labels, billing hints, and older/plugin metadata. An offline real-SDK fixture verifies unconfigured models are excluded; saved API keys override environment/custom keys; removing a saved connection restores the environment group; serialized models contain no fixture credential values or environment-key names. No user credentials were changed.
+- Browser checks cover exact selected provider/model request payloads, group ordering/separator DOM structure in all selectors, moving a provider between groups during Settings refresh without resetting a selection, empty-state navigation, unavailable-current-model preservation, and 390px mobile bounds. Existing Settings/account tests cover default persistence and login-triggered model refresh.
+- Self-review inspected actual Settings and mobile screenshots plus a deliberately expanded native-listbox preview of the group labels. The initial mobile screenshot had the sidebar covering the picker; the test now closes it before resizing. OS dropdown popups are outside Playwright page screenshots. Chromium hides `<hr>` in listbox mode, so rules are checked structurally, **not claimed as visually verified in the actual native popup**; group headings and keyboard navigation across group boundaries were exercised. Actual macOS/iOS/Safari menu separator rendering remains a manual check. No independent reviewer was available.
+
+No live Margin process was restarted, real vendor authorization/inference performed, or real cco enforcement rerun. Restart Margin normally and refresh the browser to load the new server metadata and client. See [picker behavior](provider-accounts.md#model-pickers).
+
 ## Follow-up: generic Pi provider accounts in Settings
 
 Added one SDK-driven account adapter rather than separate Codex/Claude/Grok backends. The authenticated gateway (and standalone native host) now supports Pi's browser authorization, device-code, selection, optional-text, secret and manual-redirect prompts. Provider methods are discovered from the installed runtime; the inspected 0.85.1 built-ins expose 40 providers, seven OAuth options and 39 API-key/token/configuration methods. Global custom model providers can add entries; the gateway does not load project extensions or agents.
