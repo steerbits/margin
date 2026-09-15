@@ -160,6 +160,9 @@ export function App() {
     [error, setError] = useState(""),
     [connected, setConnected] = useState(false),
     [sending, setSending] = useState(false);
+  const [submittedSessionId, setSubmittedSessionId] = useState<string | null>(
+    null,
+  );
   const [choosingWorkspace, setChoosingWorkspace] = useState(false),
     [newModel, setNewModel] = useState("");
   const [hubOpen, setHubOpen] = useState(false);
@@ -829,6 +832,8 @@ export function App() {
         );
       }
       if (selectedId.current === sendingSession) {
+        // Keep the dock in place even if acceptance arrives before the live messages.
+        setSubmittedSessionId(sendingSession);
         if (draftVersion.current === version) dirty.current = false;
         setSkill("");
         if (sendingSession) skillChoices.set(sendingSession, "");
@@ -1542,6 +1547,12 @@ export function App() {
               ))}
               <ConversationWorkspace
                 scrollRef={scrollRef}
+                inlineComposer={
+                  !!snapshot &&
+                  !snapshot.messages.length &&
+                  !sending &&
+                  submittedSessionId !== sessionId
+                }
                 composer={snapshot && (
                   <div className={`review ${rail ? "with-rail" : ""}`}>
                     <div className="composer-dock-content">

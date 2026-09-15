@@ -19,7 +19,7 @@
   scrollbar-gutter: stable;
   background: var(--paper);
 }
-.conversation-column > .scroll-area > .review {
+.conversation-content > .review {
   padding-bottom: 24px;
 }
 .composer-dock > .review {
@@ -34,6 +34,26 @@
 }
 .composer-dock .model-footer {
   margin-top: 12px;
+}
+/* Before the first send, use the original in-flow layout. Keep the same
+   composer DOM node so docking never interrupts keyboard focus or a draft. */
+.conversation-column.composer-inline {
+  display: block;
+}
+.composer-inline > .conversation-content > .review {
+  padding-bottom: 0;
+}
+.composer-inline > .composer-dock {
+  max-height: none;
+  overflow: visible;
+  scrollbar-gutter: auto;
+}
+.composer-inline > .composer-dock > .review {
+  padding-top: 30px;
+  padding-bottom: 70px;
+}
+.composer-inline .model-footer {
+  margin-top: 23px;
 }
 .plugin-panel {
   position: relative;

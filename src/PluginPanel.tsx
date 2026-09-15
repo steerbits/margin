@@ -11,20 +11,30 @@ import "./PluginPanel.css";
 export function ConversationWorkspace({
   children,
   composer,
+  inlineComposer,
   panel,
   scrollRef,
   onScroll,
 }: {
   children: ReactNode;
   composer: ReactNode;
+  inlineComposer: boolean;
   panel: ReactNode;
   scrollRef: RefObject<HTMLDivElement | null>;
   onScroll: UIEventHandler<HTMLDivElement>;
 }) {
   return (
     <div className="conversation-workspace">
-      <div className="conversation-column">
-        <div className="scroll-area" ref={scrollRef} onScroll={onScroll}>
+      <div
+        className={`conversation-column ${inlineComposer ? "composer-inline scroll-area" : ""}`}
+        ref={inlineComposer ? scrollRef : undefined}
+        onScroll={inlineComposer ? onScroll : undefined}
+      >
+        <div
+          className={`conversation-content ${inlineComposer ? "" : "scroll-area"}`}
+          ref={inlineComposer ? undefined : scrollRef}
+          onScroll={inlineComposer ? undefined : onScroll}
+        >
           {children}
         </div>
         {composer && <div className="composer-dock">{composer}</div>}

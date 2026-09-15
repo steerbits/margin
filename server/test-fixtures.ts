@@ -194,10 +194,9 @@ export function installFixtures(
                 timestamp: Date.now(),
               },
         );
-      const historyCount = Math.min(
-        12,
-        Math.max(0, Number(req.body.historyCount) || 0),
-      );
+      const historyCount = req.body.empty
+        ? 0
+        : Math.min(12, Math.max(0, Number(req.body.historyCount) || 0));
       for (let i = 0; i < historyCount; i++) {
         append("user", `Earlier request ${i + 1}`);
         append(
@@ -205,11 +204,13 @@ export function installFixtures(
           `## Earlier reply ${i + 1}\n\n${Array.from({ length: 8 }, (_, n) => `Earlier paragraph ${n + 1}. This is prior conversation context to exercise reading and commenting near the end of a long thread.`).join("\n\n")}`,
         );
       }
-      append(
-        "user",
-        "Help me plan a small meeting-notes app. Start with a proposal before writing code.",
-      );
-      append("assistant", fixtureMarkdown);
+      if (!req.body.empty) {
+        append(
+          "user",
+          "Help me plan a small meeting-notes app. Start with a proposal before writing code.",
+        );
+        append("assistant", fixtureMarkdown);
+      }
       l.messages = transcript(l.agent.sessionManager.getBranch());
       l.busy = false;
       l.agent.prompt = async (text, options) => {
