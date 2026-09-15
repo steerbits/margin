@@ -38,6 +38,106 @@ async function choose(page: Page, files = [md]) {
   await expect(drafts(page)).not.toContainText("Uploading…");
 }
 
+test("a newly created chat accepts dropped files before its first live snapshot", async ({
+  page,
+}) => {
+  await seed(page);
+  await page.route("**/api/sessions", async (route) => {
+    if (route.request().method() !== "POST") return route.continue();
+    const response = await page.request.post("/api/test/seed", {
+      data: { empty: true, title: "New attachment chat" },
+    });
+    expect(response.ok()).toBe(true);
+    await route.fulfill({ json: (await response.json()).snapshot });
+  });
+  let release!: () => void;
+  const waiting = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  await page.route("**/api/sessions/*/events", async (route) => {
+    await waiting;
+    await route.continue().catch(() => {});
+  });
+  try {
+    await page.getByRole("button", { name: /New conversation.*⌘/ }).click();
+    await expect(page.locator(".conversation-title")).toContainText(
+      "New attachment chat",
+    );
+    await expect(page.locator(".connection")).toHaveText("Reconnecting…");
+    const id = page.url().match(/\/chats\/([^/?]+)/)![1];
+    const transfer = await page.evaluateHandle(() => {
+      const data = new DataTransfer();
+      data.items.add(
+        new File(["# First attachment"], "first.md", { type: "text/markdown" }),
+      );
+      return data;
+    });
+    await page
+      .locator(".main")
+      .dispatchEvent("drop", { dataTransfer: transfer });
+    await expect(drafts(page)).toContainText("first.md");
+    await expect(drafts(page)).not.toContainText("Uploading…");
+    await expect(
+      page.getByRole("button", { name: "Attach files", exact: true }),
+    ).toBeEnabled();
+    await expect(send(page)).toBeDisabled();
+    const state = await (await page.request.get(`/api/sessions/${id}`)).json();
+    expect(
+      state.composerAttachments.map((file: { name: string }) => file.name),
+    ).toEqual(["first.md"]);
+    await expect(page.getByRole("alert")).toHaveCount(0);
+  } finally {
+    release();
+  }
+  await expect(page.locator(".connection")).toHaveText("Connected");
+  await expect(send(page)).toBeEnabled();
+});
+
+test("returning from the file picker can reconnect the chat without rejecting the selected file", async ({
+  page,
+}) => {
+  const id = await seed(page);
+  const picker = page.waitForEvent("filechooser");
+  await page.getByRole("button", { name: "Attach files", exact: true }).click();
+  const chooser = await picker;
+  let release!: () => void;
+  const waiting = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  await page.route(`**/api/sessions/${id}/events`, async (route) => {
+    await waiting;
+    await route.continue().catch(() => {});
+  });
+  try {
+    // Simulate the focus event from closing the OS picker and hold its resulting
+    // SSE reconnect. FileChooser.setFiles alone does not reproduce OS focus.
+    await page.evaluate(() => window.dispatchEvent(new Event("focus")));
+    await expect(page.locator(".connection")).toHaveText("Reconnecting…");
+    await chooser.setFiles([pdf]);
+    await expect(drafts(page)).toContainText(pdf.name);
+    await expect(drafts(page)).not.toContainText("Uploading…");
+    await expect(send(page)).toBeDisabled();
+    await expect(page.getByRole("alert")).toHaveCount(0);
+    // Real HTTP failures still retain a retryable draft while SSE is unavailable.
+    await page.route(`**/api/sessions/${id}/attachments`, (route) =>
+      route.fulfill({
+        status: 503,
+        json: { error: "Upload service unavailable" },
+      }),
+    );
+    await choose(page, [md]);
+    await expect(drafts(page)).toContainText("Upload service unavailable");
+    await page.unroute(`**/api/sessions/${id}/attachments`);
+    await page.getByRole("button", { name: "Retry", exact: true }).click();
+    await expect(drafts(page)).not.toContainText("Uploading…");
+    await expect(drafts(page)).not.toContainText("Upload service unavailable");
+  } finally {
+    release();
+  }
+  await expect(page.locator(".connection")).toHaveText("Connected");
+  await expect(send(page)).toBeEnabled();
+});
+
 for (const mobile of [false, true]) {
   test(`any-file attachment-only send, download, and persisted history on ${mobile ? "mobile" : "desktop"}`, async ({
     page,

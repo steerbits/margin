@@ -171,7 +171,7 @@ export function useChatAttachments(
     if (!enabled || !sessionId) {
       fail(
         new Error(
-          "Open a connected chat and finish sending before attaching files.",
+          "Open a Pi chat and finish any pending send before attaching files.",
         ),
       );
       return;

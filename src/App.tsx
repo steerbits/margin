@@ -229,7 +229,9 @@ export function App() {
     snapshot,
     !!snapshot?.attachmentSupport &&
       snapshot.session.id === sessionId &&
-      connected && !sending && !hubOpen && !allWorkspaces && !routeMissing &&
+      // Uploads use ordinary HTTP, not the live-update stream. In particular,
+      // returning from the OS file picker can trigger a temporary SSE reconnect.
+      !sending && !hubOpen && !allWorkspaces && !routeMissing &&
       !settingsOpen && !renameOpen && !deleteTarget && !choosingWorkspace,
     fail,
   );
