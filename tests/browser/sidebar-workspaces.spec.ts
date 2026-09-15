@@ -1,0 +1,343 @@
+import { test, expect, type Page } from "@playwright/test";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import type { Project, SessionInfo, Snapshot } from "../../shared/types.ts";
+
+const current = (page: Page) =>
+  page.getByRole("navigation", { name: "Conversations", exact: true });
+const other = (page: Page) =>
+  page.getByRole("navigation", { name: "Other workspaces", exact: true });
+const rows = (page: Page) => page.locator(".session-list > button");
+const row = (page: Page, id: string) =>
+  page.locator(`[data-session-id="${id}"]`);
+const search = (page: Page) =>
+  page.getByRole("searchbox", { name: "Search all chats" });
+
+// Synthetic metadata makes overflow/status transitions deterministic; navigation
+// and draft persistence are also exercised against the real API in the final test.
+async function fixture(page: Page, activeCurrent = 2, activeOther = 2) {
+  await page.goto("/");
+  const response = await page.request.get("/api/bootstrap");
+  expect(response.ok(), await response.text()).toBe(true);
+  const bootstrap = await response.json();
+  const seed = await (
+    await page.request.post("/api/test/seed", {
+      data: { title: "Sidebar snapshot template" },
+    })
+  ).json();
+  const template: Snapshot = await (
+    await page.request.get(`/api/sessions/${seed.id}`)
+  ).json();
+  const projects: Project[] = [
+    { ...bootstrap.projects[0], name: "Margin" },
+    { id: "sidebar-website", name: "Website", path: "/fixture/website" },
+    { id: "sidebar-research", name: "Research", path: "/fixture/research" },
+  ];
+  const make = (
+    prefix: string,
+    count: number,
+    active: number,
+    projectId: string,
+  ): SessionInfo[] =>
+    Array.from({ length: count }, (_, i) => ({
+      id: `${prefix}-${i}`,
+      projectId,
+      title:
+        i === count - 1
+          ? `${prefix} archived export`
+          : `${prefix} conversation ${i + 1}`,
+      createdAt: 1,
+      updatedAt: 100 - i,
+      activity: {
+        status: i < active ? (i === 1 ? "waiting" : "running") : "idle",
+      },
+    }));
+  const data = {
+    projects,
+    sessions: [
+      ...make(
+        "Local",
+        Math.max(8, activeCurrent + 2),
+        activeCurrent,
+        projects[0].id,
+      ),
+      ...make(
+        "Website",
+        Math.max(14, activeOther + 2),
+        activeOther,
+        projects[1].id,
+      ),
+      ...make("Research", 2, 0, projects[2].id),
+    ],
+  };
+  await page.route("**/api/bootstrap?*", (route) =>
+    route.fulfill({ json: { ...bootstrap, ...data } }),
+  );
+  await page.route("**/api/sessions", (route) => route.fulfill({ json: data }));
+  const snapshot = (url: string) => ({
+    ...template,
+    session: data.sessions.find(
+      (s) => s.id === new URL(url).pathname.split("/")[3],
+    )!,
+    composer: "",
+    busy: false,
+  });
+  await page.route("**/api/sessions/*/preview", (route) =>
+    route.fulfill({ json: snapshot(route.request().url()) }),
+  );
+  await page.route("**/api/sessions/*/events", (route) =>
+    route.fulfill({
+      contentType: "text/event-stream",
+      body: `data: ${JSON.stringify({ snapshot: snapshot(route.request().url()) })}\n\n`,
+    }),
+  );
+  await page.goto(`/workspaces/${projects[0].id}`);
+  await expect(current(page).locator("button")).toHaveCount(
+    Math.max(5, activeCurrent),
+  );
+  return data;
+}
+
+test("two deduplicated sections have soft caps, expansion, tooltip context and live status", async ({
+  page,
+}) => {
+  const data = await fixture(page);
+  await expect(other(page).locator("button")).toHaveCount(10);
+  await expect(current(page).locator("button").first()).toHaveAttribute(
+    "data-session-id",
+    "Local-0",
+  );
+  await expect(other(page).locator("button").first()).toHaveAttribute(
+    "data-session-id",
+    "Website-0",
+  );
+  await expect(row(page, "Website-0")).toHaveAttribute(
+    "title",
+    /Website — Running/,
+  );
+  await expect(
+    row(page, "Website-1").getByRole("img", { name: "Waiting for you" }),
+  ).toBeVisible();
+  await expect(row(page, "Website-0").locator(".session-title")).toHaveText(
+    "Website conversation 1",
+  );
+  await page
+    .locator(".current-workspace-chats")
+    .getByRole("button", { name: "Show all (8)" })
+    .click();
+  await expect(current(page).locator("button")).toHaveCount(8);
+  await page
+    .locator(".other-workspace-chats")
+    .getByRole("button", { name: "Show all (16)" })
+    .click();
+  await expect(other(page).locator("button")).toHaveCount(16);
+  const ids = await rows(page).evaluateAll((elements) =>
+    elements.map((e) => e.getAttribute("data-session-id")),
+  );
+  expect(new Set(ids).size).toBe(ids.length);
+  await page
+    .locator(".other-workspace-chats")
+    .getByRole("button", { name: "Show less" })
+    .click();
+  await page
+    .locator(".current-workspace-chats")
+    .getByRole("button", { name: "Show less" })
+    .click();
+  const running = data.sessions.find((s) => s.id === "Website-0")!;
+  running.activity = {
+    status: "finished",
+    completionId: "new-completion",
+    replyId: "new-reply",
+  };
+  await expect(
+    row(page, running.id).getByRole("img", { name: "Unread" }),
+  ).toBeVisible();
+  await expect(other(page).locator("button").first()).toHaveAttribute(
+    "data-session-id",
+    "Website-1",
+  );
+  await expect(
+    row(page, running.id).locator(".conversation-spinner"),
+  ).toHaveCount(0);
+  await page.screenshot({
+    path: ".margin-data/sidebar-workspaces-desktop.png",
+    fullPage: true,
+  });
+});
+
+test("all active chats remain in independently scrollable lists, including on short and mobile screens", async ({
+  page,
+}) => {
+  await fixture(page, 7, 13);
+  await expect(current(page).locator("button")).toHaveCount(7);
+  await expect(other(page).locator("button")).toHaveCount(13);
+  for (const viewport of [
+    { width: 1440, height: 650 },
+    { width: 390, height: 667 },
+  ]) {
+    await page.setViewportSize(viewport);
+    const geometry = await page.evaluate(() => {
+      const a = document.querySelector<HTMLElement>(
+        ".current-workspace-chats .session-list",
+      )!;
+      const b = document.querySelector<HTMLElement>(
+        ".other-workspace-chats .session-list",
+      )!;
+      const input = document
+        .querySelector(".sidebar-search")!
+        .getBoundingClientRect();
+      return {
+        currentOverflow: a.scrollHeight > a.clientHeight,
+        otherOverflow: b.scrollHeight > b.clientHeight,
+        currentHeight: a.clientHeight,
+        otherHeight: b.clientHeight,
+        searchBottom: input.bottom,
+        width: document.documentElement.scrollWidth,
+      };
+    });
+    expect(geometry.currentOverflow).toBe(true);
+    expect(geometry.otherOverflow).toBe(true);
+    expect(geometry.currentHeight).toBeGreaterThan(35);
+    expect(geometry.otherHeight).toBeGreaterThan(35);
+    expect(geometry.searchBottom).toBeLessThanOrEqual(viewport.height);
+    expect(geometry.width).toBeLessThanOrEqual(viewport.width);
+    await row(page, "Website-12").scrollIntoViewIfNeeded();
+    await expect(row(page, "Website-12")).toBeVisible();
+    await expect(search(page)).toBeVisible();
+  }
+  await page.screenshot({
+    path: ".margin-data/sidebar-workspaces-mobile.png",
+    fullPage: true,
+  });
+  await row(page, "Website-12").click();
+  await expect(page).toHaveURL(/\/chats\/Website-12$/);
+  await expect(page.locator(".app")).toHaveClass(/sidebar-hidden/);
+});
+
+test("global search finds hidden chats, supports keyboard opening, and retains context actions", async ({
+  page,
+}) => {
+  const data = await fixture(page);
+  await expect(row(page, "Website-13")).toHaveCount(0);
+  await search(page).fill("  WEBSITE  archived ");
+  await expect(rows(page)).toHaveCount(1);
+  await expect(row(page, "Website-13")).toBeVisible();
+  await expect(current(page)).toHaveCount(0);
+  await page.screenshot({
+    path: ".margin-data/sidebar-workspaces-search.png",
+    fullPage: true,
+  });
+  await search(page).press("ArrowUp");
+  await expect(row(page, "Website-13")).toBeFocused();
+  await page.keyboard.press("Shift+F10");
+  await expect(
+    page.getByRole("menuitem", { name: "Delete conversation", exact: true }),
+  ).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(row(page, "Website-13")).toBeFocused();
+  await page.keyboard.press("Enter");
+  await expect(page).toHaveURL(/\/chats\/Website-13$/);
+  await expect(
+    page.getByRole("combobox", { name: "Project", exact: true }),
+  ).toHaveValue(data.projects[1].id);
+  await expect(search(page)).toHaveValue("");
+  await expect(row(page, "Website-13")).toHaveAttribute("aria-current", "page");
+  await expect(
+    other(page).locator('[data-session-id^="Website-"]'),
+  ).toHaveCount(0);
+  await search(page).fill("no such chat");
+  await expect(
+    page.getByText("No matching chats.", { exact: false }),
+  ).toBeVisible();
+  await search(page).press("Escape");
+  await expect(other(page)).toBeVisible();
+  await search(page).fill("Research");
+  await expect(rows(page)).toHaveCount(2);
+  await page.getByRole("button", { name: "Clear chat search" }).click();
+  await expect(search(page)).toBeFocused();
+  await search(page).fill("Local archived");
+  await search(page).press("Enter");
+  await expect(page).toHaveURL(/\/chats\/Local-7$/);
+});
+
+test("real cross-workspace switching and search preserve drafts and discover a newly added workspace", async ({
+  page,
+}) => {
+  await page.goto("/");
+  const seed = await (
+    await page.request.post("/api/test/seed", {
+      data: { title: "Original workspace draft" },
+    })
+  ).json();
+  await page.goto(`/chats/${seed.id}`);
+  await expect(page.getByLabel("Starting skill")).toBeEnabled();
+  await page.getByLabel("Message Pi").fill("Keep the original workspace draft");
+  const folder = mkdtempSync(join(tmpdir(), "margin-sidebar-search-"));
+  try {
+    const projectResponse = await page.request.post("/api/projects", {
+      data: { path: folder },
+    });
+    expect(projectResponse.ok()).toBe(true);
+    const project = await projectResponse.json();
+    const chatResponse = await page.request.post("/api/sessions", {
+      data: { projectId: project.id },
+    });
+    expect(chatResponse.ok()).toBe(true);
+    const second: Snapshot = await chatResponse.json();
+    // Polling must bring in the new project's metadata as well as its chat.
+    await expect(row(page, second.session.id)).toBeVisible();
+    await row(page, second.session.id).click();
+    await expect(page).toHaveURL(new RegExp(`/chats/${second.session.id}$`));
+    await expect(
+      page.getByRole("combobox", { name: "Project", exact: true }),
+    ).toHaveValue(project.id);
+    await expect(page.getByLabel("Starting skill")).toBeEnabled();
+    await page.getByLabel("Message Pi").fill("Keep the second workspace draft");
+    await search(page).fill("Original workspace draft");
+    await search(page).press("Enter");
+    await expect(page).toHaveURL(new RegExp(`/chats/${seed.id}$`));
+    await expect(page.getByLabel("Message Pi")).toHaveValue(
+      "Keep the original workspace draft",
+    );
+    await row(page, second.session.id).click();
+    await expect(page.getByLabel("Message Pi")).toHaveValue(
+      "Keep the second workspace draft",
+    );
+    await page.goBack();
+    await expect(page.getByLabel("Message Pi")).toHaveValue(
+      "Keep the original workspace draft",
+    );
+    await expect
+      .poll(
+        async () =>
+          (await (await page.request.get(`/api/sessions/${seed.id}`)).json())
+            .composer,
+      )
+      .toBe("Keep the original workspace draft");
+    await expect
+      .poll(
+        async () =>
+          (
+            await (
+              await page.request.get(`/api/sessions/${second.session.id}`)
+            ).json()
+          ).composer,
+      )
+      .toBe("Keep the second workspace draft");
+    await page
+      .getByRole("button", { name: "Comment on reply", exact: true })
+      .click();
+    await page.getByLabel("Inline comment").fill("Keep this unsent comment");
+    await search(page).fill(project.name);
+    await search(page).press("Enter");
+    await expect(page).toHaveURL(new RegExp(`/chats/${seed.id}$`));
+    await expect(page.getByLabel("Inline comment")).toHaveValue(
+      "Keep this unsent comment",
+    );
+    await expect(search(page)).toHaveValue(project.name);
+    await expect(page.getByRole("alert")).toContainText("draft comment");
+  } finally {
+    rmSync(folder, { recursive: true, force: true });
+  }
+});

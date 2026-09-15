@@ -257,22 +257,103 @@ p {
   border: 1px solid #e0e0e0;
   box-shadow: 0 1px 2px #00000003;
   font-size: 14px;
-  margin: 3px 0 28px;
+  margin: 3px 0 20px;
+  flex-shrink: 0;
 }
 .new-chat > span {
   margin-left: auto;
   color: #737373;
   font-size: 12px;
 }
+.sidebar-conversations {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+.sidebar-chat-section {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+.current-workspace-chats {
+  flex: 0 1 auto;
+  max-height: 50%;
+}
+.other-workspace-chats {
+  flex: 1;
+  border-top: 1px solid var(--line);
+  margin-top: 12px;
+  padding-top: 16px;
+}
+.sidebar-search-results {
+  flex: 1;
+}
 .section-label {
-  font-size: 12px;
-  letter-spacing: 1.1px;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 6px;
+  flex-shrink: 0;
+  font-size: 11px;
+  letter-spacing: 0.8px;
+  text-transform: uppercase;
   color: #737373;
-  padding: 0 10px 12px;
+  padding: 0 10px 10px;
+}
+.section-active-count {
+  flex-shrink: 0;
+  font-size: 10px;
+  letter-spacing: 0;
+  text-transform: none;
 }
 .session-list {
   overflow: auto;
-  flex: 1;
+  overscroll-behavior: contain;
+  min-height: 0;
+  flex: 1 1 auto;
+}
+.sidebar-show-all {
+  flex-shrink: 0;
+  align-self: flex-start;
+  padding: 6px 10px;
+  font-size: 12px;
+  color: #737373;
+}
+.sidebar-search {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  flex-shrink: 0;
+  margin-top: 12px;
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  color: #737373;
+  background: #fff;
+}
+.sidebar-search:focus-within {
+  border-color: #aaa;
+  box-shadow: 0 0 0 2px #00000008;
+}
+.sidebar-search > svg {
+  flex-shrink: 0;
+}
+.sidebar-search input {
+  width: 100%;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  outline: none;
+  background: transparent;
+  font-size: 13px;
+}
+.sidebar-search input::-webkit-search-cancel-button {
+  -webkit-appearance: none;
+}
+.sidebar-search button {
+  padding: 1px;
 }
 .session-list > button {
   width: 100%;
@@ -300,16 +381,6 @@ p {
   color: #737373;
   line-height: 1.7;
   padding: 6px 10px;
-}
-.sidebar-footer {
-  display: flex;
-  align-items: flex-start;
-  gap: 9px;
-  font-size: 12px;
-  color: #737373;
-  line-height: 1.6;
-  padding: 20px 9px 0;
-  border-top: 1px solid var(--line);
 }
 .main {
   min-width: 0;
@@ -1727,6 +1798,18 @@ p {
   border-top-color: #666;
   border-radius: 50%;
   animation: conversation-spin 0.8s linear infinite;
+}
+.conversation-waiting {
+  flex: 0 0 13px;
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+  background: #96621b;
+  color: #fff;
+  text-align: center;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 13px;
 }
 .conversation-unread {
   flex: 0 0 7px;

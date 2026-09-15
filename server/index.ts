@@ -402,18 +402,17 @@ app.get(
 app.get(
   "/api/sessions",
   asyncRoute((_req, res) => {
-    const projectIds = new Set(
-      store
-        .projects()
-        .filter(
-          (p) =>
-            (!boundProjectId || p.id === boundProjectId) &&
-            workspaceAccess.canOpen(p.path),
-        )
-        .map((p) => p.id),
-    );
+    const projects = store
+      .projects()
+      .filter(
+        (p) =>
+          (!boundProjectId || p.id === boundProjectId) &&
+          workspaceAccess.canOpen(p.path),
+      );
+    const projectIds = new Set(projects.map((p) => p.id));
     res.json({
       sessions: store.sessions().filter((s) => projectIds.has(s.projectId)),
+      projects,
     });
   }),
 );

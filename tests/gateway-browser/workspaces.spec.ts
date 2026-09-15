@@ -128,15 +128,15 @@ test("external folders have independent workers and Notes shared by their chats;
     "Shared A notes",
   );
   await page
-    .getByRole("combobox", { name: "Project", exact: true })
-    .selectOption(b.id);
+    .getByRole("navigation", { name: "Other workspaces", exact: true })
+    .locator(`[data-session-id="${other}"]`)
+    .click();
+  await expect(
+    page.getByRole("combobox", { name: "Project", exact: true }),
+  ).toHaveValue(b.id);
   await expect(page.getByLabel("Project notes", { exact: true })).toHaveValue(
     "",
   );
-  await page
-    .getByRole("navigation", { name: "Conversations" })
-    .locator("button")
-    .click();
   await expect
     .poll(() => page.evaluate(() => localStorage.getItem("margin.session")))
     .toBe(other);

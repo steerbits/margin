@@ -298,7 +298,8 @@ app.get("/api/bootstrap", async (req, res) => {
 });
 app.get("/api/sessions", (_req, res) => {
   const workspaceErrors: string[] = [];
-  const sessions = projects().flatMap((project) => {
+  const available = projects();
+  const sessions = available.flatMap((project) => {
     try {
       return sessionsFor(project).map((session) => ({
         ...session,
@@ -316,6 +317,7 @@ app.get("/api/sessions", (_req, res) => {
   });
   res.json({
     sessions: sessions.sort((a, b) => b.updatedAt - a.updatedAt),
+    projects: available,
     workspaceErrors,
   });
 });

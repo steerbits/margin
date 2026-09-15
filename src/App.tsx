@@ -52,6 +52,7 @@ import type { NavigationRequest } from "./navigation.ts";
 import { defaultSkill, skillLabel } from "../shared/skills.ts";
 import { ChatStatus } from "./ChatStatus.tsx";
 import { ConversationMenu } from "./ConversationMenu.tsx";
+import { SidebarConversations } from "./SidebarConversations.tsx";
 import { SettingsDialog } from "./SettingsDialog.tsx";
 import { ChatCache, ChatDrafts } from "./chat-cache.ts";
 import { useUnread } from "./use-unread.ts";
@@ -574,12 +575,14 @@ export function App() {
       try {
         const result = await api<{
           sessions: SessionInfo[];
+          projects?: Project[];
           workspaceErrors?: string[];
         }>("/sessions");
         if (!cancelled) {
           setBoot((b) => ({
             ...b,
             sessions: result.sessions.filter((s) => !deletedSessions.has(s.id)),
+            projects: result.projects ?? b.projects,
             workspaceErrors: result.workspaceErrors ?? b.workspaceErrors,
           }));
           setStatusError("");
@@ -651,8 +654,11 @@ export function App() {
           ? { kind: "chat", sessionId: id, panel: workspacePanel() }
           : { kind: "workspace", projectId, panel: workspacePanel() },
       );
+      if (window.innerWidth <= 650) setSidebar(false);
+      return true;
     } catch (error) {
       fail(error);
+      return false;
     }
   }
   async function createSession() {
@@ -1331,75 +1337,18 @@ export function App() {
             <Plus size={16} />
             New conversation<span>⌘</span>
           </button>
-          <div className="section-label">CONVERSATIONS</div>
-          <nav className="session-list" aria-label="Conversations">
-            {boot.sessions
-              .filter((s) => s.projectId === projectId)
-              .map((s) => (
-                <button
-                  className={sessionId === s.id ? "selected" : ""}
-                  key={s.id}
-                  data-session-id={s.id}
-                  onClick={() => void switchSession(s.id)}
-                  onMouseEnter={() => {
-                    if (!histories.get(s.id)) void prefetchSession(s.id);
-                  }}
-                  onFocus={() => {
-                    if (!histories.get(s.id)) void prefetchSession(s.id);
-                  }}
-                  onContextMenu={(event) => {
-                    event.preventDefault();
-                    setContextMenu({
-                      session: s,
-                      x: event.clientX,
-                      y: event.clientY,
-                    });
-                  }}
-                  onKeyDown={(event) => {
-                    if (
-                      event.key === "ContextMenu" ||
-                      (event.shiftKey && event.key === "F10")
-                    ) {
-                      event.preventDefault();
-                      const rect = event.currentTarget.getBoundingClientRect();
-                      setContextMenu({
-                        session: s,
-                        x: rect.left + 20,
-                        y: rect.bottom,
-                      });
-                    }
-                  }}
-                  aria-haspopup="menu"
-                  title={s.title}
-                >
-                  <span className="session-title">{s.title}</span>
-                  {s.activity?.status === "running" ? (
-                    <span
-                      className="conversation-spinner"
-                      role="img"
-                      aria-label="Running"
-                      title="Running"
-                    />
-                  ) : isUnread(s.id, s.activity) ? (
-                    <span
-                      className="conversation-unread"
-                      role="img"
-                      aria-label="Unread"
-                      title="Unread"
-                    />
-                  ) : null}
-                </button>
-              ))}
-            {!boot.sessions.some((s) => s.projectId === projectId) && (
-              <p className="sidebar-empty">
-                Your conversations will appear here.
-              </p>
-            )}
-          </nav>
-          <div className="sidebar-footer">
-            <BookOpen size={15} />
-            <span>Skills from Pi, room for your ideas.</span>
-          </div>
+          <SidebarConversations
+            sessions={boot.sessions}
+            projects={boot.projects}
+            projectId={projectId}
+            sessionId={sessionId}
+            isUnread={isUnread}
+            onSelect={switchSession}
+            onPrefetch={(id) => {
+              if (!histories.get(id)) void prefetchSession(id);
+            }}
+            onContextMenu={(session, x, y) => setContextMenu({ session, x, y })}
+          />
         </aside>
         <main className="main">
           {statusError && (
