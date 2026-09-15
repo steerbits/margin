@@ -1235,7 +1235,10 @@ export function App() {
         </AppDialog>
       )}
       {settingsOpen && (
-        <SettingsDialog onClose={() => setSettingsOpen(false)} />
+        <SettingsDialog
+          onClose={() => setSettingsOpen(false)}
+          onModelsChanged={(models) => setBoot((current) => ({ ...current, models }))}
+        />
       )}
       <header className="app-header">
         <div className="brand">

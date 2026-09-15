@@ -12,14 +12,23 @@ import {
 import type { ModelInfo } from "../shared/types.ts";
 import { api } from "./api.ts";
 import { AppDialog } from "./WorkspacePicker.tsx";
+import { ProviderAccountsPanel } from "./ProviderAccounts.tsx";
 import "./SettingsDialog.css";
 
-export function SettingsDialog({ onClose }: { onClose: () => void }) {
+export function SettingsDialog({
+  onClose,
+  onModelsChanged,
+}: {
+  onClose: () => void;
+  onModelsChanged?: (models: ModelInfo[]) => void;
+}) {
   const [draft, setDraft] = useState<MarginSettings>({ ...defaultSettings });
   const [models, setModels] = useState<ModelInfo[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [accountBusy, setAccountBusy] = useState(false);
+  const [accountsOpen, setAccountsOpen] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   useEffect(() => {
@@ -29,6 +38,7 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
         if (!active) return;
         setDraft(view.settings);
         setModels(view.models);
+        setAccountsOpen(view.models.length === 0);
         setLoaded(true);
       })
       .catch((e) => {
@@ -47,15 +57,16 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
   const invalidThinking =
     !!draft.defaultThinkingLevel &&
     !levels.includes(draft.defaultThinkingLevel);
-  const pending = loading || saving;
+  const pending = loading || saving || accountBusy;
   const runtimeDefault =
     (model?.backend ?? "pi") === "pi" ? "Pi default" : "Runtime default";
-  async function refresh() {
+  async function refresh(notify = false) {
     setLoading(true);
     setError("");
     try {
       const view = await api<SettingsView>("/settings");
       setModels(view.models);
+      if (notify) onModelsChanged?.(view.models);
       if (!loaded) setDraft(view.settings);
       setLoaded(true);
     } catch (e) {
@@ -71,6 +82,24 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
         if (!saving) onClose();
       }}
     >
+      <details
+        className="settings-accounts"
+        open={accountsOpen}
+        onToggle={(event) => setAccountsOpen(event.currentTarget.open)}
+      >
+        <summary>
+          Provider accounts{" "}
+          <span>
+            {accountBusy
+              ? "Sign-in in progress"
+              : "Connect subscriptions or API keys"}
+          </span>
+        </summary>
+        <ProviderAccountsPanel
+          onChanged={() => refresh(true)}
+          onBusyChange={setAccountBusy}
+        />
+      </details>
       <form
         className="settings-form"
         onSubmit={(event) => {
@@ -164,9 +193,9 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
             </label>
             <p id="settings-model-help" className="settings-help">
               {invalidModel
-                ? "The saved model is unavailable. Choose another model or refresh after signing in through pi /login."
+                ? "The saved model is unavailable. Connect its provider account above and refresh, or choose another model."
                 : !models.length && loaded
-                  ? "No authenticated models found. Sign in through pi /login, then refresh."
+                  ? "No authenticated models found. Connect a provider account above, then choose a model."
                   : !draft.defaultModel && model
                     ? `Currently: ${model.name} · ${model.provider}.`
                     : "Provider accounts are separate; Margin will not silently switch providers if a selected model becomes unavailable."}
@@ -222,7 +251,9 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
           </p>
         )}
         <p className="settings-footnote">
-          Saved in Margin, not in your global Pi settings.
+          Conversation defaults are saved in Margin, not in your global Pi
+          settings. Cancel discards only these default edits; completed account
+          changes above are already saved in Pi.
         </p>
         <div className="management-actions">
           <button type="button" disabled={saving} onClick={onClose}>

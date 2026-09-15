@@ -35,7 +35,7 @@ Recently opened chats render immediately from an in-memory cache while their liv
 
 ## Run
 
-Requires Node 22.13+, cco, and a Pi login. This prototype pins `@earendil-works/pi-coding-agent` to **0.85.1**; it does not replace your global Pi installation.
+Requires Node 22.13+ and cco. Connect a provider in Settings after launching, or reuse an existing Pi login. This prototype pins `@earendil-works/pi-coding-agent` to **0.85.1**; it does not replace your global Pi installation.
 
 ```sh
 npm ci --ignore-scripts
@@ -46,12 +46,12 @@ npm start
 Click the connection link printed in Terminal. It opens **http://127.0.0.1:4317** and connects this browser; later refreshes and restarts retain the connection. `npm start` launches a local gateway and starts one cco-wrapped Pi server per active workspace. Run it from a normal Terminal; a process already inside a restrictive sandbox cannot expand its inherited permissions. For development, `npm run dev` provides Vite browser updates; restart after backend/plugin changes. Explicit legacy direct-launch commands remain `npm run start:native` and `npm run dev:native`; `npm run start:single-sandbox` retains the former single cco server launcher.
 
 1. Open a project using the folder button, or select an existing project.
-2. Start a conversation. Use the gear beside **Connected** (or **Ready**) to save a default model and thinking effort. Until you choose one, Margin prefers your OpenAI Codex subscription model.
+2. Open the gear beside **Connected** (or **Ready**). Expand **Provider accounts** to sign in or enter an API key, then choose a default model and thinking effort. Start a conversation. Until you choose a default, Margin prefers an available OpenAI Codex model.
 3. **Shape with me** is selected for the first message of a new chat when available. Choose another skill or **No skill** if you prefer, then send your prompt.
 4. Select text in a completed reply and choose **Comment**. Selections can cross formatting, table cells, or code. The button beneath a reply comments on the whole reply.
 5. Save several draft comments, add an optional overall reply, and send them together. Sent comments remain anchored to the original reply when Pi produces a revision.
 
-**Settings**, in the top-right header, saves new-conversation defaults across all workspaces and restarts. Choose a provider/model and a supported thinking effort, or leave **Automatic** / **Pi default** to retain the existing startup behavior. **Save** affects new chats only, including chats started from Customize Margin; **Cancel** and Escape discard edits. Settings are stored in Margin’s database, not your global Pi settings. An unavailable selected model produces an error rather than silently switching providers. Default skill and additional settings are deferred; the dialog is organized into sections for future additions.
+**Settings**, in the top-right header, saves new-conversation defaults across all workspaces and restarts. Choose a provider/model and a supported thinking effort, or leave **Automatic** / **Pi default** to retain the existing startup behavior. **Save** affects new chats only, including chats started from Customize Margin; **Cancel** and Escape discard edits. Settings are stored in Margin’s database, not your global Pi settings. An unavailable selected model produces an error rather than silently switching providers. **Provider accounts** is expandable (opened automatically when no models are available). Account changes save immediately to Pi, independently of the conversation-default Save/Cancel controls. Default skill remains deferred.
 
 The welcome screen’s **Default from Settings** uses the latest saved defaults. Selecting another model there overrides just the next chat; if it cannot support the default effort, Pi chooses its normal supported effort. The **Thinking** dropdown beside the model selects effort for the current conversation. It shows only supported levels, persists with the session, and is disabled while Pi is working. Neither conversation control changes your saved Margin or global Pi defaults.
 
@@ -75,9 +75,11 @@ Margin uses Pi's own skill discovery, including `~/.pi/agent/skills/`, project `
 
 **Shape with me** combines clarification questions and automated evaluation with a compact default approach, concrete previews and alternatives, and an invitation to bring a real case that might reveal missing assumptions. It also summarizes what feedback actually changed in chat. The former **Think with me** skill has been removed.
 
-Sign in with `pi` → `/login`, then refresh models or restart Margin. Credentials stay in Pi's server-side authentication storage. `openai-codex` uses your ChatGPT/Codex subscription; `openai` is a separate API-key provider. The UI does not silently switch providers when a request fails.
+Open **Settings → Provider accounts**, search/select a provider, and choose one of the login methods exposed by Pi. Browser authorization, device codes, authorization-code/redirect-URL fallback, and API-key/configuration prompts use one generic SDK adapter. This includes ChatGPT/Codex, Claude, xAI/Grok, GitHub Copilot, OpenRouter, Kimi Code, and Pi's API-key providers. Providers configured through your global Pi model configuration are discovered too; project-only provider extensions are not loaded by the gateway. See [provider account setup](docs/provider-accounts.md).
 
-Pi currently documents Claude Pro/Max third-party authentication as drawing from extra usage. Claude has not been live-tested in this build. See [Pi provider documentation](https://pi.dev/docs/latest/providers).
+Credentials stay in Pi's server-side authentication storage, normally `~/.pi/agent/auth.json`, and remain shared with terminal Pi. `pi` → `/login` still works; refresh accounts/models afterwards. Reconnecting replaces that provider's saved login; **Remove saved login…** requires confirmation and also affects terminal Pi. External/environment credentials may still provide access after removal. Account changes do not change existing conversations' model selections, and Margin does not silently switch providers when a request fails.
+
+`openai-codex` uses eligible ChatGPT/Codex subscriptions; `openai` is a separate API-key provider. Pi currently documents Claude Pro/Max third-party authentication as drawing from **separately billed extra usage**, not included plan limits. OpenRouter browser sign-in creates an API key billed from credits; a consumer Gemini subscription is not a Gemini API key. Live Claude/Grok inference and real vendor sign-ins have not been verified by this change. See [Pi provider documentation](https://pi.dev/docs/latest/providers).
 
 An optional `MARGIN_AUTH_READ_ONLY=1` mode reads existing Pi credentials without acquiring its credential write lock. It is useful in restricted hosts, including the environment used to test this prototype. It **cannot refresh expired OAuth tokens**. Normal launches omit this variable and use Pi's normal refresh behavior. No credential copies are stored in the app database.
 
@@ -103,7 +105,7 @@ Background-agent primitives exist in the plugin API, but the default main agent 
 
 For a new skill, add `~/.pi/agent/skills/my-skill/SKILL.md` for global use, or `<project>/.pi/skills/my-skill/SKILL.md` for one project, then use **Reload skills**. Give the file `name` and `description` frontmatter followed by its instructions.
 
-Margin runs Pi and server plugins inside each workspace's cco-wrapped Node process. The small local gateway handles browser authentication, folder selection, storage registration, and worker lifecycle; it does not execute agent sessions or server plugins. Native cco defaults allow reading the host filesystem and directly modifying the primary project, explicitly added folders, and normal state/temp paths; network behavior remains unchanged. There are no extra command approvals or Apply/Discard steps. A direct `start:native` launch only has inherited OS restrictions. Skill instructions to wait remain behavioral instructions, separate from cco's enforced boundary.
+Margin runs Pi and server plugins inside each workspace's cco-wrapped Node process. The small local gateway handles browser authentication, Pi provider-account setup, folder selection, storage registration, and worker lifecycle; it does not execute agent sessions or server plugins. Native cco defaults allow reading the host filesystem and directly modifying the primary project, explicitly added folders, and normal state/temp paths; network behavior remains unchanged. There are no extra command approvals or Apply/Discard steps. A direct `start:native` launch only has inherited OS restrictions. Skill instructions to wait remain behavioral instructions, separate from cco's enforced boundary.
 
 ## Verification
 

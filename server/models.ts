@@ -32,8 +32,9 @@ export function readOnlyCredentials(authPath: string): CredentialStore {
     },
   };
 }
-export async function createModels(dataDir: string) {
+export async function createModels(dataDir: string, signal?: AbortSignal) {
   return ModelRuntime.create({
+    signal,
     modelsStorePath: join(dataDir, "models-store.json"),
     ...(process.env.MARGIN_AUTH_READ_ONLY === "1"
       ? { credentials: readOnlyCredentials(join(getAgentDir(), "auth.json")) }

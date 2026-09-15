@@ -1,5 +1,18 @@
 # Evaluation record
 
+## Follow-up: generic Pi provider accounts in Settings
+
+Added one SDK-driven account adapter rather than separate Codex/Claude/Grok backends. The authenticated gateway (and standalone native host) now supports Pi's browser authorization, device-code, selection, optional-text, secret and manual-redirect prompts. Provider methods are discovered from the installed runtime; the inspected 0.85.1 built-ins expose 40 providers, seven OAuth options and 39 API-key/token/configuration methods. Global custom model providers can add entries; the gateway does not load project extensions or agents.
+
+- `npm run check`: **173 Node tests passed**; TypeScript and the production build passed. The existing bundle advisory remains (about 686 KB / 211 KB gzip).
+- **6 focused Chromium tests passed** (provider accounts plus existing Settings regressions), and **2 focused gateway tests passed** (account access controls plus multi-workspace defaults). The complete browser/gateway suites were not rerun.
+- Real SDK tests used disposable credential files: API-key login/removal, owner-only `0600` permissions, fresh-runtime Claude/Grok availability, and the actual xAI device-code implementation against mocked HTTP. Concurrent runtimes requesting an expired xAI credential caused exactly one mocked token refresh through Pi's credential locking. Extended the real LiveSession default/effort/dispose/reopen regression to Anthropic and xAI without inference.
+- Negative cases covered secret-bearing provider errors, unsupported URL schemes, stale prompt replies, invalid options, blank secrets, shell/environment key expressions, concurrent operations, cancellation, expiry, read-only mutations, and committed-credential/local-sync failures. HTTP responses expose no credential values or raw provider errors. Browser tests checked password inputs, absence of submitted secrets from browser storage, persistent validation errors while polling, callback fallback/error/retry, shared-login removal confirmation, server-lost interaction recovery, automatic model refresh and independence from default Save/Cancel.
+- Gateway checks exercised unauthenticated requests, hostile Origins, non-JSON mutations and read-only denial. Gateway tests use the existing process-routing shim, not actual cco OS enforcement.
+- Self-review inspected actual desktop and 390px mobile screenshots. It led to expandable accounts (automatically opened with no models), denser buttons, scrolling new authorization instructions into view, and a retry path for lost server interactions. Browser automation initially found an exact-label lookup issue on the provider selector; explicit labels were added and the tests rerun. No independent reviewer or real-user preference evaluation was available.
+
+No real provider login was changed, no live Claude/Grok inference was requested, and no live Margin process was restarted. Real vendor authorization, account eligibility/billing, remote-host callbacks and real cco behavior remain manual checks. Restart Margin normally (without `MARGIN_AUTH_READ_ONLY` for account changes), then refresh the browser to activate this build. See [account setup and limits](provider-accounts.md).
+
 ## Follow-up: shared new-conversation settings
 
 Added the header gear and Settings dialog for a default model and supported thinking effort. Defaults live in Margin's SQLite preferences; the gateway owns the app-wide record and passes a snapshot to each workspace worker only at chat creation. Existing chats keep their choices. Default skill remains deferred.

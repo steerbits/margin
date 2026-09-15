@@ -18,6 +18,8 @@ import { launcherAuth } from "./launcher-auth.ts";
 import { NativeDirectoryPicker } from "./native-directory-picker.ts";
 import type { ModelInfo, Project, SessionInfo } from "../shared/types.ts";
 import { installSettingsRoutes, readSettings } from "./settings.ts";
+import { createModels } from "./models.ts";
+import { ProviderAccounts, installProviderAccountRoutes } from "./provider-accounts.ts";
 
 // This process handles browser requests and worker lifecycle. It deliberately
 // imports neither Pi sessions nor executable server plugins.
@@ -370,6 +372,12 @@ app.post("/api/workspaces", async (req, res) => {
   registry.put("project", created.id, created);
   res.json(projectView(created));
 });
+// Account setup belongs to the authenticated gateway, not a project worker.
+// Loading ModelRuntime does not load project extensions or start an agent.
+const providerAccounts = new ProviderAccounts(() =>
+  createModels(dataDir, AbortSignal.timeout(15_000)),
+);
+installProviderAccountRoutes(app, providerAccounts);
 installSettingsRoutes(app, registry, async () => {
   const response = await workerFetch(
     projectById(initial.id),
@@ -515,6 +523,7 @@ async function shutdown() {
   stopping = true;
   server.close();
   directoryPicker.close();
+  providerAccounts.close();
   await workers.close();
   registry.close();
   process.exit(0);

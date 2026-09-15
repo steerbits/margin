@@ -16,6 +16,7 @@ import { runtimeLog } from "./runtime-log.ts";
 import { deleteSavedSession } from "./delete-session.ts";
 import { LiveSession, errorText } from "./sessions.ts";
 import { createModels, listModels } from "./models.ts";
+import { ProviderAccounts, installProviderAccountRoutes } from "./provider-accounts.ts";
 import {
   installSettingsRoutes,
   modelReferenceSchema,
@@ -548,7 +549,13 @@ app.post(
     res.json(projectView(project));
   }),
 );
-if (!workerToken) installSettingsRoutes(app, store, availableModels);
+const providerAccounts = new ProviderAccounts(() =>
+  createModels(dataDir, AbortSignal.timeout(15_000)),
+);
+if (!workerToken) {
+  installSettingsRoutes(app, store, availableModels);
+  installProviderAccountRoutes(app, providerAccounts);
+}
 app.post(
   "/api/models/refresh",
   asyncRoute(async (_req, res) =>
@@ -958,6 +965,7 @@ const server = app.listen(port, "127.0.0.1", () => {
 });
 let shuttingDown = false;
 async function shutdown() {
+  providerAccounts.close();
   if (shuttingDown) return;
   shuttingDown = true;
   runtimeOwner.update(runtimeIdentity.generation, { expectedStop: true });

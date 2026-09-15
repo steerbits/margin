@@ -1,3 +1,13 @@
+export class ApiError extends Error {
+  constructor(
+    readonly status: number,
+    message: string,
+  ) {
+    super(message);
+    this.name = "ApiError";
+  }
+}
+
 export async function api<T>(
   path: string,
   body?: unknown,
@@ -10,7 +20,8 @@ export async function api<T>(
   });
   const data = await r.json();
   if (!r.ok)
-    throw new Error(
+    throw new ApiError(
+      r.status,
       r.status === 404 && data.error === "Unknown API route."
         ? "Restart Margin to finish updating. Save any unsaved notes, stop the server in Terminal, and run the same launch command again. Then refresh this page."
         : (data.error ?? `Request failed (${r.status})`),
