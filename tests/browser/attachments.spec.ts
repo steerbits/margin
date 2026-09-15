@@ -38,6 +38,39 @@ async function choose(page: Page, files = [md]) {
   await expect(drafts(page)).not.toContainText("Uploading…");
 }
 
+test("selecting files returns focus for typing, but finishing a late upload does not steal it", async ({
+  page,
+}) => {
+  const id = await seed(page);
+  let release!: () => void;
+  const waiting = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  await page.route(`**/api/sessions/${id}/attachments`, async (route) => {
+    await waiting;
+    await route.continue().catch(() => {});
+  });
+  const composer = page.getByLabel("Message Pi", { exact: true });
+  const skill = page.getByLabel("Starting skill");
+  try {
+    const picker = page.waitForEvent("filechooser");
+    await page
+      .getByRole("button", { name: "Attach files", exact: true })
+      .click();
+    await (await picker).setFiles([md, pdf]);
+    await expect(drafts(page)).toContainText("Uploading…");
+    await expect(composer).toBeFocused();
+    await page.keyboard.type("Use these references");
+    await expect(composer).toHaveValue("Use these references");
+    await skill.focus();
+  } finally {
+    release();
+  }
+  await expect(drafts(page)).not.toContainText("Uploading…");
+  await expect(skill).toBeFocused();
+  await expect(composer).toHaveValue("Use these references");
+});
+
 test("a newly created chat accepts dropped files before its first live snapshot", async ({
   page,
 }) => {
@@ -131,6 +164,7 @@ test("returning from the file picker can reconnect the chat without rejecting th
     await page.getByRole("button", { name: "Retry", exact: true }).click();
     await expect(drafts(page)).not.toContainText("Uploading…");
     await expect(drafts(page)).not.toContainText("Upload service unavailable");
+    await expect(page.getByLabel("Message Pi", { exact: true })).toBeFocused();
   } finally {
     release();
   }
@@ -139,6 +173,66 @@ test("returning from the file picker can reconnect the chat without rejecting th
 });
 
 for (const mobile of [false, true]) {
+  test(`attachment chips are aligned and single-line with size tooltips on ${mobile ? "mobile" : "desktop"}`, async ({
+    page,
+  }) => {
+    if (mobile) await page.setViewportSize({ width: 390, height: 844 });
+    await seed(page);
+    const long = { ...md, name: `${"long-filename-".repeat(10)}.md` };
+    await choose(page, [md, long]);
+    const chip = drafts(page).locator(".attachment-chip").first();
+    await expect(chip).toHaveText(md.name);
+    await expect(chip).toHaveAttribute("title", `${md.name} · 33 B`);
+    const textLeft = await page
+      .getByLabel("Message Pi", { exact: true })
+      .evaluate((input) => {
+        const style = getComputedStyle(input);
+        return (
+          input.getBoundingClientRect().left +
+          parseFloat(style.paddingLeft) +
+          parseFloat(style.borderLeftWidth)
+        );
+      });
+    expect(
+      Math.abs((await chip.boundingBox())!.x - textLeft),
+    ).toBeLessThanOrEqual(1);
+    const longName = drafts(page).locator(".attachment-name").last();
+    await expect(longName).toHaveCSS("white-space", "nowrap");
+    await expect(longName).toHaveCSS("text-overflow", "ellipsis");
+    await expect(
+      drafts(page).locator(".attachment-chip").last(),
+    ).toHaveAttribute("title", `${long.name} · 33 B`);
+    expect(
+      await longName.evaluate((name) => name.scrollWidth > name.clientWidth),
+    ).toBe(true);
+    await page.screenshot({
+      path: `.margin-data/attachments-compact-draft-${mobile ? "mobile" : "desktop"}.png`,
+    });
+    await send(page).click();
+    const sent = page.getByLabel("Sent attachments", { exact: true });
+    const download = sent.getByRole("link", {
+      name: `Download ${md.name}`,
+      exact: true,
+    });
+    await expect(download).toHaveText(md.name);
+    await expect(download).toHaveAttribute(
+      "title",
+      `Download ${md.name} · 33 B`,
+    );
+    await expect(sent.locator(".attachment-name").last()).toHaveCSS(
+      "white-space",
+      "nowrap",
+    );
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= innerWidth,
+      ),
+    ).toBe(true);
+    await page.screenshot({
+      path: `.margin-data/attachments-compact-sent-${mobile ? "mobile" : "desktop"}.png`,
+    });
+  });
+
   test(`any-file attachment-only send, download, and persisted history on ${mobile ? "mobile" : "desktop"}`, async ({
     page,
   }) => {
@@ -216,6 +310,7 @@ test("drop on chat history and paste an image; ordinary text dragging does not a
     page.getByText("Attach to this conversation", { exact: true }),
   ).toHaveCount(0);
   await expect(drafts(page)).toContainText("dropped.md");
+  await expect(page.getByLabel("Message Pi", { exact: true })).toBeFocused();
   await page.getByLabel("Message Pi", { exact: true }).evaluate((input) => {
     const data = new DataTransfer();
     data.items.add(
@@ -318,6 +413,9 @@ test("late uploads stay in their original chat and other chats cannot download o
   // SPA navigation, preserving the in-flight request and its captured destination.
   await page.locator(`[data-session-id="${second}"]`).click();
   await expect(drafts(page)).toHaveCount(0);
+  await expect(page.getByLabel("Starting skill")).toBeEnabled();
+  await page.getByLabel("Starting skill").focus();
+  await expect(page.getByLabel("Starting skill")).toBeFocused();
   release();
   await expect
     .poll(
@@ -327,6 +425,7 @@ test("late uploads stay in their original chat and other chats cannot download o
     )
     .toBe(1);
   await expect(drafts(page)).toHaveCount(0);
+  await expect(page.getByLabel("Starting skill")).toBeFocused();
   const state = await (await page.request.get(`/api/sessions/${first}`)).json();
   const attachmentId = state.composerAttachments[0].id;
   expect(

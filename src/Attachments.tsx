@@ -4,6 +4,7 @@ import {
   useState,
   type DragEvent,
   type ClipboardEvent,
+  type RefObject,
 } from "react";
 import { FileUp, Paperclip, X } from "lucide-react";
 import type { Attachment, Snapshot } from "../shared/types.ts";
@@ -42,6 +43,7 @@ export function useChatAttachments(
   snapshot: Snapshot | null,
   enabled: boolean,
   fail: (error: unknown) => void,
+  composerEditor: RefObject<HTMLTextAreaElement | null>,
 ) {
   const latest = useRef(snapshot);
   latest.current = snapshot;
@@ -183,6 +185,7 @@ export function useChatAttachments(
         .filter((job) => job.sessionId === id)
         .map((job) => job.id),
     ]).size;
+    let added = false;
     for (const file of files) {
       if (file.size > MAX_ATTACHMENT_BYTES) {
         fail(new Error(`${file.name}: files must be 20 MB or smaller.`));
@@ -200,11 +203,15 @@ export function useChatAttachments(
         status: "uploading",
       };
       jobs.current.push(job);
+      added = true;
       count++;
       // Bound memory use; a navigation never changes a queued upload's destination.
       queue.current = queue.current.then(() => upload(job));
     }
     update();
+    // Focus during the explicit attachment gesture (also opens mobile keyboards),
+    // not an async completion that could steal focus after typing or navigation.
+    if (added) composerEditor.current?.focus({ preventScroll: true });
   }
   async function remove(id: string) {
     if (!enabled || !sessionId) return;
@@ -331,12 +338,13 @@ export function useChatAttachments(
         {files
           .filter((file) => !currentJobs.some((job) => job.id === file.id))
           .map((file) => (
-            <div className="attachment-chip" key={file.id}>
+            <div
+              className="attachment-chip"
+              key={file.id}
+              title={`${file.name} · ${attachmentSize(file.size)}`}
+            >
               <Paperclip size={14} />
-              <span title={file.name}>
-                {file.name}
-                <small>{attachmentSize(file.size)}</small>
-              </span>
+              <span className="attachment-name">{file.name}</span>
               <button
                 type="button"
                 disabled={!enabled}
@@ -351,10 +359,11 @@ export function useChatAttachments(
           <div
             className={`attachment-chip ${job.status === "error" ? "failed" : ""}`}
             key={job.id}
+            title={`${job.name}${job.file ? ` · ${attachmentSize(job.file.size)}` : ""}`}
           >
             <Paperclip size={14} />
-            <span title={job.name}>
-              {job.name}
+            <span>
+              <span className="attachment-name">{job.name}</span>
               <small role={job.status === "error" ? "alert" : "status"}>
                 {job.status === "error"
                   ? job.error
@@ -373,6 +382,7 @@ export function useChatAttachments(
                       job.status = "uploading";
                       update();
                       queue.current = queue.current.then(() => upload(job));
+                      composerEditor.current?.focus({ preventScroll: true });
                     }}
                   >
                     Retry
@@ -411,12 +421,11 @@ export function SentAttachments({
           key={file.id}
           href={`/api/sessions/${encodeURIComponent(sessionId)}/attachments/${encodeURIComponent(file.id)}/download`}
           download={file.name}
+          aria-label={`Download ${file.name}`}
+          title={`Download ${file.name} · ${attachmentSize(file.size)}`}
         >
           <Paperclip size={14} />
-          <span>
-            {file.name}
-            <small>{attachmentSize(file.size)} · Download</small>
-          </span>
+          <span className="attachment-name">{file.name}</span>
         </a>
       ))}
     </div>

@@ -234,6 +234,7 @@ export function App() {
       !sending && !hubOpen && !allWorkspaces && !routeMissing &&
       !settingsOpen && !renameOpen && !deleteTarget && !choosingWorkspace,
     fail,
+    composerEditor,
   );
   function writeRoute(next: Destination, replace = false) {
     const url = destinationUrl(next);
