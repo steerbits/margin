@@ -137,6 +137,10 @@ test("orphaned upload writes are retryable and damaged drafts can be removed wit
     rmSync(f.files.read(missing.id).file.path);
     f.files.remove(missing.id);
     assert.equal(f.files.list().length, 0);
+    f.files.upload(upload());
+    f.store.put("attachments", f.id, []);
+    deleteSavedSession(f.store, f.info, f.dir);
+    assert.equal(existsSync(join(f.dir, "attachments", f.id)), false);
   } finally {
     f.close();
   }

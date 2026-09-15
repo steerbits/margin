@@ -268,6 +268,7 @@ export class AttachmentStore {
     this.save(files.filter((file) => file.id !== id));
   }
   deleteAll() {
+    if (!existsSync(join(this.dataDir, "attachments"))) return;
     const path = this.directory();
     rmSync(path, { recursive: true, force: true });
   }

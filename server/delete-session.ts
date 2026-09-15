@@ -20,6 +20,7 @@ export function deleteSavedSession(
     unlinkSync(file);
   }
   const attachments = new AttachmentStore(store, dataDir, info.id);
-  if (attachments.list().length) attachments.deleteAll();
+  // Include orphaned originals from a crash before upload metadata was saved.
+  attachments.deleteAll();
   store.deleteSession(info.id);
 }
