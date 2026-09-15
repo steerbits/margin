@@ -104,6 +104,92 @@
             stroke-linecap="round"
           />
         </symbol>
+        <symbol id="star" viewBox="0 0 60 60">
+          <path
+            d="m30 5 8 16 18 3-13 13 3 18-16-9-16 9 3-18L4 24l18-3Z"
+            fill="#f7dc91"
+            stroke="#b99b5f"
+            stroke-width="2"
+            stroke-linejoin="round"
+          />
+          <path
+            d="m30 12 5 12 13 2"
+            fill="none"
+            stroke="#fff4c8"
+            stroke-width="3"
+            stroke-linecap="round"
+          />
+          <circle cx="23" cy="31" r="2" fill="#796948" />
+          <circle cx="37" cy="31" r="2" fill="#796948" />
+          <path
+            d="M27 37q3 3 6 0"
+            fill="none"
+            stroke="#796948"
+            stroke-width="1.5"
+            stroke-linecap="round"
+          />
+          <ellipse cx="18" cy="36" rx="4" ry="2" fill="#e8b397" />
+          <ellipse cx="42" cy="36" rx="4" ry="2" fill="#e8b397" />
+        </symbol>
+        <symbol id="lantern" viewBox="0 0 80 100">
+          <ellipse cx="40" cy="93" rx="29" ry="5" fill="#607b78" opacity=".2" />
+          <circle
+            cx="40"
+            cy="15"
+            r="10"
+            fill="none"
+            stroke="#9a835d"
+            stroke-width="3"
+          />
+          <path
+            d="m20 31 6 56h28l6-56Z"
+            fill="var(--lantern-glass, #d6d4b7)"
+            stroke="#9a835d"
+            stroke-width="2"
+          />
+          <path
+            d="m28 36 3 43m21-43-3 43"
+            stroke="#fff8dc"
+            stroke-width="3"
+            opacity=".65"
+          />
+          <use
+            href="#star"
+            x="24"
+            y="44"
+            width="32"
+            height="32"
+            opacity="var(--lantern-star, .2)"
+          />
+          <path
+            d="m16 31 10-11h28l10 11Zm9 53h30l8 7H17Z"
+            fill="#d5b982"
+            stroke="#9a835d"
+            stroke-width="2"
+            stroke-linejoin="round"
+          />
+          <path
+            d="M19 32h42M21 92h38"
+            stroke="#9a835d"
+            stroke-width="3"
+            stroke-linecap="round"
+          />
+        </symbol>
+        <symbol id="icon-moon" viewBox="0 0 32 32">
+          <path
+            d="M24 23A12 12 0 0 1 10 4a12 12 0 1 0 14 19Z"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.8"
+            stroke-linejoin="round"
+          />
+          <path
+            d="M24 4v6m-3-3h6"
+            stroke="currentColor"
+            stroke-width="1.5"
+            stroke-linecap="round"
+          />
+        </symbol>
         <symbol id="bunny" viewBox="0 0 100 135">
           <ellipse
             cx="50"
@@ -454,10 +540,17 @@
               />
             </svg>
           </h1>
-          <p>A few strawberries. A few friends. A lovely little afternoon.</p>
+          <p id="intro-copy">
+            A few strawberries. A few friends. A lovely little afternoon.
+          </p>
         </section>
 
         <section class="game-wrap" aria-label="Clover’s picnic game">
+          <div class="level-strip" aria-label="Adventure progress">
+            <span id="level-count">LEVEL 1 OF 2</span>
+            <span id="level-name">The strawberry picnic</span>
+            <span id="level-next">Up next: a little starlight ✧</span>
+          </div>
           <div
             id="game"
             class="game"
@@ -474,12 +567,12 @@
             >
               <defs>
                 <linearGradient id="sky" x2="0" y2="1">
-                  <stop stop-color="#edf0d9" />
-                  <stop offset="1" stop-color="#f8f0d2" />
+                  <stop stop-color="var(--sky-top, #edf0d9)" />
+                  <stop offset="1" stop-color="var(--sky-bottom, #f8f0d2)" />
                 </linearGradient>
                 <linearGradient id="meadow" x2="0" y2="1">
-                  <stop stop-color="#d5dfa9" />
-                  <stop offset="1" stop-color="#c1d298" />
+                  <stop stop-color="var(--meadow-top, #d5dfa9)" />
+                  <stop offset="1" stop-color="var(--meadow-bottom, #c1d298)" />
                 </linearGradient>
                 <pattern
                   id="gingham"
@@ -518,18 +611,44 @@
                   d="M641 77q-15-13 1-24 0-22 20-20 14-20 32 0 23-6 29 15 21 7 13 25Z"
                 />
               </g>
-              <circle cx="825" cy="88" r="33" fill="#f4dda0" opacity=".85" />
-              <g
-                stroke="#d6bd7b"
-                stroke-width="1.6"
-                stroke-linecap="round"
-                opacity=".7"
-              >
-                <path d="M813 88h1m20 0h1m-17 8q5 4 10 0" />
+              <g class="day-sun">
+                <circle cx="825" cy="88" r="33" fill="#f4dda0" opacity=".85" />
+                <g
+                  stroke="#d6bd7b"
+                  stroke-width="1.6"
+                  stroke-linecap="round"
+                  opacity=".7"
+                >
+                  <path d="M813 88h1m20 0h1m-17 8q5 4 10 0" />
+                </g>
+              </g>
+              <g class="night-sky">
+                <circle cx="786" cy="88" r="49" fill="#fff6d5" opacity=".12" />
+                <path
+                  d="M804 112a34 34 0 0 1-24-57 34 34 0 1 0 24 57Z"
+                  fill="#fcf0c7"
+                />
+                <path
+                  d="M764 94q3 3 6 0m5 9q4 3 7 0"
+                  fill="none"
+                  stroke="#a59b7f"
+                  stroke-width="1.5"
+                  stroke-linecap="round"
+                />
+                <g fill="#fff1bc">
+                  <path
+                    d="m520 39 3 9 9 3-9 3-3 9-3-9-9-3 9-3Zm-204 69 2 6 6 2-6 2-2 6-2-6-6-2 6-2Zm359 9 2 7 7 2-7 2-2 7-2-7-7-2 7-2Z"
+                  />
+                  <circle cx="580" cy="91" r="2" />
+                  <circle cx="476" cy="132" r="2" />
+                  <circle cx="728" cy="37" r="2" />
+                  <circle cx="262" cy="80" r="2" />
+                  <circle cx="845" cy="141" r="2" />
+                </g>
               </g>
               <path
                 d="M0 173Q130 76 310 162q119-76 269 6 139-83 277-13 83-36 144-13v260H0Z"
-                fill="#dce2b8"
+                fill="var(--far-hill, #dce2b8)"
               />
               <path
                 d="M0 227q157-88 341-20 161-69 318-10 206-86 341 20v353H0Z"
@@ -537,12 +656,12 @@
               />
               <path
                 d="M474 195c-77 34-148 60-184 112-36 50 99 86 143 132 49 52-63 95-103 131h152c45-57 61-97 7-140-66-51-167-79-132-120 25-38 79-72 144-104Z"
-                fill="#e1deb0"
+                fill="var(--path-color, #e1deb0)"
                 opacity=".72"
               />
               <path
                 d="M0 459q185-40 302 37t357 9q219-65 341-4v69H0Z"
-                fill="#b7cc91"
+                fill="var(--near-hill, #b7cc91)"
                 opacity=".4"
               />
               <!-- The two old trees at the edge of the clearing. -->
@@ -729,6 +848,15 @@
               </g>
               <use href="#bush" x="-30" y="495" width="155" height="100" />
               <use href="#bush" x="911" y="512" width="145" height="94" />
+              <g class="night-sky fireflies" fill="#fff3b0">
+                <circle cx="260" cy="333" r="3" />
+                <circle cx="407" cy="390" r="2" />
+                <circle cx="603" cy="300" r="3" />
+                <circle cx="818" cy="449" r="3" />
+                <circle cx="320" cy="470" r="2" />
+                <circle cx="906" cy="376" r="2" />
+                <circle cx="561" cy="521" r="3" />
+              </g>
               <rect
                 class="paper-texture"
                 width="1000"
@@ -914,9 +1042,12 @@
       </div>
       <div class="eyebrow">HELLO, LITTLE EXPLORER</div>
       <h2 id="help-title">There’s a spot for you.</h2>
-      <p>
+      <p id="help-objective">
         Help Clover gather <strong>6 strawberries</strong>, then bring them to
         the picnic basket.
+      </p>
+      <p class="dialog-small">
+        Two little levels: a berry picnic, then a starlit evening.
       </p>
       <ul>
         <li><span>↗</span> Click or tap anywhere to hop there.</li>
@@ -924,8 +1055,8 @@
         <li><span>♡</span> Tap a friend to say something sweet.</li>
       </ul>
       <p class="dialog-small">
-        You can also Tab to a berry and press Enter.<br />No timer. No wrong
-        turns. Just a little joy.
+        You can also Tab to a collectible and press Enter.<br />No timer. No
+        wrong turns. Just a little joy.
       </p>
       <button class="primary-button" data-close="help-dialog">
         Let’s have a lovely day <span>→</span>
@@ -938,12 +1069,17 @@
         ><svg class="win-bunny"><use href="#bunny" /></svg
         ><svg><use href="#cat" /></svg><svg><use href="#duck" /></svg>
       </div>
-      <div class="eyebrow">SIX BERRIES. FOUR HAPPY HEARTS.</div>
+      <div id="win-eyebrow" class="eyebrow">
+        LEVEL 1 COMPLETE. MORE MAGIC AWAITS.
+      </div>
       <h2 id="win-title">A little kindness.<br />A lovely little picnic.</h2>
-      <p>
+      <p id="win-copy">
         You brought the strawberries.<br />They brought the very best company.
       </p>
       <div class="win-message">“The sweetest ones are the ones we share.”</div>
+      <button id="next-level-button" class="primary-button" hidden>
+        Level 2: a little starlight <span>→</span>
+      </button>
       <button id="stay-button" class="primary-button">
         Stay a little while <span>♡</span></button
       ><button id="replay-button" class="text-button">

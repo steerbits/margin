@@ -859,6 +859,162 @@ dialog li > span {
 .completed .player-name {
   color: #73815a;
 }
+/* Two chapters of the same lovely day. */
+[hidden] {
+  display: none !important;
+}
+.level-strip {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 7px 13px 13px;
+  color: #83916b;
+  font-size: 10px;
+}
+#level-count {
+  font-size: 8px;
+  font-weight: 650;
+  letter-spacing: 1.5px;
+}
+#level-name {
+  font-family: var(--serif);
+  font-style: italic;
+  font-size: 12px;
+}
+#level-next {
+  margin-left: auto;
+  color: #969d83;
+  font-size: 9px;
+}
+.night-sky {
+  display: none;
+}
+.game.twilight {
+  --sky-top: #aaaecb;
+  --sky-bottom: #d8ccda;
+  --meadow-top: #b2c8c5;
+  --meadow-bottom: #91b3b2;
+  --far-hill: #bfccd0;
+  --near-hill: #789e9f;
+  --path-color: #c6cec5;
+}
+.twilight .night-sky {
+  display: block;
+}
+.twilight .day-sun,
+.twilight .butterfly {
+  display: none;
+}
+.twilight .cloud {
+  opacity: 0.25;
+}
+.twilight .tree-crown > path:first-child {
+  fill: #82a39c;
+}
+.twilight .tree-crown > path[stroke-width="3"] {
+  stroke: #72938d;
+}
+.twilight .tree-crown > path[stroke-width="7"] {
+  stroke: #a7bdb0;
+}
+.twilight .landscape > use[href="#bush"] {
+  filter: hue-rotate(38deg) saturate(0.6) brightness(0.9);
+}
+.twilight #scattered-flowers {
+  opacity: 0.65;
+}
+.twilight .weather {
+  color: #686f8b;
+}
+.twilight .weather svg {
+  color: #827c9d;
+}
+.twilight .field-note {
+  color: #626c7c;
+  background: #f5f0e2cc;
+}
+.twilight .progress-dot.filled {
+  background: #dfbc70;
+  border-color: #c4a464;
+}
+.twilight .objective-icon {
+  background: #f3ead0;
+}
+.twilight .player-name {
+  color: #647574;
+  background: #f7f3e6ca;
+  border-color: #91b1a9;
+}
+.star-object svg {
+  filter: drop-shadow(0 0 7px #fff5b1aa);
+}
+.twilight .star-object::before {
+  background: #fff2ac33;
+  box-shadow: 0 0 14px 7px #fff4c22b;
+}
+.twilight .fireflies {
+  filter: drop-shadow(0 0 5px #fff4ac);
+}
+.fireflies circle {
+  animation: firefly-glow 4s ease-in-out infinite alternate;
+}
+.fireflies circle:nth-child(even) {
+  animation-delay: -2s;
+}
+.twilight.completed {
+  --lantern-glass: #f9e8a8;
+  --lantern-star: 1;
+}
+.twilight.completed .basket > svg {
+  filter: drop-shadow(0 0 14px #ffe7a0);
+}
+.twilight.completed .basket::before {
+  content: "";
+  position: absolute;
+  width: 250%;
+  aspect-ratio: 1;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background: radial-gradient(circle, #fff1b255, transparent 70%);
+  z-index: -1;
+  pointer-events: none;
+}
+#win-dialog.twilight .primary-button {
+  background: #7c869e;
+  border-color: #6a768e;
+  box-shadow: 0 3px 0 #606d85;
+}
+#win-dialog.twilight .primary-button:hover {
+  background: #6b7892;
+}
+#win-dialog .text-button + .text-button {
+  margin-left: 10px;
+}
+@keyframes firefly-glow {
+  from {
+    opacity: 0.25;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@media (max-width: 600px) {
+  .level-strip {
+    padding: 7px 8px 11px;
+    gap: 9px;
+  }
+  #level-count {
+    font-size: 7px;
+    letter-spacing: 1px;
+  }
+  #level-name {
+    font-size: 11px;
+  }
+  #level-next {
+    display: none;
+  }
+}
 @keyframes hop {
   0%,
   100% {

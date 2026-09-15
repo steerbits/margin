@@ -70,6 +70,106 @@
     "Six sweet berries! Bring them to the picnic basket.",
   ];
 
+  const LEVELS = [
+    {
+      name: "The strawberry picnic",
+      item: "strawberry",
+      plural: "strawberries",
+      sprite: "berry",
+      points: BERRIES,
+      start: START,
+      goal: BASKET,
+      objective: "A picnic for everyone",
+      instruction: "Find 6 sweet strawberries",
+      readyTitle: "The sweetest little haul!",
+      readyCopy: "Bring your berries to the basket",
+      goalLabel: "Picnic basket. Gather six strawberries first.",
+      readyLabel: "Share all six strawberries at the picnic basket",
+      action: "Bring berries to the picnic",
+      prompt: "Picnic time!",
+      welcome: "Little paws. Big picnic plans.",
+      notes: pickupNotes,
+      intro: "A few strawberries. A few friends. A lovely little afternoon.",
+      weather: "a very good day",
+      weatherIcon: "icon-sun",
+      help: "Help Clover gather <strong>6 strawberries</strong>, then bring them to the picnic basket.",
+      finishedTitle: "Good things are for sharing",
+      finishedCopy: "A full basket & happy hearts",
+      finishedLabel: "A full picnic basket. Share a happy moment.",
+      finishedNote: "And just like that, an ordinary day became a lovely one.",
+      winEyebrow: "LEVEL 1 COMPLETE. MORE MAGIC AWAITS.",
+      winTitle: "A little kindness.<br>A lovely little picnic.",
+      winCopy:
+        "You brought the strawberries.<br>They brought the very best company.",
+      winMessage: "“There’s one more little adventure before bedtime.”",
+      afterLine: "Puddles: “Same time tomorrow? And the day after that?”",
+    },
+    {
+      name: "A little starlight",
+      item: "fallen star",
+      plural: "fallen stars",
+      sprite: "star",
+      points: [
+        { x: 200, y: 366 },
+        { x: 385, y: 250 },
+        { x: 645, y: 255 },
+        { x: 855, y: 388 },
+        { x: 474, y: 491 },
+        { x: 142, y: 496 },
+      ],
+      start: { x: 354, y: 420 },
+      goal: BASKET,
+      objective: "A little light for everyone",
+      instruction: "Find 6 sleepy fallen stars",
+      readyTitle: "A pocket full of starlight!",
+      readyCopy: "Bring your stars to the lantern",
+      goalLabel: "Unlit lantern. Gather six fallen stars first.",
+      readyLabel: "Light the lantern with all six fallen stars",
+      action: "Bring stars to the lantern",
+      prompt: "Let’s glow!",
+      welcome: "The sun is tucked in. Let’s find a little starlight.",
+      notes: [
+        "A sleepy little star. It’s warm as a hug.",
+        "This one fell right into a patch of clover.",
+        "Three tiny stars. Half a pocket of magic.",
+        "Puddles is making a very important wish.",
+        "Just one more little light to find.",
+        "Six tiny stars! Bring them to the lantern.",
+      ],
+      intro:
+        "The sun has tucked itself in. There’s a little magic left to find.",
+      weather: "a very cozy evening",
+      weatherIcon: "icon-moon",
+      help: "Help Clover gather <strong>6 fallen stars</strong>, then bring them to the lantern to light up the picnic.",
+      finishedTitle: "You made the meadow glow",
+      finishedCopy: "Six stars & four cozy friends",
+      finishedLabel: "A glowing lantern. Share a cozy moment.",
+      finishedNote: "A little light, a little company. Everything we need.",
+      winEyebrow: "TWO LITTLE ADVENTURES. FOUR HAPPY HEARTS.",
+      winTitle: "A little light.<br>A whole lot of lovely.",
+      winCopy:
+        "Six tiny stars. One cozy lantern.<br>And nowhere else you need to be.",
+      winMessage: "“Even the smallest light is lovelier together.”",
+      afterLine: "Puddles: “I wished for more days with you.”",
+      friendLines: [
+        [
+          "Hazel: “I’m keeping a little starlight in my favorite leaf.”",
+          "Hazel: “I’m not afraid of the dark when we’re together.”",
+        ],
+        [
+          "Marmalade: “I’m very good at counting stars. One… zzz.”",
+          "Marmalade: “The moon looks like a very cozy pillow.”",
+        ],
+        [
+          "Puddles: “Do you think stars say twack instead of quack?”",
+          "Puddles: “My wish? More afternoons just like this one.”",
+        ],
+      ],
+    },
+  ];
+  const basketArtwork = basket.querySelector("svg").outerHTML;
+  let levelIndex = 0;
+  let level = LEVELS[levelIndex];
   let position = { ...START };
   let target = null;
   let berries = [];
@@ -155,6 +255,7 @@
       void audioContext.resume().catch(() => {});
     const melodies = {
       berry: [523.25, 659.25, 783.99],
+      star: [659.25, 880, 1046.5],
       friend: [392, 523.25],
       finish: [523.25, 659.25, 783.99, 1046.5, 783.99, 1046.5],
       hello: [392, 523.25, 659.25],
@@ -231,7 +332,7 @@
     progress.setAttribute("aria-valuenow", String(count));
     progress.setAttribute(
       "aria-valuetext",
-      `${count} of 6 strawberries gathered`,
+      `${count} of 6 ${level.plural} gathered`,
     );
     [...progress.children].forEach((dot, i) =>
       dot.classList.toggle("filled", i < count),
@@ -248,17 +349,16 @@
     setTimeout(() => berry.element.remove(), 410);
     updateProgress();
     burst(berry.x, berry.y);
-    chime();
-    note(pickupNotes[count - 1]);
-    announce(`${count} of 6 strawberries gathered. ${pickupNotes[count - 1]}`);
+    chime(levelIndex === 0 ? "berry" : "star");
+    note(level.notes[count - 1]);
+    announce(
+      `${count} of 6 ${level.plural} gathered. ${level.notes[count - 1]}`,
+    );
     if (count === 6) {
       game.classList.add("ready");
-      $("#objective-title").textContent = "The sweetest little haul!";
-      $("#objective-copy").textContent = "Bring your berries to the basket";
-      basket.setAttribute(
-        "aria-label",
-        "Share all six strawberries at the picnic basket",
-      );
+      $("#objective-title").textContent = level.readyTitle;
+      $("#objective-copy").textContent = level.readyCopy;
+      basket.setAttribute("aria-label", level.readyLabel);
       picnicButton.disabled = false;
     }
   }
@@ -287,19 +387,33 @@
     stopWalking();
     game.classList.remove("ready");
     game.classList.add("completed");
-    $("#objective-title").textContent = "Good things are for sharing";
-    $("#objective-copy").textContent = "A full basket & happy hearts";
-    basket.setAttribute(
-      "aria-label",
-      "A full picnic basket. Share a happy moment.",
-    );
-    picnicButton.innerHTML = "Another lovely afternoon <span>↻</span>";
+    $("#objective-title").textContent = level.finishedTitle;
+    $("#objective-copy").textContent = level.finishedCopy;
+    basket.setAttribute("aria-label", level.finishedLabel);
+    const hasNextLevel = levelIndex < LEVELS.length - 1;
+    picnicButton.innerHTML = hasNextLevel
+      ? "Level 2: a little starlight <span>↗</span>"
+      : "Play both levels again <span>↻</span>";
+    $("#level-next").textContent = hasNextLevel
+      ? "A little starlight awaits ✧"
+      : "Two lovely adventures complete ♡";
+    $("#win-eyebrow").textContent = level.winEyebrow;
+    $("#win-title").innerHTML = level.winTitle;
+    $("#win-copy").innerHTML = level.winCopy;
+    $(".win-message").textContent = level.winMessage;
+    $("#next-level-button").hidden = !hasNextLevel;
+    $("#stay-button").className = hasNextLevel
+      ? "text-button"
+      : "primary-button";
+    $("#replay-button").textContent = hasNextLevel
+      ? "Replay the picnic ↻"
+      : "Play both levels again ↻";
     $(".player-name").innerHTML = "happy Clover <span>♡</span>";
-    note("And just like that, an ordinary day became a lovely one.", true);
+    note(level.finishedNote, true);
     document
       .querySelectorAll(".friend")
       .forEach((element) => element.classList.add("party"));
-    burst(BASKET.x, BASKET.y - 30, 22);
+    burst(level.goal.x, level.goal.y - 30, 22);
     chime("finish");
     const finishedRound = round;
     setTimeout(
@@ -317,15 +431,50 @@
     );
   }
 
-  function reset() {
+  function reset(nextLevel = 0) {
+    levelIndex = nextLevel;
+    level = LEVELS[levelIndex];
     round++;
     stopWalking();
     greetingTimers.forEach(clearTimeout);
     greetingTimers = new Map();
     count = 0;
     complete = false;
-    position = { ...START };
+    position = { ...level.start };
     game.classList.remove("ready", "completed");
+    game.classList.toggle("twilight", levelIndex === 1);
+    winDialog.classList.toggle("twilight", levelIndex === 1);
+    game.dataset.level = String(levelIndex + 1);
+    game.setAttribute(
+      "aria-label",
+      `Level ${levelIndex + 1} of 2: ${level.name}. Use arrow keys or W A S D to move Clover, or tap a ${level.item} to walk to it.`,
+    );
+    $("#level-count").textContent = `LEVEL ${levelIndex + 1} OF 2`;
+    $("#level-name").textContent = level.name;
+    $("#level-next").textContent =
+      levelIndex === 0
+        ? "Up next: a little starlight ✧"
+        : "One last lovely thing before bedtime";
+    $("#intro-copy").textContent = level.intro;
+    $(".weather").innerHTML =
+      `${sprite(level.weatherIcon)}<span>${level.weather}</span>`;
+    $(".objective-icon").innerHTML = sprite(level.sprite);
+    $("#help-objective").innerHTML = level.help;
+    $("#toolbar-note").textContent =
+      levelIndex === 0
+        ? "Take your time. The berries won’t mind."
+        : "Take your time. The stars will wait.";
+    $("footer > span").innerHTML =
+      levelIndex === 0
+        ? `no scores, just strawberries ${sprite("berry")}`
+        : `no scores, just starlight ${sprite("star")}`;
+    basket.innerHTML = `${levelIndex === 0 ? basketArtwork : sprite("lantern")}<span class="basket-prompt">${level.prompt} <span>↓</span></span>`;
+    place(basket, level.goal.x, level.goal.y);
+    progress.setAttribute(
+      "aria-label",
+      levelIndex === 0 ? "Strawberries gathered" : "Fallen stars gathered",
+    );
+    $("#next-level-button").hidden = true;
     playerElement.classList.remove("facing-left");
     $(".player-name").innerHTML = "Clover <span>♡</span>";
     place(playerElement, position.x, position.y);
@@ -334,22 +483,20 @@
     progress.innerHTML =
       '<span class="progress-dot" aria-hidden="true"></span>'.repeat(6);
     updateProgress();
-    $("#objective-title").textContent = "A picnic for everyone";
-    $("#objective-copy").textContent = "Find 6 sweet strawberries";
-    basket.setAttribute(
-      "aria-label",
-      "Picnic basket. Gather six strawberries first.",
-    );
-    picnicButton.innerHTML = "Bring berries to the picnic <span>↗</span>";
+    $("#objective-title").textContent = level.objective;
+    $("#objective-copy").textContent = level.instruction;
+    basket.setAttribute("aria-label", level.goalLabel);
+    picnicButton.innerHTML = `${level.action} <span>↗</span>`;
     picnicButton.disabled = true;
-    note("Little paws. Big picnic plans.");
-    berries = BERRIES.map((point, i) => {
+    note(level.welcome);
+    berries = level.points.map((point, i) => {
       const element = document.createElement("button");
-      element.className = "world-object berry-object";
-      element.setAttribute("aria-label", `Walk to strawberry ${i + 1}`);
-      element.dataset.berry = String(i + 1);
+      element.className = `world-object berry-object${levelIndex === 1 ? " star-object" : ""}`;
+      element.setAttribute("aria-label", `Walk to ${level.item} ${i + 1}`);
+      element.dataset.collectible = String(i + 1);
+      element.dataset[level.sprite] = String(i + 1);
       element.style.setProperty("--delay", `${-i * 0.55}s`);
-      element.innerHTML = sprite("berry");
+      element.innerHTML = sprite(level.sprite);
       place(element, point.x, point.y);
       element.addEventListener("click", (event) => {
         event.stopPropagation();
@@ -359,7 +506,11 @@
       return { ...point, element, collected: false };
     });
     FRIENDS.forEach((original, i) => {
-      const friend = { ...original, visits: 0 };
+      const friend = {
+        ...original,
+        lines: level.friendLines?.[i] || original.lines,
+        visits: 0,
+      };
       const element = document.createElement("button");
       element.className = "world-object friend";
       element.dataset.friend = friend.type;
@@ -426,7 +577,7 @@
           if (!berry.collected && distance(position, berry) < PICKUP_RADIUS)
             collect(berry);
         });
-        if (count === 6 && distance(position, BASKET) < 32) finish();
+        if (count === 6 && distance(position, level.goal) < 32) finish();
       }
     } else {
       playerElement.classList.remove("walking");
@@ -446,26 +597,43 @@
   basket.addEventListener("click", (event) => {
     event.stopPropagation();
     if (complete) {
-      note("Puddles: “Same time tomorrow? And the day after that?”", true);
-      burst(BASKET.x, BASKET.y, 8);
+      note(level.afterLine, true);
+      burst(level.goal.x, level.goal.y, 8);
       chime("friend");
     } else {
-      walkTo(BASKET.x, BASKET.y);
-      if (count < 6)
+      walkTo(level.goal.x, level.goal.y);
+      if (count < 6) {
+        const remainingItem =
+          levelIndex === 0
+            ? count === 5
+              ? "berry"
+              : "berries"
+            : count === 5
+              ? "star"
+              : "stars";
         note(
-          `A spot for every friend. Just ${6 - count} more ${count === 5 ? "berry" : "berries"} to find.`,
+          `A little joy for every friend. Just ${6 - count} more ${remainingItem} to find.`,
           true,
         );
+      }
     }
   });
 
+  function continueAdventure() {
+    if (!complete) return;
+    winDialog.close();
+    reset(levelIndex < LEVELS.length - 1 ? levelIndex + 1 : 0);
+    game.focus({ preventScroll: true });
+    announce(
+      `Level ${levelIndex + 1} of 2: ${level.name}. ${level.instruction}. ${level.welcome}`,
+    );
+  }
+
   picnicButton.addEventListener("click", () => {
-    if (complete) {
-      reset();
-      game.focus({ preventScroll: true });
-      announce("A fresh afternoon. Find six strawberries for your friends.");
-    } else walkTo(BASKET.x, BASKET.y);
+    if (complete) continueAdventure();
+    else walkTo(level.goal.x, level.goal.y);
   });
+  $("#next-level-button").addEventListener("click", continueAdventure);
 
   document.addEventListener("keydown", (event) => {
     const key = event.key.length === 1 ? event.key.toLowerCase() : event.key;

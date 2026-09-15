@@ -68,9 +68,10 @@ async function tabTo(page, selector) {
   assert.fail(`Could not reach ${selector} with Tab`);
 }
 async function gatherAndFinish(page, input = "click") {
-  const route = [1, 2, 3, 6, 5, 4];
-  for (const [index, berry] of route.entries()) {
-    const selector = `[data-berry="${berry}"]`;
+  const level = await page.locator("#game").getAttribute("data-level");
+  const route = level === "1" ? [1, 2, 3, 6, 5, 4] : [1, 2, 3, 4, 5, 6];
+  for (const [index, item] of route.entries()) {
+    const selector = `[data-collectible="${item}"]`;
     if (input === "keyboard") {
       await tabTo(page, selector);
       await page.keyboard.press("Enter");
@@ -87,7 +88,7 @@ async function gatherAndFinish(page, input = "click") {
   assert.equal(
     await page.locator("#win-dialog").evaluate((dialog) => dialog.open),
     false,
-    "Gathering is not winning until the berries are shared",
+    "Gathering is not winning until the items reach the basket or lantern",
   );
   if (input === "keyboard") {
     await tabTo(page, "#picnic-button");
@@ -109,6 +110,39 @@ async function gatherAndFinish(page, input = "click") {
   );
 }
 
+async function assertTwilight(page) {
+  assert.equal(await page.locator("#game").getAttribute("data-level"), "2");
+  assert.equal(
+    await page.locator("#level-count").textContent(),
+    "LEVEL 2 OF 2",
+  );
+  assert.equal(await page.locator(".star-object").count(), 6);
+  assert.equal(await page.locator("[data-berry]").count(), 0);
+  assert.equal(
+    await page.locator(".objective-icon use").getAttribute("href"),
+    "#star",
+  );
+  assert.equal(
+    await page.locator(".weather use").getAttribute("href"),
+    "#icon-moon",
+  );
+  assert.equal(
+    await page.locator("#basket > svg > use").getAttribute("href"),
+    "#lantern",
+  );
+  assert.match(
+    await page.locator("#game").getAttribute("aria-label"),
+    /fallen star/,
+  );
+  assert.equal(
+    await page.locator("#berry-progress").getAttribute("aria-label"),
+    "Fallen stars gathered",
+  );
+  assert.equal(await page.locator("#next-level-button").isVisible(), false);
+  await countIs(page, 0);
+  assert.equal(await page.locator("#picnic-button").isDisabled(), true);
+}
+
 try {
   browser = await chromium.launch({ headless: true });
   const desktop = await browser.newContext({
@@ -122,6 +156,11 @@ try {
   assert.equal(await page.title(), "Clover’s Little Picnic");
   assert.equal(await page.locator(".berry-object").count(), 6);
   assert.equal(await page.locator(".friend").count(), 3);
+  assert.equal(
+    await page.locator("#level-count").textContent(),
+    "LEVEL 1 OF 2",
+  );
+  assert.equal(await page.locator("#next-level-button").isVisible(), false);
   await countIs(page, 0);
   assert.equal(
     await page.locator("#sound-button").getAttribute("aria-pressed"),
@@ -220,6 +259,59 @@ try {
     "Mouse play: six unique pickups, full basket objective, and picnic celebration",
   );
 
+  assert.equal(await page.locator("#next-level-button").isVisible(), true);
+  await page.locator("#next-level-button").click();
+  await assertTwilight(page);
+  await page.locator('[data-friend="hedgehog"]').click();
+  assert.match(
+    await page.locator("#field-note-text").textContent(),
+    /starlight/,
+  );
+  await page.locator("#help-button").click();
+  assert.match(
+    await page.locator("#help-objective").textContent(),
+    /6 fallen stars/,
+  );
+  await page.keyboard.press("Escape");
+  await page.locator("#basket").click();
+  assert.match(
+    await page.locator("#field-note-text").textContent(),
+    /6 more stars/,
+  );
+  assert.equal(
+    await page
+      .locator("#game")
+      .evaluate((element) =>
+        getComputedStyle(element).getPropertyValue("--lantern-star"),
+      ),
+    "",
+  );
+  assert.equal(
+    await page.locator("#win-dialog").evaluate((dialog) => dialog.open),
+    false,
+  );
+  passed(
+    "Next-level button unlocks a fresh twilight meadow, new layout, star objective, lantern, dialogue, and instructions",
+  );
+
+  await gatherAndFinish(page);
+  assert.equal(await page.locator("#next-level-button").isVisible(), false);
+  assert.match(
+    await page.locator("#win-eyebrow").textContent(),
+    /TWO LITTLE ADVENTURES/,
+  );
+  assert.equal(
+    await page
+      .locator("#game")
+      .evaluate((element) =>
+        getComputedStyle(element).getPropertyValue("--lantern-star").trim(),
+      ),
+    "1",
+  );
+  passed(
+    "Mouse play completes level 2 and lights the lantern only after delivering all six stars",
+  );
+
   await page.locator("#replay-button").click();
   await countIs(page, 0);
   assert.equal(await page.locator(".berry-object").count(), 6);
@@ -228,7 +320,17 @@ try {
   assert.equal(resetPosition.x, 34);
   assert.ok(Math.abs(resetPosition.y - (387 / 570) * 100) < 0.001);
   assert.equal(await page.locator("#picnic-button").isDisabled(), true);
-  passed("Replay resets the entire round");
+  assert.equal(await page.locator("#game").getAttribute("data-level"), "1");
+  assert.equal(await page.locator(".star-object").count(), 0);
+  assert.equal(
+    await page
+      .locator("#game")
+      .evaluate((element) => element.classList.contains("twilight")),
+    false,
+  );
+  passed(
+    "Replay resets the entire adventure to level 1, including its art and collectibles",
+  );
 
   await gatherAndFinish(page, "keyboard");
   await page.locator("#stay-button").click();
@@ -242,10 +344,29 @@ try {
     await page.locator("#field-note-text").textContent(),
     /Same time tomorrow/,
   );
+  await page.locator("#sound-button").click();
+  await tabTo(page, "#picnic-button");
+  await page.keyboard.press("Enter");
+  await assertTwilight(page);
+  assert.equal(
+    await page.locator("#sound-button").getAttribute("aria-pressed"),
+    "true",
+  );
+  await page.locator("#sound-button").click();
+  await page.locator("#game").focus();
+  await gatherAndFinish(page, "keyboard");
+  await page.locator("#stay-button").click();
+  await page.locator("#basket").click();
+  assert.match(
+    await page.locator("#field-note-text").textContent(),
+    /I wished for more days/,
+  );
+  assert.equal(await page.locator("#game").getAttribute("data-level"), "2");
   await page.locator("#picnic-button").click();
   await countIs(page, 0);
+  assert.equal(await page.locator("#game").getAttribute("data-level"), "1");
   passed(
-    "Entire round via Tab/Enter; staying keeps the picnic, and replay works afterward",
+    "Both levels via Tab/Enter; staying preserves each scene, progression preserves sound, and final replay returns to level 1",
   );
 
   const phone = await browser.newContext({
@@ -295,8 +416,33 @@ try {
     stayBox.y >= shortDialog.y &&
       stayBox.y + stayBox.height <= shortDialog.y + shortDialog.height,
   );
-  await mobile.locator("#stay-button").tap();
-  passed("Landscape phone: celebration scrolls and its action stays reachable");
+  await mobile.locator("#next-level-button").tap();
+  await assertTwilight(mobile);
+  passed(
+    "Landscape phone: celebration scrolls and its next-level action stays reachable",
+  );
+
+  await mobile.setViewportSize({ width: 390, height: 844 });
+  assert.equal(
+    await mobile
+      .locator(".fireflies circle")
+      .first()
+      .evaluate((element) => getComputedStyle(element).animationName),
+    "none",
+  );
+  const starSize = await mobile.locator('[data-star="1"]').boundingBox();
+  assert.ok(starSize.width >= 44 && starSize.height >= 44);
+  await gatherAndFinish(mobile, "tap");
+  const finalDialog = await mobile.locator("#win-dialog").boundingBox();
+  assert.ok(finalDialog.x >= 0 && finalDialog.x + finalDialog.width <= 390);
+  assert.ok(finalDialog.y >= 0 && finalDialog.y + finalDialog.height <= 844);
+  await mobile.keyboard.press("Escape");
+  await mobile.locator("#picnic-button").tap();
+  await countIs(mobile, 0);
+  assert.equal(await mobile.locator("#game").getAttribute("data-level"), "1");
+  passed(
+    "Touch play completes level 2 with reduced motion, reachable stars, final celebration, Escape, and replay",
+  );
 
   await mobile.setViewportSize({ width: 320, height: 640 });
   await mobile.reload();
