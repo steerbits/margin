@@ -135,6 +135,9 @@ test("failed first send restores the inline draft; accepted send stays docked be
   await seed(page);
   await mockNewConversation(page);
   await page.getByRole("button", { name: /New conversation.*⌘/ }).click();
+  // The previous chat's composer is still enabled while creation is in flight.
+  // Wait for the new chat, rather than accidentally typing into the old one.
+  await expect(page.getByRole("heading", { name: "What would you like to work on?" })).toBeVisible();
   const composer = page.getByLabel("Message Pi", { exact: true });
   await expect(page.getByLabel("Starting skill")).toBeEnabled();
   await composer.fill("Preserve this first draft");

@@ -1,5 +1,8 @@
 import {
   copyFileSync,
+  cpSync,
+  readFileSync,
+  writeFileSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
@@ -58,6 +61,35 @@ export function prepareWorkspaceData(
         .sessions()
         .filter((s) => s.projectId === project.id);
       const ids = new Set(sessions.map((s) => s.id));
+      // Keep uploaded originals available in the worker's allowed data directory.
+      const oldAttachments = join(realpathSync(dataDir), "attachments");
+      const newAttachments = join(targetDir, "attachments");
+      const relocate = (value: unknown): unknown => {
+        if (typeof value === "string")
+          return value
+            .replaceAll(`${oldAttachments}/`, `${newAttachments}/`)
+            .replaceAll(
+              JSON.stringify(`${oldAttachments}/`).slice(1, -1),
+              JSON.stringify(`${newAttachments}/`).slice(1, -1),
+            );
+        if (Array.isArray(value)) return value.map(relocate);
+        if (value && typeof value === "object")
+          return Object.fromEntries(
+            Object.entries(value).map(([key, item]) => [key, relocate(item)]),
+          );
+        return value;
+      };
+      for (const id of ids) {
+        const uploaded = join(oldAttachments, id);
+        if (existsSync(uploaded)) {
+          assertDataPath(dataDir, uploaded);
+          // AttachmentStore validates individual file paths before later reads.
+          cpSync(uploaded, join(staging, "attachments", id), {
+            recursive: true,
+            dereference: false,
+          });
+        }
+      }
       const rows = source.db
         .prepare("SELECT kind, id, value FROM records")
         .all() as { kind: string; id: string; value: string }[];
@@ -73,7 +105,7 @@ export function prepareWorkspaceData(
             row.kind.startsWith("plugin:") &&
             row.kind.endsWith(`:${project.id}`);
           if (!isSessionData && !isPluginData) continue;
-          let value = JSON.parse(row.value);
+          let value = relocate(JSON.parse(row.value));
           if (row.kind === "session") {
             const info = value as SessionInfo;
             if (info.sessionFile) {
@@ -86,8 +118,20 @@ export function prepareWorkspaceData(
               mkdirSync(join(staging, "pi-sessions", project.id), {
                 recursive: true,
               });
-              if (existsSync(info.sessionFile))
-                copyFileSync(info.sessionFile, destination);
+              if (existsSync(info.sessionFile)) {
+                if (existsSync(join(oldAttachments, info.id))) {
+                  const lines = readFileSync(info.sessionFile, "utf8")
+                    .trimEnd()
+                    .split("\n");
+                  writeFileSync(
+                    destination,
+                    lines
+                      .map((line) => JSON.stringify(relocate(JSON.parse(line))))
+                      .join("\n") + "\n",
+                    { mode: 0o600 },
+                  );
+                } else copyFileSync(info.sessionFile, destination);
+              }
               // If the source is missing, the existing pi-backup record can restore it.
               info.sessionFile = join(
                 targetDir,

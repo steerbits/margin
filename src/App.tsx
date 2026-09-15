@@ -78,6 +78,7 @@ import {
   captureConversationPosition,
 } from "./PluginPanel.tsx";
 import { CustomMessage } from "./CustomMessage.tsx";
+import { useChatAttachments, SentAttachments } from "./Attachments.tsx";
 import { captureCommentPosition, focusCommentEditor } from "./comment-focus.ts";
 
 interface Bootstrap {
@@ -223,6 +224,15 @@ export function App() {
   const currentProject = boot.projects.find((p) => p.id === projectId);
   const fail = (e: unknown) =>
     setError(e instanceof Error ? e.message : String(e));
+  const attachments = useChatAttachments(
+    sessionId,
+    snapshot,
+    !!snapshot?.attachmentSupport &&
+      snapshot.session.id === sessionId &&
+      connected && !sending && !hubOpen && !allWorkspaces && !routeMissing &&
+      !settingsOpen && !renameOpen && !deleteTarget && !choosingWorkspace,
+    fail,
+  );
   function writeRoute(next: Destination, replace = false) {
     const url = destinationUrl(next);
     if (location.pathname + location.search !== url) {
@@ -804,7 +814,8 @@ export function App() {
       sending ||
       editing ||
       snapshot.busy ||
-      snapshot.dialogs.length
+      snapshot.dialogs.length ||
+      attachments.hasPending(snapshot.session.id)
     )
       return;
     setSending(true);
@@ -816,7 +827,8 @@ export function App() {
       ids = snapshot.comments
         .filter((c) => c.status === "draft")
         .map((c) => c.id);
-    const fingerprint = JSON.stringify({ note, ids, skill });
+    const attachmentIds = attachments.ids(snapshot.session.id);
+    const fingerprint = JSON.stringify({ note, ids, skill, attachmentIds });
     // Reuse an id after a transport error; the server will never enqueue that batch twice.
     const prior = lastAccepted.current
       ? (JSON.parse(lastAccepted.current) as {
@@ -831,7 +843,11 @@ export function App() {
       await flushDraft();
       const result = await api<{ status: string }>(
         `/sessions/${sendingSession}/send`,
-        { id, note, commentIds: ids, ...(skill ? { skill } : {}) },
+        {
+          id, note, commentIds: ids,
+          ...(attachmentIds.length ? { attachmentIds } : {}),
+          ...(skill ? { skill } : {}),
+        },
       );
       if (result.status === "rejected") {
         lastAccepted.current = "";
@@ -1214,6 +1230,7 @@ export function App() {
                     deletedSessions.add(target.id);
                     histories.delete(target.id);
                     pendingDrafts.delete(target.id);
+                    attachments.forgetSession(target.id);
                     positions.delete(target.id);
                     skillChoices.delete(target.id);
                     const data = {
@@ -1378,7 +1395,8 @@ export function App() {
             onContextMenu={(session, x, y) => setContextMenu({ session, x, y })}
           />
         </aside>
-        <main className="main">
+        <main className="main" {...attachments.dropProps}>
+          {attachments.overlay}
           {statusError && (
             <div className="notice" role="status">
               {statusError}
@@ -1585,13 +1603,17 @@ export function App() {
                             {draftCount === 1 ? "" : "s"} attached
                           </button>
                         )}
+                        {attachments.chips}
                         <textarea
                           ref={composerEditor}
+                          onPaste={attachments.paste}
                           aria-label={`Message ${agentName}`}
                           placeholder={
-                            draftCount
-                              ? "Add an overall reply (optional)…"
-                              : `Message ${agentName}, or select a passage above to comment…`
+                            attachments.files.length
+                              ? "Add a message about these files (optional)…"
+                              : draftCount
+                                ? "Add an overall reply (optional)…"
+                                : `Message ${agentName}, or select a passage above to comment…`
                           }
                           value={draft}
                           onChange={(e) => updateDraft(e.target.value)}
@@ -1605,6 +1627,7 @@ export function App() {
                         />
                         <div className="composer-footer">
                           <div className="composer-options">
+                            {snapshot.attachmentSupport && attachments.button}
                             <label className="skill-choice">
                               <BookOpen size={14} />
                               <select
@@ -1668,7 +1691,9 @@ export function App() {
                                 sending ||
                                 !!snapshot.dialogs.length ||
                                 !!editing ||
-                                (!draft.trim() && !draftCount) ||
+                                attachments.pending ||
+                                (!draft.trim() && !draftCount &&
+                                  !attachments.files.length) ||
                                 !connected
                               }
                             >
@@ -2097,7 +2122,11 @@ export function App() {
                                     {skillLabel(m.skill)}
                                   </div>
                                 )}
-                                <UserMessage text={m.text} />
+                                {m.text && <UserMessage text={m.text} />}
+                                <SentAttachments
+                                  sessionId={snapshot.session.id}
+                                  files={m.attachments}
+                                />
                               </div>
                             )}
                             {m.role === "assistant" && !m.streaming && (

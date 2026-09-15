@@ -3,6 +3,7 @@ import { join, resolve } from "node:path";
 import type { SessionInfo } from "../shared/types.ts";
 import { withinPath } from "./execution.ts";
 import type { Store } from "./store.ts";
+import { AttachmentStore } from "./attachments.ts";
 
 export function deleteSavedSession(
   store: Store,
@@ -18,5 +19,7 @@ export function deleteSavedSession(
       );
     unlinkSync(file);
   }
+  const attachments = new AttachmentStore(store, dataDir, info.id);
+  if (attachments.list().length) attachments.deleteAll();
   store.deleteSession(info.id);
 }

@@ -55,6 +55,12 @@ export interface SessionInfo {
   updatedAt: number;
   activity?: SessionActivity;
 }
+export interface Attachment {
+  id: string;
+  name: string;
+  size: number;
+  mimeType: string;
+}
 export interface Message {
   id: string;
   role: "user" | "assistant" | "tool" | "custom";
@@ -66,6 +72,7 @@ export interface Message {
   details?: unknown;
   skill?: string;
   images?: { data: string; mimeType: string }[];
+  attachments?: Attachment[];
   tool?: ToolView;
 }
 export interface ToolView {
@@ -112,6 +119,9 @@ export interface Snapshot {
   comments: Comment[];
   composer: string;
   composerRevision?: number;
+  composerAttachments?: Attachment[];
+  attachmentRevision?: number;
+  attachmentSupport?: boolean;
   busy: boolean;
   dialogs: Dialog[];
   notices: Notice[];
@@ -128,5 +138,6 @@ export interface FeedbackBatch {
   id: string;
   note: string;
   commentIds: string[];
+  attachmentIds?: string[];
   skill?: string;
 }

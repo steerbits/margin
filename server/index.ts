@@ -8,6 +8,8 @@ import { Store } from "./store.ts";
 import { ArtifactPreviews } from "./artifact-preview.ts";
 import { ArtifactStore } from "./artifacts.ts";
 import { installArtifactRoutes } from "./artifact-routes.ts";
+import { installAttachmentRoutes } from "./attachment-routes.ts";
+import { attachmentUploadRoute, ATTACHMENT_JSON_LIMIT, MAX_DRAFT_ATTACHMENTS } from "../shared/attachments.ts";
 import { readSessionPreview } from "./session-preview.ts";
 import { SessionActivityTracker } from "./session-activity.ts";
 import { snapshotStream } from "./snapshot-stream.ts";
@@ -232,6 +234,7 @@ app.use((req, res, next) => {
   }
   next();
 });
+app.post(attachmentUploadRoute, express.json({ limit: ATTACHMENT_JSON_LIMIT }));
 app.use(express.json({ limit: "2mb" }));
 const asyncRoute =
   (
@@ -673,10 +676,26 @@ app.get(
     stream.send(l.snapshot());
   }),
 );
+installAttachmentRoutes(app, {
+  store,
+  dataDir,
+  getLive,
+  authorize(id) {
+    assertOwnership();
+    if (deleting.has(id)) throw new Error("Conversation is being deleted.");
+    const session = store.get<SessionInfo>("session", id);
+    if (!session) throw new Error("Conversation not found.");
+    requireWorkspace(session.projectId);
+    const project = store.get<Project>("project", session.projectId);
+    if (!project) throw new Error("Workspace not found.");
+    workspaceAccess.requireDirectory(project.path);
+  },
+});
 const batchSchema = z.object({
   id: z.string().uuid(),
   note: z.string().max(100000),
   commentIds: z.array(z.string().uuid()).max(200),
+  attachmentIds: z.array(z.string().uuid()).max(MAX_DRAFT_ATTACHMENTS).optional(),
   skill: z.string().max(200).optional(),
 });
 app.delete(
@@ -730,6 +749,8 @@ async function sendBatch(
     requireIdle();
     history.save("Before customization", "automatic", true);
   }
+  if (batch.attachmentIds?.length && !l.attachmentsChanged)
+    throw new Error("This runtime does not support attachments.");
   const result = await l.send(batch);
   observe(l.snapshot());
   return result;

@@ -67,6 +67,8 @@ export class Store {
         "transcript",
         "composer",
         "composer-revision",
+        "attachments",
+        "attachment-revision",
         "comments",
         "artifact-review",
         "interrupted",

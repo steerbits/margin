@@ -27,7 +27,7 @@ Selecting or creating a conversation updates the address to `/chats/<session UUI
 
 **Rename workspace**, beside the New workspace icon, changes its saved display name; the folder path and UUID stay the same. The dropdown shows five recent workspaces and **All workspaces…** as its final item, after a separator. All workspaces searches by name or path. Recents are stored in this browser.
 
-Right-click a conversation in the sidebar and choose **Delete conversation** to delete its messages, comments, composer draft, and native Pi transcript permanently after confirmation. The same menu is available with Shift+F10 when a chat row has keyboard focus. Stop running work and answer or cancel pending dialogs first. Deleting a chat keeps workspace files and shared plugin notes. Bookmarks to deleted chats show an unavailable destination.
+Right-click a conversation in the sidebar and choose **Delete conversation** to delete its messages, comments, composer draft, uploaded attachments, and native Pi transcript permanently after confirmation. The same menu is available with Shift+F10 when a chat row has keyboard focus. Stop running work and answer or cancel pending dialogs first. Deleting a chat keeps workspace files and shared plugin notes. Bookmarks to deleted chats show an unavailable destination.
 
 Chat rows stay on one line without a chat icon or status text. A small spinner appears while the main agent is running, and a blue dot marks unread replies. The current chat’s header provides its detailed agent state. Summaries update approximately every 1.5 seconds across workspaces. Finished replies remain unread until the end of the latest reply is visible in the focused browser tab. Read markers persist in this browser across reloads; other browsers maintain their own read state. Restarted or exited workers report interrupted activity as stopped. Individual plugin background agents are not listed.
 
@@ -58,6 +58,16 @@ The welcome screen’s **Default from Settings** uses the latest saved defaults.
 Inline comments are sent as a normal user message: a short instruction followed by JSON with `inlineComments` (original `messageId`, `quotedPassage`, and `comment`) and `overallReply`. Visual highlighting and offsets stay in Margin; the model receives the quotations and feedback.
 
 Tool rows show their outcome as text as well as color. Gray is normal running/success styling; red means Pi reported a tool error. For bash this may be a nonzero exit code (including a search returning no matches), a timeout, a stopped command, or a permission failure. Open the row for the actual output. Red is not a separate command-approval or danger classification.
+
+## Chat attachments
+
+In a Pi conversation, click the **paperclip**, drop files anywhere in the **chat pane** (not the sidebar), or paste an image into the message box. Files appear as removable chips; you can send them with text, inline comments, a skill, or no text at all. Any file type is accepted, including Markdown and PDF. Limits are **20 MB per file**, **10 files / 50 MB per draft**, and **500 MB / 1,000 files per conversation**. Zip folders before uploading.
+
+Completed uploads survive reloads and stay with their original conversation when switching chats. Send waits for uploads/removals to finish; failed uploads offer Retry/Remove, and failed sends retain their drafts. Incomplete uploads remain browser-local until acknowledged—finish them before closing the tab. Sent files appear as download links; arbitrary HTML/SVG is downloaded, never rendered in Margin's origin.
+
+The agent receives a JSON manifest containing the message and each file's name, size, MIME hint, and absolute path, not base64 contents. Originals live in `attachments/<conversation ID>/` inside the owning worker's private data directory, accessible to Pi's tools, not in your project source. **Upload support is not universal format understanding:** Markdown can be read directly; PDF, Office, audio, and other binary formats depend on available tools. No OCR, conversion service, reader installation, or automatic execution is performed by the upload feature. The manifest asks the agent not to execute uploaded programs or install readers without permission; this is guidance, not a new security sandbox. Removing a draft deletes its original; deleting the conversation removes all its attachments.
+
+After updating, build and restart Margin with your usual launch command, then refresh the browser.
 
 ## Review generated artifacts
 

@@ -22,6 +22,8 @@ export interface AgentBackend {
   setThinking?(level: string): Promise<void>;
   saveComments(comments: Comment[]): void;
   setComposer(text: string): void;
+  /** Optional capability: the runtime resolves attachment IDs when sending. */
+  attachmentsChanged?(): void;
   answerDialog(id: string, value: unknown, cancelled?: boolean): void;
   dismissNotice(id: string): void;
   notifyError(error: unknown): void;

@@ -30,6 +30,12 @@ import { UiBridge } from "./ui-bridge.ts";
 import { createModels, modelInfo } from "./models.ts";
 import { contentText, diffFrom, transcript } from "./transcript.ts";
 import { formatFeedback } from "./feedback.ts";
+import {
+  AttachmentStore,
+  attachmentState,
+  decorateAttachments,
+} from "./attachments.ts";
+import { attachmentPrompt } from "../shared/attachments.ts";
 import type {
   PluginContext,
   ServerPlugin,
@@ -167,8 +173,12 @@ export class LiveSession implements AgentBackend {
         this.ui.editorText = recovered.composer;
         this.store.put("composer", this.info.id, recovered.composer);
         this.store.put("comments", this.info.id, recovered.comments);
-        if (pending)
+        if (pending) {
+          new AttachmentStore(this.store, this.dataDir, this.info.id).recover(
+            pending.batchId,
+          );
           this.store.markBatch(this.info.id, pending.batchId, "rejected");
+        }
       } else if (
         pending &&
         this.store.batch(this.info.id, pending.batchId)?.status === "submitting"
@@ -597,6 +607,9 @@ export class LiveSession implements AgentBackend {
       this.trackWaiting();
     }
   }
+  attachmentsChanged() {
+    this.changed();
+  }
   snapshot(): Snapshot {
     const messages = this.messages.map((m) =>
       m.tool && this.liveTools.has(m.tool.id)
@@ -607,32 +620,37 @@ export class LiveSession implements AgentBackend {
     for (const t of this.liveTools.values())
       if (!messages.some((m) => m.tool?.id === t.id))
         messages.push({ id: `tool:${t.id}`, role: "tool", text: "", tool: t });
-    return {
-      session: this.info,
-      messages,
-      comments: this.store.comments(this.info.id),
-      composer: this.ui.editorText,
-      composerRevision:
-        this.store.get<number>("composer-revision", this.info.id) ?? 0,
-      busy: this.busy,
-      dialogs: [...this.ui.dialogs.values()],
-      notices: this.ui.notices,
-      statuses: this.ui.statuses,
-      widgets: this.ui.widgets,
-      skills:
-        this.agent?.resourceLoader.getSkills().skills.map((s) => ({
-          name: s.name,
-          description: s.description,
-          filePath: s.filePath,
-        })) ?? [],
-      pluginState: this.pluginState,
-      thinking: this.agent
-        ? {
-            level: this.agent.thinkingLevel,
-            available: this.agent.getAvailableThinkingLevels(),
-          }
-        : undefined,
-    };
+    return decorateAttachments(
+      {
+        session: this.info,
+        messages,
+        attachmentSupport: true,
+        ...attachmentState(this.store, this.info.id),
+        comments: this.store.comments(this.info.id),
+        composer: this.ui.editorText,
+        composerRevision:
+          this.store.get<number>("composer-revision", this.info.id) ?? 0,
+        busy: this.busy,
+        dialogs: [...this.ui.dialogs.values()],
+        notices: this.ui.notices,
+        statuses: this.ui.statuses,
+        widgets: this.ui.widgets,
+        skills:
+          this.agent?.resourceLoader.getSkills().skills.map((s) => ({
+            name: s.name,
+            description: s.description,
+            filePath: s.filePath,
+          })) ?? [],
+        pluginState: this.pluginState,
+        thinking: this.agent
+          ? {
+              level: this.agent.thinkingLevel,
+              available: this.agent.getAvailableThinkingLevels(),
+            }
+          : undefined,
+      },
+      new AttachmentStore(this.store, this.dataDir, this.info.id).list(),
+    );
   }
   async send(batch: FeedbackBatch) {
     this.assertOwnership();
@@ -649,11 +667,22 @@ export class LiveSession implements AgentBackend {
       throw new Error(
         "Context is compacting. Your draft is saved; send it when compaction finishes.",
       );
-    let prompt = formatFeedback(
-      batch,
-      this.store.comments(this.info.id),
-      this.messages,
+    const attachmentStore = new AttachmentStore(
+      this.store,
+      this.dataDir,
+      this.info.id,
     );
+    const attachments = attachmentStore.select(batch);
+    let prompt =
+      attachments.length && !batch.note.trim() && !batch.commentIds.length
+        ? ""
+        : formatFeedback(
+            batch,
+            this.store.comments(this.info.id),
+            this.messages,
+          );
+    if (attachments.length)
+      prompt = attachmentPrompt(prompt, batch.id, attachments);
     if (batch.skill) {
       if (
         !this.agent.resourceLoader
@@ -674,6 +703,7 @@ export class LiveSession implements AgentBackend {
       accepted: false,
       batchId: batch.id,
       note: batch.note,
+      attachmentIds: batch.attachmentIds,
     });
     this.store.markBatch(this.info.id, batch.id, "submitting");
     this.recoveryRun.begin(batch.id);
@@ -698,6 +728,7 @@ export class LiveSession implements AgentBackend {
             note: batch.note,
           });
           if (ok) {
+            attachmentStore.accept(batch);
             const comments = this.store
               .comments(this.info.id)
               .map((c) =>
@@ -714,6 +745,7 @@ export class LiveSession implements AgentBackend {
               this.info.title = (
                 batch.note.trim() ||
                 comments.find((c) => c.batchId === batch.id)?.text ||
+                attachments[0]?.name ||
                 "Review"
               ).slice(0, 64);
               this.persist();

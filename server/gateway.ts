@@ -13,6 +13,7 @@ import { deleteSavedSession } from "./delete-session.ts";
 import { WorkspaceAccess } from "./workspace-access.ts";
 import { createWorkspace } from "./workspaces.ts";
 import { workspaceDataDir, assertDataPath } from "./workspace-data.ts";
+import { attachmentUploadRoute, attachmentDownloadRoute, ATTACHMENT_JSON_LIMIT } from "../shared/attachments.ts";
 import { WorkspaceWorkers } from "./workspace-workers.ts";
 import { launcherAuth } from "./launcher-auth.ts";
 import { NativeDirectoryPicker } from "./native-directory-picker.ts";
@@ -178,6 +179,7 @@ app.use((req, res, next) => {
   }
   next();
 });
+app.post(attachmentUploadRoute, express.json({ limit: ATTACHMENT_JSON_LIMIT }));
 app.use(express.json({ limit: "2mb" }));
 app.post("/api/connect", (req, res) => {
   if (typeof req.body.token !== "string" || !auth.accepts(req.body.token))
@@ -227,9 +229,10 @@ async function proxy(
     abort.signal,
   );
   const type = response.headers.get("content-type")?.split(";")[0];
+  const download = attachmentDownloadRoute.test(req.originalUrl.split("?")[0]);
   const expected = req.path.endsWith("/events")
     ? "text/event-stream"
-    : "application/json";
+    : download ? "application/octet-stream" : "application/json";
   if (
     type !== expected &&
     !(response.status >= 400 && type === "application/json")
@@ -238,7 +241,7 @@ async function proxy(
     throw new Error("Worker returned an unsupported response type.");
   }
   res.status(response.status);
-  for (const name of ["content-type", "cache-control", "x-accel-buffering"])
+  for (const name of ["content-type", "cache-control", "x-accel-buffering", ...(download ? ["content-disposition"] : [])])
     if (response.headers.has(name))
       res.setHeader(name, response.headers.get(name)!);
   res.flushHeaders();

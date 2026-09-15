@@ -5,12 +5,17 @@ import type {
   Comment,
 } from "../shared/types.ts";
 import type { DatabaseSync } from "node:sqlite";
+import {
+  decorateAttachments,
+  publicAttachment,
+  type SavedAttachment,
+} from "./attachments.ts";
 
 export function readSessionPreview(db: DatabaseSync, id: string): Snapshot {
   // One SQLite read snapshot: never pair old composer text with a newer revision.
   const rows = db
     .prepare(
-      "SELECT kind,value FROM records WHERE id=? AND kind IN ('session','activity','transcript','comments','composer','composer-revision')",
+      "SELECT kind,value FROM records WHERE id=? AND kind IN ('session','activity','transcript','comments','composer','composer-revision','attachments','attachment-revision')",
     )
     .all(id) as { kind: string; value: string }[];
   const values = new Map(rows.map((row) => [row.kind, JSON.parse(row.value)]));
@@ -28,18 +33,27 @@ export function sessionPreview(
   const session = get<SessionInfo>("session", id);
   if (!session) throw new Error("Conversation not found.");
   const activity = get<SessionInfo["activity"]>("activity", id);
-  return {
-    session: { ...session, activity },
-    messages: get<Message[]>("transcript", id) ?? [],
-    comments: get<Comment[]>("comments", id) ?? [],
-    composer: get<string>("composer", id) ?? "",
-    composerRevision: get<number>("composer-revision", id) ?? 0,
-    busy: activity?.status === "running" || activity?.status === "waiting",
-    dialogs: [],
-    notices: [],
-    statuses: {},
-    widgets: {},
-    skills: [],
-    pluginState: {},
-  };
+  const attachments = get<SavedAttachment[]>("attachments", id) ?? [];
+  return decorateAttachments(
+    {
+      session: { ...session, activity },
+      attachmentSupport: !session.backend || session.backend === "pi",
+      composerAttachments: attachments
+        .filter((file) => !file.batchId)
+        .map(publicAttachment),
+      attachmentRevision: get<number>("attachment-revision", id) ?? 0,
+      messages: get<Message[]>("transcript", id) ?? [],
+      comments: get<Comment[]>("comments", id) ?? [],
+      composer: get<string>("composer", id) ?? "",
+      composerRevision: get<number>("composer-revision", id) ?? 0,
+      busy: activity?.status === "running" || activity?.status === "waiting",
+      dialogs: [],
+      notices: [],
+      statuses: {},
+      widgets: {},
+      skills: [],
+      pluginState: {},
+    },
+    attachments,
+  );
 }

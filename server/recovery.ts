@@ -5,6 +5,7 @@ export interface PendingInput {
   note: string;
   accepted: boolean;
   persistedUserId?: string;
+  attachmentIds?: string[];
 }
 export function recoverInput(
   pending: PendingInput | undefined,
