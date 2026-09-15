@@ -79,8 +79,17 @@ export function SidebarConversations({
   onPrefetch: (id: string) => void;
   onContextMenu: (session: SessionInfo, x: number, y: number) => void;
 }) {
-  const [expandedProject, setExpandedProject] = useState<string | null>(null);
-  const [otherExpanded, setOtherExpanded] = useState(false);
+  const [limits, setLimits] = useState({ projectId, current: 5, other: 10 });
+  const currentLimit = limits.projectId === projectId ? limits.current : 5;
+  const otherLimit = limits.projectId === projectId ? limits.other : 10;
+  function revealMore(section: "current" | "other", nextLimit: number) {
+    setLimits((previous) => ({
+      ...(previous.projectId === projectId
+        ? previous
+        : { projectId, current: 5, other: 10 }),
+      [section]: nextLimit,
+    }));
+  }
   const [query, setQuery] = useState("");
   const searchRef = useRef<HTMLInputElement>(null);
   const ordered = orderConversations(sessions);
@@ -98,7 +107,8 @@ export function SidebarConversations({
   function row(s: SessionInfo) {
     const status = s.activity?.status ?? "idle";
     const unread = isUnread(s.id, s.activity);
-    const label = `${s.title} — ${names.get(s.projectId) ?? "Workspace unavailable"} — ${statusLabels[status]}${unread ? " · Unread" : ""}`;
+    const tooltip = `${names.get(s.projectId) ?? "Workspace unavailable"} — ${s.title}`;
+    const label = `${tooltip} — ${statusLabels[status]}${unread ? " · Unread" : ""}`;
     return (
       <button
         className={sessionId === s.id ? "selected" : ""}
@@ -124,7 +134,7 @@ export function SidebarConversations({
         aria-haspopup="menu"
         aria-current={sessionId === s.id ? "page" : undefined}
         aria-label={label}
-        title={label}
+        title={tooltip}
       >
         <span className="session-title">{s.title}</span>
         {status === "running" ? (
@@ -159,13 +169,11 @@ export function SidebarConversations({
     id: string,
     title: string,
     limit: number,
-    expanded: boolean,
-    toggle: () => void,
+    showMore: (nextLimit: number) => void,
     empty: string,
     selected?: string | null,
   ) {
-    const visible = visibleConversations(items, limit, expanded, selected);
-    const collapsed = visibleConversations(items, limit, false, selected);
+    const visible = visibleConversations(items, limit, selected);
     const activeIds = items.filter(isActiveConversation).map((s) => s.id);
     return (
       <section
@@ -182,17 +190,39 @@ export function SidebarConversations({
         <nav className="session-list" id={`${id}-list`} aria-label={title}>
           {visible.map(row)}
           {!items.length && <p className="sidebar-empty">{empty}</p>}
+          {items.length > visible.length && (
+            <div className="sidebar-list-actions">
+              <button
+                className="sidebar-show-more"
+                aria-controls={`${id}-list`}
+                onClick={(event) => {
+                  const list = event.currentTarget.closest("nav")!;
+                  const top = list.scrollTop;
+                  const keyboard = event.detail === 0;
+                  const previousIds = new Set(visible.map((s) => s.id));
+                  // Active/selected rows can exceed the soft limit. Always add
+                  // ten beyond what's actually shown, not just beyond the cap.
+                  showMore(visible.length + 10);
+                  requestAnimationFrame(() => {
+                    if (!list.isConnected) return;
+                    list.scrollTop = top;
+                    if (keyboard) {
+                      const next = Array.from(
+                        list.querySelectorAll<HTMLButtonElement>(
+                          "[data-session-id]",
+                        ),
+                      ).find((row) => !previousIds.has(row.dataset.sessionId!));
+                      next?.focus({ preventScroll: true });
+                      next?.scrollIntoView({ block: "nearest" });
+                    }
+                  });
+                }}
+              >
+                Show more
+              </button>
+            </div>
+          )}
         </nav>
-        {items.length > collapsed.length && (
-          <button
-            className="sidebar-show-all"
-            aria-expanded={expanded}
-            aria-controls={`${id}-list`}
-            onClick={toggle}
-          >
-            {expanded ? "Show less" : `Show all (${items.length})`}
-          </button>
-        )}
       </section>
     );
   }
@@ -225,12 +255,8 @@ export function SidebarConversations({
               current,
               "current-workspace-chats",
               "Conversations",
-              5,
-              expandedProject === projectId,
-              () =>
-                setExpandedProject(
-                  expandedProject === projectId ? null : projectId,
-                ),
+              currentLimit,
+              (limit) => revealMore("current", limit),
               "Your conversations will appear here.",
               sessionId,
             )}
@@ -238,9 +264,8 @@ export function SidebarConversations({
               other,
               "other-workspace-chats",
               "Other workspaces",
-              10,
-              otherExpanded,
-              () => setOtherExpanded(!otherExpanded),
+              otherLimit,
+              (limit) => revealMore("other", limit),
               "Chats from other workspaces will appear here.",
             )}
           </>

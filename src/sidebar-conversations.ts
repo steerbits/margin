@@ -18,10 +18,8 @@ export function orderConversations(sessions: SessionInfo[]) {
 export function visibleConversations(
   ordered: SessionInfo[],
   limit: number,
-  expanded: boolean,
   selectedId?: string | null,
 ) {
-  if (expanded) return ordered;
   const included = new Set(
     ordered
       .filter((s) => isActiveConversation(s) || s.id === selectedId)

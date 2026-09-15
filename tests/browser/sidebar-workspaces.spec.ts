@@ -16,7 +16,15 @@ const search = (page: Page) =>
 
 // Synthetic metadata makes overflow/status transitions deterministic; navigation
 // and draft persistence are also exercised against the real API in the final test.
-async function fixture(page: Page, activeCurrent = 2, activeOther = 2) {
+async function fixture(
+  page: Page,
+  {
+    activeCurrent = 2,
+    activeOther = 2,
+    currentCount = 8,
+    otherCount = 14,
+  } = {},
+) {
   await page.goto("/");
   const response = await page.request.get("/api/bootstrap");
   expect(response.ok(), await response.text()).toBe(true);
@@ -58,13 +66,13 @@ async function fixture(page: Page, activeCurrent = 2, activeOther = 2) {
     sessions: [
       ...make(
         "Local",
-        Math.max(8, activeCurrent + 2),
+        Math.max(currentCount, activeCurrent + 2),
         activeCurrent,
         projects[0].id,
       ),
       ...make(
         "Website",
-        Math.max(14, activeOther + 2),
+        Math.max(otherCount, activeOther + 2),
         activeOther,
         projects[1].id,
       ),
@@ -93,18 +101,18 @@ async function fixture(page: Page, activeCurrent = 2, activeOther = 2) {
     }),
   );
   await page.goto(`/workspaces/${projects[0].id}`);
-  await expect(current(page).locator("button")).toHaveCount(
+  await expect(current(page).locator("[data-session-id]")).toHaveCount(
     Math.max(5, activeCurrent),
   );
   return data;
 }
 
-test("two deduplicated sections have soft caps, expansion, tooltip context and live status", async ({
+test("two deduplicated sections have soft caps, full workspace-first tooltips and live status", async ({
   page,
 }) => {
   const data = await fixture(page);
   await expect(page.locator(".section-active-count")).toHaveCount(0);
-  await expect(other(page).locator("button")).toHaveCount(10);
+  await expect(other(page).locator("[data-session-id]")).toHaveCount(10);
   await expect(current(page).locator("button").first()).toHaveAttribute(
     "data-session-id",
     "Local-0",
@@ -115,7 +123,11 @@ test("two deduplicated sections have soft caps, expansion, tooltip context and l
   );
   await expect(row(page, "Website-0")).toHaveAttribute(
     "title",
-    /Website — Running/,
+    "Website — Website conversation 1",
+  );
+  await expect(row(page, "Website-0")).toHaveAttribute(
+    "aria-label",
+    /Running$/,
   );
   await expect(
     row(page, "Website-1").getByRole("img", { name: "Waiting for you" }),
@@ -123,28 +135,10 @@ test("two deduplicated sections have soft caps, expansion, tooltip context and l
   await expect(row(page, "Website-0").locator(".session-title")).toHaveText(
     "Website conversation 1",
   );
-  await page
-    .locator(".current-workspace-chats")
-    .getByRole("button", { name: "Show all (8)" })
-    .click();
-  await expect(current(page).locator("button")).toHaveCount(8);
-  await page
-    .locator(".other-workspace-chats")
-    .getByRole("button", { name: "Show all (16)" })
-    .click();
-  await expect(other(page).locator("button")).toHaveCount(16);
   const ids = await rows(page).evaluateAll((elements) =>
     elements.map((e) => e.getAttribute("data-session-id")),
   );
   expect(new Set(ids).size).toBe(ids.length);
-  await page
-    .locator(".other-workspace-chats")
-    .getByRole("button", { name: "Show less" })
-    .click();
-  await page
-    .locator(".current-workspace-chats")
-    .getByRole("button", { name: "Show less" })
-    .click();
   const running = data.sessions.find((s) => s.id === "Website-0")!;
   running.activity = {
     status: "finished",
@@ -168,10 +162,123 @@ test("two deduplicated sections have soft caps, expansion, tooltip context and l
   });
 });
 
+test("Show more reveals ten at a time and stays immediately beneath the rows", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1440, height: 1500 });
+  await fixture(page, { currentCount: 25, otherCount: 35 });
+  const more = (list: ReturnType<typeof current>) =>
+    list.getByRole("button", { name: "Show more", exact: true });
+  const geometry = await other(page).evaluate((list) => {
+    const chats = list.querySelectorAll("[data-session-id]");
+    const last = chats[chats.length - 1].getBoundingClientRect();
+    const more = list
+      .querySelector(".sidebar-show-more")!
+      .getBoundingClientRect();
+    const search = document
+      .querySelector(".sidebar-search")!
+      .getBoundingClientRect();
+    return {
+      afterLast: more.top - last.bottom,
+      searchGap: search.top - more.bottom,
+    };
+  });
+  expect(geometry.afterLast).toBeGreaterThanOrEqual(0);
+  expect(geometry.afterLast).toBeLessThan(10);
+  expect(geometry.searchGap).toBeGreaterThan(80);
+  await expect(
+    page.getByRole("button", { name: /Show all|Show less/ }),
+  ).toHaveCount(0);
+
+  for (const [list, counts] of [
+    [current(page), [15, 25]],
+    [other(page), [20, 30, 37]],
+  ] as const) {
+    for (const count of counts) {
+      const previousIds = await list
+        .locator("[data-session-id]")
+        .evaluateAll((rows) =>
+          rows.map((row) => row.getAttribute("data-session-id")),
+        );
+      await more(list).scrollIntoViewIfNeeded();
+      const scrollTop = await list.evaluate((list) => list.scrollTop);
+      await more(list).click();
+      await expect(list.locator("[data-session-id]")).toHaveCount(count);
+      const nextIds = await list
+        .locator("[data-session-id]")
+        .evaluateAll((rows) =>
+          rows.map((row) => row.getAttribute("data-session-id")),
+        );
+      expect(previousIds.every((id) => nextIds.includes(id))).toBe(true);
+      expect(new Set(nextIds).size).toBe(count);
+      await expect
+        .poll(() => list.evaluate((list) => list.scrollTop))
+        .toBe(scrollTop);
+    }
+    await expect(more(list)).toHaveCount(0);
+  }
+});
+
+test("paging adds ten beyond overflowing activity and keyboard focus enters the new rows", async ({
+  page,
+}) => {
+  await fixture(page, {
+    activeCurrent: 7,
+    activeOther: 13,
+    currentCount: 32,
+    otherCount: 40,
+  });
+  const localMore = current(page).getByRole("button", {
+    name: "Show more",
+    exact: true,
+  });
+  await localMore.focus();
+  await localMore.press("Enter");
+  await expect(current(page).locator("[data-session-id]")).toHaveCount(17);
+  await expect(row(page, "Local-7")).toBeFocused();
+  await other(page)
+    .getByRole("button", { name: "Show more", exact: true })
+    .click();
+  await expect(other(page).locator("[data-session-id]")).toHaveCount(23);
+  await search(page).fill("archived");
+  await expect(rows(page)).toHaveCount(3);
+  await search(page).press("Escape");
+  await expect(current(page).locator("[data-session-id]")).toHaveCount(17);
+  await expect(other(page).locator("[data-session-id]")).toHaveCount(23);
+});
+
+test("row tooltips retain the full truncated title after the workspace, without status", async ({
+  page,
+}) => {
+  const data = await fixture(page);
+  const title =
+    "Review all export edge cases and preserve every original customer field";
+  data.sessions.find((s) => s.id === "Website-0")!.title = title;
+  await expect(row(page, "Website-0").locator(".session-title")).toHaveText(
+    title,
+  );
+  expect(
+    await row(page, "Website-0")
+      .locator(".session-title")
+      .evaluate((text) => text.scrollWidth > text.clientWidth),
+  ).toBe(true);
+  await expect(row(page, "Website-0")).toHaveAttribute(
+    "title",
+    `Website — ${title}`,
+  );
+  await expect(row(page, "Website-0")).toHaveAttribute(
+    "aria-label",
+    `Website — ${title} — Running`,
+  );
+  await expect(
+    row(page, "Website-0").getByRole("img", { name: "Running" }),
+  ).toHaveAttribute("title", "Running");
+});
+
 test("active counts appear only when active rows are outside the list viewport", async ({
   page,
 }) => {
-  const data = await fixture(page, 4, 6);
+  const data = await fixture(page, { activeCurrent: 4, activeOther: 6 });
   const localCount = page.locator(
     ".current-workspace-chats .section-active-count",
   );
@@ -198,19 +305,19 @@ test("active counts appear only when active rows are outside the list viewport",
   });
   await expect(otherCount).toHaveCount(0);
 
-  await page
-    .locator(".current-workspace-chats")
-    .getByRole("button", { name: "Show all (8)" })
+  await current(page)
+    .getByRole("button", { name: "Show more", exact: true })
     .click();
+  // Let paging restore the reading position before exercising a new scroll.
+  await page.evaluate(() => new Promise(requestAnimationFrame));
   await expect(localCount).toHaveCount(0);
   await current(page).evaluate((list) => {
     list.scrollTop = list.scrollHeight;
   });
   await expect(localCount).toHaveText("4 active");
-  await page
-    .locator(".current-workspace-chats")
-    .getByRole("button", { name: "Show less" })
-    .click();
+  await current(page).evaluate((list) => {
+    list.scrollTop = 0;
+  });
   await expect(localCount).toHaveCount(0);
 
   // Completing offscreen activity clears the cue, without requiring a scroll.
@@ -227,9 +334,9 @@ test("active counts appear only when active rows are outside the list viewport",
 test("all active chats remain in independently scrollable lists, including on short and mobile screens", async ({
   page,
 }) => {
-  await fixture(page, 7, 13);
-  await expect(current(page).locator("button")).toHaveCount(7);
-  await expect(other(page).locator("button")).toHaveCount(13);
+  await fixture(page, { activeCurrent: 7, activeOther: 13 });
+  await expect(current(page).locator("[data-session-id]")).toHaveCount(7);
+  await expect(other(page).locator("[data-session-id]")).toHaveCount(13);
   for (const viewport of [
     { width: 1440, height: 650 },
     { width: 390, height: 667 },

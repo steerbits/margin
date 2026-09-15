@@ -66,20 +66,21 @@ test("ordering is active-first, recency within groups, deterministic and dedupli
   ]);
 });
 
-test("normal caps, expanded lists, and an old selected chat", () => {
+test("normal caps, progressively larger limits, and an old selected chat", () => {
   const ordered = orderConversations(
     Array.from({ length: 20 }, (_, i) => chat(String(i), 20 - i)),
   );
-  assert.deepEqual(ids(visibleConversations(ordered, 5, false, "19")), [
+  assert.deepEqual(ids(visibleConversations(ordered, 5, "19")), [
     "0",
     "1",
     "2",
     "3",
     "19",
   ]);
-  assert.equal(visibleConversations(ordered, 10, false).length, 10);
-  assert.equal(visibleConversations(ordered, 5, true).length, 20);
-  assert.deepEqual(visibleConversations([], 5, false), []);
+  assert.equal(visibleConversations(ordered, 10).length, 10);
+  assert.equal(visibleConversations(ordered, 15).length, 15);
+  assert.equal(visibleConversations(ordered, 25).length, 20);
+  assert.deepEqual(visibleConversations([], 5), []);
 });
 
 test("soft caps include every active chat without duplicating recent entries", () => {
@@ -92,12 +93,12 @@ test("soft caps include every active chat without duplicating recent entries", (
       chat("new-inactive", 100),
       chat("selected", 0),
     ]);
-    const visible = visibleConversations(ordered, limit, false);
+    const visible = visibleConversations(ordered, limit);
     assert.equal(visible.length, active.length);
     assert.ok(visible.every(isActiveConversation));
     assert.equal(new Set(ids(visible)).size, visible.length);
     assert.equal(
-      visibleConversations(ordered, limit, false, "selected").length,
+      visibleConversations(ordered, limit, "selected").length,
       active.length + 1,
     );
   }
@@ -108,7 +109,7 @@ test("a completed chat rejoins recents and the next recent fills the cap", () =>
     chat("old-run", 1, "running"),
     ...Array.from({ length: 5 }, (_, i) => chat(`recent-${i}`, 20 - i)),
   ]);
-  assert.equal(visibleConversations(ordered, 5, false)[0].id, "old-run");
+  assert.equal(visibleConversations(ordered, 5)[0].id, "old-run");
   const completed = orderConversations(
     ordered.map((s) =>
       s.id === "old-run"
@@ -116,7 +117,7 @@ test("a completed chat rejoins recents and the next recent fills the cap", () =>
         : s,
     ),
   );
-  assert.deepEqual(ids(visibleConversations(completed, 5, false)), [
+  assert.deepEqual(ids(visibleConversations(completed, 5)), [
     "recent-0",
     "recent-1",
     "recent-2",
