@@ -171,6 +171,8 @@ export function App() {
     saveTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined),
     scrollRef = useRef<HTMLDivElement>(null),
     railList = useRef<HTMLDivElement>(null);
+  const composerEditor = useRef<HTMLTextAreaElement>(null);
+  const pendingComposerFocus = useRef<string | null>(null);
   const commentEditor = useRef<HTMLTextAreaElement>(null);
   const pendingCommentFocus = useRef<{
     id: string;
@@ -385,6 +387,7 @@ export function App() {
       });
     }
     selectedId.current = id;
+    if (pendingComposerFocus.current !== id) pendingComposerFocus.current = null;
     const cached = id ? histories.get(id) : undefined;
     const pending = id ? pendingDrafts.get(id) : undefined;
     setSnapshot(cached ?? null);
@@ -450,6 +453,18 @@ export function App() {
     if (scrollRef.current && snapshot?.session.id === sessionId)
       scrollRef.current.scrollTop =
         saved && !saved.sticky ? saved.top : scrollRef.current.scrollHeight;
+  }, [sessionId, hubOpen, snapshot?.session.id]);
+  useLayoutEffect(() => {
+    if (
+      !hubOpen &&
+      sessionId &&
+      pendingComposerFocus.current === sessionId &&
+      snapshot?.session.id === sessionId &&
+      composerEditor.current
+    ) {
+      pendingComposerFocus.current = null;
+      composerEditor.current.focus({ preventScroll: true });
+    }
   }, [sessionId, hubOpen, snapshot?.session.id]);
   useEffect(() => {
     const warn = (event: BeforeUnloadEvent) => {
@@ -678,7 +693,9 @@ export function App() {
         sessionId: s.session.id,
         panel: workspacePanel(),
       });
+      pendingComposerFocus.current = s.session.id;
       applyRoute(routeRef.current, data);
+      if (window.innerWidth <= 650) setSidebar(false);
       setError("");
     } catch (e) {
       fail(e);
@@ -700,6 +717,7 @@ export function App() {
     histories.put({ ...s, composer: prompt });
     const data = { ...boot, sessions: [s.session, ...boot.sessions] };
     setBoot(data);
+    pendingComposerFocus.current = s.session.id;
     await go({ kind: "chat", sessionId: s.session.id }, data);
   }
   async function chooseWorkspace() {
@@ -1524,6 +1542,193 @@ export function App() {
               ))}
               <ConversationWorkspace
                 scrollRef={scrollRef}
+                composer={snapshot && (
+                  <div className={`review ${rail ? "with-rail" : ""}`}>
+                    <div className="composer-dock-content">
+                      <form
+                        className="composer"
+                        onSubmit={(e) => {
+                          e.preventDefault();
+                          void send();
+                        }}
+                      >
+                        {draftCount > 0 && (
+                          <button
+                            type="button"
+                            className="batch-chip"
+                            onClick={() => showComments(true)}
+                          >
+                            <MessageSquare size={13} />
+                            {draftCount} draft comment
+                            {draftCount === 1 ? "" : "s"} attached
+                          </button>
+                        )}
+                        <textarea
+                          ref={composerEditor}
+                          aria-label={`Message ${agentName}`}
+                          placeholder={
+                            draftCount
+                              ? "Add an overall reply (optional)…"
+                              : `Message ${agentName}, or select a passage above to comment…`
+                          }
+                          value={draft}
+                          onChange={(e) => updateDraft(e.target.value)}
+                          rows={3}
+                          onKeyDown={(e) => {
+                            if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
+                              e.preventDefault();
+                              if (!busy && !editing) void send();
+                            }
+                          }}
+                        />
+                        <div className="composer-footer">
+                          <div className="composer-options">
+                            <label className="skill-choice">
+                              <BookOpen size={14} />
+                              <select
+                                aria-label="Starting skill"
+                                value={skill}
+                                onChange={(e) => {
+                                  skillChosen.current = true;
+                                  setSkill(e.target.value);
+                                  if (sessionId)
+                                    skillChoices.set(sessionId, e.target.value);
+                                }}
+                                disabled={busy || !connected}
+                              >
+                                <option value="">No skill</option>
+                                {snapshot.skills.map((s) => (
+                                  <option key={s.filePath} value={s.name}>
+                                    {skillLabel(s.name)}
+                                  </option>
+                                ))}
+                              </select>
+                            </label>
+                            <button
+                              type="button"
+                              aria-label="Reload skills"
+                              title="Reload Pi skills and extensions"
+                              disabled={busy || !connected}
+                              onClick={() =>
+                                void api(
+                                  `/sessions/${sessionId}/reload`,
+                                  {},
+                                ).catch(fail)
+                              }
+                            >
+                              <RefreshCw size={13} />
+                            </button>
+                          </div>
+                          {busy ? (
+                            <button
+                              type="button"
+                              className="stop-button"
+                              onClick={() =>
+                                void api(
+                                  `/sessions/${sessionId}/stop`,
+                                  {},
+                                ).catch(fail)
+                              }
+                            >
+                              <Square size={12} fill="currentColor" />
+                              Stop
+                            </button>
+                          ) : (
+                            <button
+                              className="send-button"
+                              aria-label={
+                                draftCount
+                                  ? `Send ${draftCount} comment${draftCount === 1 ? "" : "s"}`
+                                  : "Send message"
+                              }
+                              type="submit"
+                              disabled={
+                                sending ||
+                                !!snapshot.dialogs.length ||
+                                !!editing ||
+                                (!draft.trim() && !draftCount) ||
+                                !connected
+                              }
+                            >
+                              <ArrowUp size={19} />
+                            </button>
+                          )}
+                        </div>
+                      </form>
+                      <div className="composer-hint">
+                        <span>
+                          {editing
+                            ? "Finish or cancel your draft comment before sending."
+                            : skill
+                              ? `${skillLabel(skill)} will guide your next message`
+                              : "Your skill sets the pace. Your comments shape the work."}
+                        </span>
+                        <kbd>⌘ ↵</kbd>
+                      </div>
+                      {model && (
+                        <div className="model-footer">
+                          <span className="model-dot" />
+                          <select
+                            aria-label="Model"
+                            disabled={busy || !connected}
+                            value={modelKey(model)}
+                            onChange={(e) => {
+                              const m = boot.models.find(
+                                (m) => modelKey(m) === e.target.value,
+                              );
+                              if (m)
+                                void api(`/sessions/${sessionId}/model`, {
+                                  provider: m.provider,
+                                  id: m.id,
+                                }).catch(fail);
+                            }}
+                          >
+                            {boot.models.map((m) => (
+                              <option key={modelKey(m)} value={modelKey(m)}>
+                                {m.name}
+                              </option>
+                            ))}
+                          </select>
+                          {snapshot.thinking && (
+                            <label className="thinking-choice">
+                              <span>Thinking</span>
+                              <select
+                                aria-label="Thinking effort"
+                                disabled={
+                                  busy || snapshot.thinking.available.length < 2
+                                }
+                                value={snapshot.thinking.level}
+                                onChange={(event) =>
+                                  void api(`/sessions/${sessionId}/thinking`, {
+                                    level: event.target.value,
+                                  }).catch(fail)
+                                }
+                              >
+                                {snapshot.thinking.available.map((level) => (
+                                  <option key={level} value={level}>
+                                    {level === "xhigh"
+                                      ? "Extra high"
+                                      : level.charAt(0).toUpperCase() +
+                                        level.slice(1)}
+                                  </option>
+                                ))}
+                              </select>
+                            </label>
+                          )}
+                          <span>
+                            {model.provider === "openai-codex" &&
+                            model.subscription
+                              ? "ChatGPT subscription"
+                              : model.provider === "anthropic" &&
+                                  model.subscription
+                                ? "Claude · extra usage"
+                                : model.provider}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
                 panel={
                   panel &&
                   browserPlugins.flatMap(
@@ -1872,186 +2077,6 @@ export function App() {
                           }}
                         />
                       ))}
-                      <form
-                        className="composer"
-                        onSubmit={(e) => {
-                          e.preventDefault();
-                          void send();
-                        }}
-                      >
-                        {draftCount > 0 && (
-                          <button
-                            type="button"
-                            className="batch-chip"
-                            onClick={() => showComments(true)}
-                          >
-                            <MessageSquare size={13} />
-                            {draftCount} draft comment
-                            {draftCount === 1 ? "" : "s"} attached
-                          </button>
-                        )}
-                        <textarea
-                          aria-label={`Message ${agentName}`}
-                          placeholder={
-                            draftCount
-                              ? "Add an overall reply (optional)…"
-                              : `Message ${agentName}, or select a passage above to comment…`
-                          }
-                          value={draft}
-                          onChange={(e) => updateDraft(e.target.value)}
-                          rows={3}
-                          onKeyDown={(e) => {
-                            if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
-                              e.preventDefault();
-                              if (!busy && !editing) void send();
-                            }
-                          }}
-                        />
-                        <div className="composer-footer">
-                          <div className="composer-options">
-                            <label className="skill-choice">
-                              <BookOpen size={14} />
-                              <select
-                                aria-label="Starting skill"
-                                value={skill}
-                                onChange={(e) => {
-                                  skillChosen.current = true;
-                                  setSkill(e.target.value);
-                                  if (sessionId)
-                                    skillChoices.set(sessionId, e.target.value);
-                                }}
-                                disabled={busy || !connected}
-                              >
-                                <option value="">No skill</option>
-                                {snapshot.skills.map((s) => (
-                                  <option key={s.filePath} value={s.name}>
-                                    {skillLabel(s.name)}
-                                  </option>
-                                ))}
-                              </select>
-                            </label>
-                            <button
-                              type="button"
-                              aria-label="Reload skills"
-                              title="Reload Pi skills and extensions"
-                              disabled={busy || !connected}
-                              onClick={() =>
-                                void api(
-                                  `/sessions/${sessionId}/reload`,
-                                  {},
-                                ).catch(fail)
-                              }
-                            >
-                              <RefreshCw size={13} />
-                            </button>
-                          </div>
-                          {busy ? (
-                            <button
-                              type="button"
-                              className="stop-button"
-                              onClick={() =>
-                                void api(
-                                  `/sessions/${sessionId}/stop`,
-                                  {},
-                                ).catch(fail)
-                              }
-                            >
-                              <Square size={12} fill="currentColor" />
-                              Stop
-                            </button>
-                          ) : (
-                            <button
-                              className="send-button"
-                              aria-label={
-                                draftCount
-                                  ? `Send ${draftCount} comment${draftCount === 1 ? "" : "s"}`
-                                  : "Send message"
-                              }
-                              type="submit"
-                              disabled={
-                                sending ||
-                                !!snapshot.dialogs.length ||
-                                !!editing ||
-                                (!draft.trim() && !draftCount) ||
-                                !connected
-                              }
-                            >
-                              <ArrowUp size={19} />
-                            </button>
-                          )}
-                        </div>
-                      </form>
-                      <div className="composer-hint">
-                        <span>
-                          {editing
-                            ? "Finish or cancel your draft comment before sending."
-                            : skill
-                              ? `${skillLabel(skill)} will guide your next message`
-                              : "Your skill sets the pace. Your comments shape the work."}
-                        </span>
-                        <kbd>⌘ ↵</kbd>
-                      </div>
-                      {model && (
-                        <div className="model-footer">
-                          <span className="model-dot" />
-                          <select
-                            aria-label="Model"
-                            disabled={busy || !connected}
-                            value={modelKey(model)}
-                            onChange={(e) => {
-                              const m = boot.models.find(
-                                (m) => modelKey(m) === e.target.value,
-                              );
-                              if (m)
-                                void api(`/sessions/${sessionId}/model`, {
-                                  provider: m.provider,
-                                  id: m.id,
-                                }).catch(fail);
-                            }}
-                          >
-                            {boot.models.map((m) => (
-                              <option key={modelKey(m)} value={modelKey(m)}>
-                                {m.name}
-                              </option>
-                            ))}
-                          </select>
-                          {snapshot.thinking && (
-                            <label className="thinking-choice">
-                              <span>Thinking</span>
-                              <select
-                                aria-label="Thinking effort"
-                                disabled={
-                                  busy || snapshot.thinking.available.length < 2
-                                }
-                                value={snapshot.thinking.level}
-                                onChange={(event) =>
-                                  void api(`/sessions/${sessionId}/thinking`, {
-                                    level: event.target.value,
-                                  }).catch(fail)
-                                }
-                              >
-                                {snapshot.thinking.available.map((level) => (
-                                  <option key={level} value={level}>
-                                    {level === "xhigh"
-                                      ? "Extra high"
-                                      : level.charAt(0).toUpperCase() +
-                                        level.slice(1)}
-                                  </option>
-                                ))}
-                              </select>
-                            </label>
-                          )}
-                          <span>
-                            {model.provider === "openai-codex" &&
-                            model.subscription
-                              ? "ChatGPT subscription"
-                              : model.provider === "anthropic" &&
-                                  model.subscription
-                                ? "Claude · extra usage"
-                                : model.provider}
-                          </span>
-                        </div>
-                      )}
                     </div>
                     {rail && (
                       <aside className="comment-rail" aria-label="Comments">

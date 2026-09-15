@@ -10,19 +10,24 @@ import "./PluginPanel.css";
 
 export function ConversationWorkspace({
   children,
+  composer,
   panel,
   scrollRef,
   onScroll,
 }: {
   children: ReactNode;
+  composer: ReactNode;
   panel: ReactNode;
   scrollRef: RefObject<HTMLDivElement | null>;
   onScroll: UIEventHandler<HTMLDivElement>;
 }) {
   return (
     <div className="conversation-workspace">
-      <div className="scroll-area" ref={scrollRef} onScroll={onScroll}>
-        {children}
+      <div className="conversation-column">
+        <div className="scroll-area" ref={scrollRef} onScroll={onScroll}>
+          {children}
+        </div>
+        {composer && <div className="composer-dock">{composer}</div>}
       </div>
       {panel}
     </div>
@@ -39,7 +44,7 @@ export function captureConversationPosition(container: HTMLElement | null) {
     container.scrollHeight - scrollTop - container.clientHeight < 2;
   const anchor = [
     ...container.querySelectorAll<HTMLElement>(
-      ".message h1, .message h2, .message h3, .message p, .message pre, .message tr, .message li, .composer",
+      ".message h1, .message h2, .message h3, .message p, .message pre, .message tr, .message li",
     ),
   ].find((element) => element.getBoundingClientRect().bottom > top);
   const offset = anchor ? anchor.getBoundingClientRect().top - top : 0;
