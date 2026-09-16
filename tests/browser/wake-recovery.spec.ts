@@ -24,7 +24,7 @@ test("offline browser catches up to a completed run without reload, resend, or l
 }) => {
   const id = await seed(page, { historyCount: 6, responseDelay: 3000 });
   const composer = page.getByRole("textbox", {
-    name: "Message Pi",
+    name: "Message",
     exact: true,
   });
   await composer.fill("Continue the original task");
@@ -83,7 +83,7 @@ test("wake reattaches to an active run without starting a second one", async ({
 }) => {
   const id = await seed(page, { responseDelay: 3000 });
   await page
-    .getByRole("textbox", { name: "Message Pi", exact: true })
+    .getByRole("textbox", { name: "Message", exact: true })
     .fill("One run only");
   await page.getByRole("button", { name: "Send message", exact: true }).click();
   await expect(

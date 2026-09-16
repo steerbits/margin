@@ -28,10 +28,10 @@ test("Margin has a special workspace and examples prepare source-workspace promp
   ).toHaveCount(1);
   await page
     .locator(".example-card")
-    .filter({ hasText: "Let Pi work with notes" })
+    .filter({ hasText: "Let your assistant work with notes" })
     .getByRole("button", { name: "Use this prompt" })
     .click();
-  await expect(page.getByLabel("Message Pi")).toHaveValue(
+  await expect(page.getByLabel("Message", { exact: true })).toHaveValue(
     /Extend the project-notes plugin/,
   );
   const boot = await (await page.request.get("/api/bootstrap")).json();

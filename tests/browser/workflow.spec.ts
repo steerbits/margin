@@ -97,12 +97,12 @@ test("formatted selection, table and code comments survive reload, send one batc
     "Yes, use a local SQLite file.",
   );
   await page
-    .getByRole("textbox", { name: "Message Pi" })
+    .getByRole("textbox", { name: "Message" })
     .fill("Keep this personal and local.");
   await page.waitForTimeout(400);
   await page.reload();
   await expect(page.locator(".comment-card")).toHaveCount(3);
-  await expect(page.getByRole("textbox", { name: "Message Pi" })).toHaveValue(
+  await expect(page.getByRole("textbox", { name: "Message" })).toHaveValue(
     "Keep this personal and local.",
   );
   const before = await (await page.request.get(`/api/sessions/${id}`)).json();
@@ -122,7 +122,7 @@ test("formatted selection, table and code comments survive reload, send one batc
   ).toBeTruthy();
   expect(after.messages.filter((m: any) => m.role === "user")).toHaveLength(2);
   await page
-    .getByRole("textbox", { name: "Message Pi" })
+    .getByRole("textbox", { name: "Message" })
     .fill("Another thought.");
   await page.waitForTimeout(400);
   expect(after.comments[0].text).toBe("Make action items optional.");
@@ -284,14 +284,14 @@ test("delayed submission preserves newer draft and prevents changing comments al
   const id = await seed(page);
   await commentOn(page, "notes.db", "Original submitted comment.");
   await page.request.post(`/api/test/${id}/delay-preflight`, { data: {} });
-  await page.getByLabel("Message Pi").fill("Submitted note.");
+  await page.getByLabel("Message", { exact: true }).fill("Submitted note.");
   await page
     .getByRole("button", { name: "Send 1 comment", exact: true })
     .click();
   await expect(
     page.getByRole("heading", { name: "Accept this submission?" }),
   ).toBeVisible();
-  await page.getByLabel("Message Pi").fill("A newer draft that must survive.");
+  await page.getByLabel("Message", { exact: true }).fill("A newer draft that must survive.");
   await page.waitForTimeout(350);
   const state = await (await page.request.get(`/api/sessions/${id}`)).json();
   const changed = await page.request.put(`/api/sessions/${id}/comments`, {
@@ -305,7 +305,7 @@ test("delayed submission preserves newer draft and prevents changing comments al
   await expect(
     page.getByRole("heading", { name: "Revised direction" }),
   ).toBeVisible();
-  await expect(page.getByLabel("Message Pi")).toHaveValue(
+  await expect(page.getByLabel("Message", { exact: true })).toHaveValue(
     "A newer draft that must survive.",
   );
   const after = await (await page.request.get(`/api/sessions/${id}`)).json();

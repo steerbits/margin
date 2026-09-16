@@ -30,7 +30,7 @@ export function DialogCard({
         )}{" "}
         {dialog.kind === "unsupported"
           ? "Extension compatibility"
-          : "Pi is waiting for your answer"}
+          : "Waiting for your answer"}
       </div>
       <h3>{dialog.title}</h3>
       {dialog.message && <p>{dialog.message}</p>}

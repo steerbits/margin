@@ -62,7 +62,7 @@ test("short replies stay on one line while long unbroken text stays within the t
 }) => {
   await seed(page);
   for (const text of ["ok", "go ahead"]) {
-    await page.getByLabel("Message Pi").fill(text);
+    await page.getByLabel("Message", { exact: true }).fill(text);
     await page
       .getByRole("button", { name: "Send message", exact: true })
       .click();
@@ -81,7 +81,7 @@ test("short replies stay on one line while long unbroken text stays within the t
     ).toHaveCount(0);
   }
   const long = "unbroken".repeat(60);
-  await page.getByLabel("Message Pi").fill(long);
+  await page.getByLabel("Message", { exact: true }).fill(long);
   await page.getByRole("button", { name: "Send message", exact: true }).click();
   const bubble = page.locator(".message.user .user-bubble").last();
   await expect(bubble).toHaveText(long);

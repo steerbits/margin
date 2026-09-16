@@ -52,7 +52,7 @@ export function safeAuthUrl(value: string): string | undefined {
 }
 export function providerBillingNote(id: string) {
   if (id === "anthropic")
-    return "Claude Pro/Max sign-in uses separately billed extra usage in third-party tools, not included plan limits (per Pi documentation). API keys use API billing.";
+    return "Claude Pro/Max sign-in uses separately billed extra usage in third-party tools, not included plan limits. API keys use API billing.";
   if (id === "openai-codex")
     return "Uses your eligible ChatGPT/Codex subscription. This is separate from OpenAI API billing.";
   if (id === "openai")

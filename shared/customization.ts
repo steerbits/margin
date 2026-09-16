@@ -44,11 +44,11 @@ export const customizationExamples = [
   },
   {
     id: "notes-tools",
-    title: "Let Pi work with notes",
+    title: "Let your assistant work with notes",
     description:
       "Give the agent tools to read and update your project notepad.",
     prompt:
-      "Extend the project-notes plugin with tools that let Pi read and update the current project's notes. Preserve its revision checks and show changes in the panel.",
+      "Extend the project-notes plugin with tools that let the assistant read and update the current project's notes. Preserve its revision checks and show changes in the panel.",
   },
   {
     id: "decisions",

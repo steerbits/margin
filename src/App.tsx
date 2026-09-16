@@ -549,7 +549,11 @@ export function App() {
           void pendingDrafts.flush(s.session.id).catch(fail);
           if (completed.rejected) {
             lastAccepted.current = "";
-            fail(new Error("Pi did not accept that message. Your draft is restored; try again."));
+            fail(
+              new Error(
+                "That message was not accepted. Your draft is restored; try again.",
+              ),
+            );
           }
         }
         const pending = pendingDrafts.get(s.session.id);
@@ -912,7 +916,7 @@ export function App() {
       if (result.status === "rejected") {
         lastAccepted.current = "";
         throw new Error(
-          "Pi did not accept that message. Your draft is saved; try again.",
+          "That message was not accepted. Your draft is saved; try again.",
         );
       }
       if (result.status === "accepted") outbox.accept(sendingSession, id);
@@ -1203,7 +1207,10 @@ export function App() {
     );
   }
   const model = snapshot?.session.model;
-  const agentName = snapshot?.session.backendLabel ?? "Pi";
+  const agentName =
+    (snapshot?.session.backend ?? "pi") === "pi"
+      ? "Assistant"
+      : (snapshot?.session.backendLabel ?? "Assistant");
   const conversationTitle =
     (snapshot?.session.id === sessionId ? snapshot.session.title : undefined) ??
     boot.sessions.find((s) => s.id === sessionId)?.title ??
@@ -1583,7 +1590,6 @@ export function App() {
                       <ChatStatus
                         activity={currentActivity}
                         unread={isUnread(sessionId, currentActivity)}
-                        agent={agentName}
                       />
                     </>
                   )}
@@ -1634,7 +1640,6 @@ export function App() {
                   <ChatStatus
                     activity={currentActivity}
                     unread={isUnread(sessionId, currentActivity)}
-                    agent={agentName}
                   />
                 </div>
               )}
@@ -1700,13 +1705,13 @@ export function App() {
                         <textarea
                           ref={composerEditor}
                           onPaste={attachments.paste}
-                          aria-label={`Message ${agentName}`}
+                          aria-label="Message"
                           placeholder={
                             attachments.files.length
                               ? "Add a message about these files (optional)…"
                               : draftCount
                                 ? "Add an overall reply (optional)…"
-                                : `Message ${agentName}, or select a passage above to comment…`
+                                : "Message… or select a passage above to comment"
                           }
                           value={draft}
                           onChange={(e) => updateDraft(e.target.value)}
@@ -1981,7 +1986,8 @@ export function App() {
                       <br />a conversation.
                     </h1>
                     <p className="welcome-copy">
-                      Work with Pi. Read closely, leave comments in the margin,
+                      Work with your assistant. Read closely, leave comments in
+                      the margin,
                       <br className="desktop-break" /> and shape the next step
                       together.
                     </p>

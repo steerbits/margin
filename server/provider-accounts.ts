@@ -107,7 +107,7 @@ export class ProviderAccounts {
   private writable() {
     if (this.readOnly)
       throw new AccountError(
-        "Account changes are disabled by MARGIN_AUTH_READ_ONLY. Restart Margin without it, or use npm run pi, then /login in Terminal.",
+        "Account changes are disabled by MARGIN_AUTH_READ_ONLY. Restart Margin without it to connect a provider in Settings.",
       );
     if (this.removing || this.attempt?.running)
       throw new AccountError(
@@ -166,7 +166,7 @@ export class ProviderAccounts {
           : provider.auth.apiKey?.login)
       )
         throw new AccountError(
-          "This provider does not expose that sign-in method through Pi.",
+          "This provider does not expose that sign-in method here.",
         );
       await runtime.login(view.providerId, view.method, {
         signal: abort.signal,
@@ -183,7 +183,7 @@ export class ProviderAccounts {
       });
       view.status = "connected";
       view.message =
-        "Credentials saved in Pi. Model access is checked when you send a message.";
+        "Credentials saved. Model access is checked when you send a message.";
     } catch (error) {
       // A committed credential must not be misreported as a failed/cancelled login.
       if (
@@ -192,7 +192,7 @@ export class ProviderAccounts {
       ) {
         view.status = "connected";
         view.message =
-          "Credentials were saved, but Pi could not refresh its local model state. Refresh models or restart Margin; do not sign in again just to retry the refresh.";
+          "Credentials were saved, but the runtime could not refresh its local model state. Refresh models or restart Margin; do not sign in again just to retry the refresh.";
       } else {
         view.status = attempt.reason ?? "error";
         view.message =
@@ -202,7 +202,7 @@ export class ProviderAccounts {
               ? "Sign-in cancelled."
               : error instanceof AccountError
                 ? error.message
-                : "Sign-in failed. Check your account eligibility, network connection, and Pi credential-file permissions, then try again. For browser login, close any other Pi login using its callback port. You can also use npm run pi, then /login in Terminal.";
+                : "Sign-in failed. Check your account eligibility, network connection, and credential-file permissions, then try again. For browser login, close any other sign-in using its callback port.";
       }
     } finally {
       clearTimeout(timer);
@@ -219,7 +219,7 @@ export class ProviderAccounts {
     signal.throwIfAborted();
     if (attempt.answer)
       throw new AccountError(
-        "Pi requested overlapping login prompts. Cancel and try Terminal login instead.",
+        "The provider requested overlapping login prompts. Cancel and try terminal login instead.",
       );
     const { signal: _signal, ...fields } = prompt;
     const id = randomUUID();
@@ -269,7 +269,7 @@ export class ProviderAccounts {
       (value.trimStart().startsWith("!") || value.includes("$"))
     )
       throw new AccountError(
-        "Enter a literal API key, not a shell command or environment expression. Configure advanced credentials through Pi instead.",
+        "Enter a literal API key, not a shell command or environment expression. Configure advanced credentials in the runtime's credential file instead.",
       );
     attempt.answer(value);
     return this.snapshot(attempt);
@@ -305,11 +305,11 @@ export class ProviderAccounts {
       )
         return {
           warning:
-            "Saved credentials were removed, but Pi could not refresh its local model state. Refresh models or restart Margin.",
+            "Saved credentials were removed, but the runtime could not refresh its local model state. Refresh models or restart Margin.",
         };
       if (error instanceof AccountError) throw error;
       throw new AccountError(
-        "Could not remove credentials. Check Pi credential-file permissions and try again.",
+        "Could not remove credentials. Check credential-file permissions and try again.",
       );
     } finally {
       this.removing = false;
@@ -319,13 +319,18 @@ export class ProviderAccounts {
 function safeEvent(event: AuthEvent): AuthEvent {
   if (event.type === "auth_url") {
     const url = safeAuthUrl(event.url);
-    if (!url) throw new AccountError("Pi supplied an unsupported sign-in URL.");
+    if (!url)
+      throw new AccountError(
+        "The provider supplied an unsupported sign-in URL.",
+      );
     return { type: event.type, url, instructions: event.instructions };
   }
   if (event.type === "device_code") {
     const verificationUri = safeAuthUrl(event.verificationUri);
     if (!verificationUri)
-      throw new AccountError("Pi supplied an unsupported verification URL.");
+      throw new AccountError(
+        "The provider supplied an unsupported verification URL.",
+      );
     return {
       type: event.type,
       verificationUri,
@@ -365,7 +370,7 @@ export function installProviderAccountRoutes(
               ? error.message
               : error instanceof z.ZodError
                 ? "Invalid account request."
-                : "Unable to read Pi accounts. Check Pi credential-file permissions and try again.",
+                : "Unable to read provider accounts. Check credential-file permissions and try again.",
         });
       }
     };

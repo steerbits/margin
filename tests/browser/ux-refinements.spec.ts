@@ -69,7 +69,7 @@ test("browsing and reloading do not promote a chat; sending a message does", asy
   expect((await order()).slice(0, 2)).toEqual([newer, older]);
   const after = await (await page.request.get(`/api/sessions/${older}`)).json();
   expect(after.session.updatedAt).toBe(before.session.updatedAt);
-  await page.getByLabel("Message Pi", { exact: true }).fill("Actual activity");
+  await page.getByLabel("Message", { exact: true }).fill("Actual activity");
   await page.getByRole("button", { name: "Send message", exact: true }).click();
   await expect.poll(async () => (await order())[0]).toBe(older);
   await expect(page.locator(".send-status")).toHaveCount(0);
@@ -82,7 +82,7 @@ for (const failure of [false, true]) {
     await page.goto("/");
     const id = await seed(page);
     await open(page, id);
-    const composer = page.getByLabel("Message Pi", { exact: true });
+    const composer = page.getByLabel("Message", { exact: true });
     await composer.fill("Original note");
     let release!: () => void;
     const gate = new Promise<void>((resolve) => {
@@ -135,7 +135,7 @@ test("asynchronous preflight rejection restores the draft and retries with a fre
   await page.goto("/");
   const id = await seed(page, { rejectSend: true });
   await open(page, id);
-  const composer = page.getByLabel("Message Pi", { exact: true });
+  const composer = page.getByLabel("Message", { exact: true });
   await composer.fill("Rejected draft");
   const batches: string[] = [];
   page.on("request", (request) => {
@@ -161,7 +161,7 @@ test("a live confirmation replaces the bubble even if the HTTP response is lost"
   await page.goto("/");
   const id = await seed(page);
   await open(page, id);
-  const composer = page.getByLabel("Message Pi", { exact: true });
+  const composer = page.getByLabel("Message", { exact: true });
   await composer.fill("Send exactly once");
   let release!: () => void;
   const gate = new Promise<void>((resolve) => {

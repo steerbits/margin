@@ -98,7 +98,7 @@ test("cached switches paint in one frame while the stream and outgoing save are 
   const second = await seed(page, "Cached second");
   await page.goto(`/chats/${first}`);
   await expect(page.getByLabel("Starting skill")).toBeEnabled();
-  await page.getByLabel("Message Pi").fill("First draft");
+  await page.getByLabel("Message", { exact: true }).fill("First draft");
   await open(page, second);
   let release!: () => void;
   const blocked = new Promise<void>((resolve) => {
@@ -118,7 +118,7 @@ test("cached switches paint in one frame while the stream and outgoing save are 
     return route.fulfill({ json: { status: "accepted" } });
   });
   try {
-    await page.getByLabel("Message Pi").fill("Second draft still saving");
+    await page.getByLabel("Message", { exact: true }).fill("Second draft still saving");
     const timing = await page.evaluate(async (id) => {
       const start = performance.now();
       document
@@ -131,7 +131,7 @@ test("cached switches paint in one frame while the stream and outgoing save are 
           .querySelector(".conversation-title")
           ?.textContent?.trim(),
         draft: document.querySelector<HTMLTextAreaElement>(
-          'textarea[aria-label="Message Pi"]',
+          'textarea[aria-label="Message"]',
         )?.value,
         loading: !!document.querySelector(".conversation-loading"),
       };
@@ -144,14 +144,14 @@ test("cached switches paint in one frame while the stream and outgoing save are 
       ".margin-data/chat-switch-timing.json",
       JSON.stringify(timing, null, 2),
     );
-    await page.getByLabel("Message Pi").press("Control+Enter");
+    await page.getByLabel("Message", { exact: true }).press("Control+Enter");
     expect(sends).toBe(0);
     await row(page, second).click();
-    await expect(page.getByLabel("Message Pi")).toHaveValue(
+    await expect(page.getByLabel("Message", { exact: true })).toHaveValue(
       "Second draft still saving",
     );
     await expect(page.getByLabel("Starting skill")).toBeEnabled();
-    await page.getByLabel("Message Pi").fill("Second draft with a newer edit");
+    await page.getByLabel("Message", { exact: true }).fill("Second draft with a newer edit");
     release();
     await expect
       .poll(
@@ -177,11 +177,11 @@ test("a failed background save retains its chat's draft across rapid switches", 
   await page.route(`**/api/sessions/${first}/composer`, (route) =>
     route.fulfill({ status: 503, json: { error: "Temporary save failure" } }),
   );
-  await page.getByLabel("Message Pi").fill("Keep this even when saving fails");
+  await page.getByLabel("Message", { exact: true }).fill("Keep this even when saving fails");
   await open(page, second);
   await expect(page.getByRole("alert")).toContainText("Temporary save failure");
   await open(page, first);
-  await expect(page.getByLabel("Message Pi")).toHaveValue(
+  await expect(page.getByLabel("Message", { exact: true })).toHaveValue(
     "Keep this even when saving fails",
   );
   await page.unroute(`**/api/sessions/${first}/composer`);
@@ -258,7 +258,7 @@ test("delayed plugin composer and comment responses stay with their original cha
       .getByRole("button", { name: "Delete comment", exact: true })
       .click();
     await open(page, second);
-    await page.getByLabel("Message Pi").fill("Current draft must remain");
+    await page.getByLabel("Message", { exact: true }).fill("Current draft must remain");
     await page.getByRole("button", { name: /^Comments/ }).click();
     await expect(page.locator(".comment-text")).toHaveText(
       "Current comment must remain",
@@ -279,14 +279,14 @@ test("delayed plugin composer and comment responses stay with their original cha
             .comments.length,
       )
       .toBe(0);
-    await expect(page.getByLabel("Message Pi")).toHaveValue(
+    await expect(page.getByLabel("Message", { exact: true })).toHaveValue(
       "Current draft must remain",
     );
     await expect(page.locator(".comment-text")).toHaveText(
       "Current comment must remain",
     );
     await open(page, first);
-    await expect(page.getByLabel("Message Pi")).toHaveValue(
+    await expect(page.getByLabel("Message", { exact: true })).toHaveValue(
       "Draft prepared for the original chat",
     );
   } finally {

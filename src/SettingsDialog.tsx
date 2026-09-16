@@ -68,8 +68,7 @@ export function SettingsDialog({
     !!draft.defaultThinkingLevel &&
     !levels.includes(draft.defaultThinkingLevel);
   const pending = loading || saving || accountBusy;
-  const runtimeDefault =
-    (model?.backend ?? "pi") === "pi" ? "Pi default" : "Runtime default";
+  const runtimeDefault = "Runtime default";
   async function refresh() {
     setLoading(true);
     setError("");
@@ -258,7 +257,7 @@ export function SettingsDialog({
                   ? "This model does not support thinking."
                   : !levels.length && model
                     ? "This runtime does not expose thinking effort."
-                    : "Only supported levels are shown. Pi default uses your existing Pi configuration."}
+                    : "Only supported levels are shown. Runtime default uses your existing runtime configuration."}
             </p>
           </div>
         </section>
@@ -270,9 +269,9 @@ export function SettingsDialog({
           </p>
         )}
         <p className="settings-footnote">
-          Conversation defaults are saved in Margin, not in your global Pi
+          Conversation defaults are saved in Margin, not in your global runtime
           settings. Cancel discards only these default edits; completed account
-          changes above are already saved in Pi.
+          changes above are already saved.
         </p>
         <div className="management-actions">
           <button type="button" disabled={saving} onClick={onClose}>

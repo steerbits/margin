@@ -202,8 +202,7 @@ export function ProviderAccountsPanel({
       {accounts?.readOnly && (
         <p className="account-notice">
           Account changes are disabled by MARGIN_AUTH_READ_ONLY. Restart without
-          it to connect here, or use pi /login in Terminal and refresh. Expired
-          tokens cannot refresh in this mode.
+          it to connect here. Expired tokens cannot refresh in this mode.
         </p>
       )}
       {accounts && (
@@ -266,7 +265,7 @@ export function ProviderAccountsPanel({
                 {provider.statusError
                   ? "Could not check account status. Try refreshing."
                   : provider.configured
-                    ? `Configured · ${provider.authType === "oauth" ? "provider sign-in" : "API / external credentials"}${provider.stored ? " · saved in Pi" : " · configured externally"}`
+                    ? `Configured · ${provider.authType === "oauth" ? "provider sign-in" : "API / external credentials"}${provider.stored ? " · saved locally" : " · configured externally"}`
                     : "Not configured"}
               </p>
               <p className="settings-help">
@@ -274,15 +273,16 @@ export function ProviderAccountsPanel({
               </p>
               {!provider.methods.length && (
                 <p className="settings-help">
-                  Pi has no interactive login for this provider. Configure its
-                  environment or cloud credentials on the server, then refresh.
+                  Interactive login is unavailable for this provider. Configure
+                  its environment or cloud credentials on the server, then refresh.
                 </p>
               )}
               {provider.configured && (
                 <p className="settings-help">
-                  Connecting again replaces this provider’s saved login for both
-                  Margin and terminal Pi. Existing conversations keep their
-                  model but subsequent requests use the new credentials.
+                  Connecting again replaces this provider’s saved login for
+                  Margin and any terminal sessions sharing these credentials.
+                  Existing conversations keep their model but subsequent
+                  requests use the new credentials.
                 </p>
               )}
               <div className="account-actions">
@@ -309,10 +309,10 @@ export function ProviderAccountsPanel({
               {confirmRemove && (
                 <div className="account-notice">
                   <p>
-                    Remove {provider.name} credentials from Pi? This also
-                    affects terminal Pi and future requests in existing chats.
-                    Environment or external credentials may still provide
-                    access.
+                    Remove saved {provider.name} credentials? This also affects
+                    terminal sessions sharing these credentials and future
+                    requests in existing chats. Environment or external
+                    credentials may still provide access.
                   </p>
                   <div className="account-actions">
                     <button
@@ -343,7 +343,7 @@ export function ProviderAccountsPanel({
                         })
                       }
                     >
-                      Remove from Pi
+                      Remove saved credentials
                     </button>
                   </div>
                 </div>

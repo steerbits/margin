@@ -33,7 +33,7 @@ for (const mobile of [false, true]) {
     if (mobile)
       await page.getByRole("button", { name: "Show sidebar" }).click();
     await page.getByRole("button", { name: /New conversation.*⌘/ }).click();
-    const composer = page.getByLabel("Message Pi", { exact: true });
+    const composer = page.getByLabel("Message", { exact: true });
     // Check before fill/click can hide a missing autofocus.
     await expect(composer).toBeFocused();
     await expect(composer).toBeInViewport({ ratio: 1 });
@@ -66,7 +66,7 @@ for (const mobile of [false, true]) {
     if (mobile)
       await page.getByRole("button", { name: "Show sidebar" }).click();
     await page.getByRole("button", { name: /New conversation.*⌘/ }).click();
-    const composer = page.getByLabel("Message Pi", { exact: true });
+    const composer = page.getByLabel("Message", { exact: true });
     await expect(composer).toBeFocused();
     await expect(page.getByLabel("Starting skill")).toBeEnabled();
     const welcome = (await page.locator(".empty-conversation").boundingBox())!;
@@ -95,7 +95,7 @@ for (const mobile of [false, true]) {
           document.querySelector<HTMLButtonElement>('button[aria-label="Send message"]')!.click();
           await new Promise(requestAnimationFrame);
           return {
-            draft: document.querySelector<HTMLTextAreaElement>('textarea[aria-label="Message Pi"]')!.value,
+            draft: document.querySelector<HTMLTextAreaElement>('textarea[aria-label="Message"]')!.value,
             bubble: document.querySelector(".message.user")?.textContent,
             inline: !!document.querySelector(".composer-inline"),
           };
@@ -154,7 +154,7 @@ test("failed first send restores the inline draft; accepted send keeps its bubbl
   // The previous chat's composer is still enabled while creation is in flight.
   // Wait for the new chat, rather than accidentally typing into the old one.
   await expect(page.getByRole("heading", { name: "What would you like to work on?" })).toBeVisible();
-  const composer = page.getByLabel("Message Pi", { exact: true });
+  const composer = page.getByLabel("Message", { exact: true });
   await expect(page.getByLabel("Starting skill")).toBeEnabled();
   await composer.fill("Preserve this first draft");
   await page.route("**/api/sessions/*/send", (route) =>
@@ -196,7 +196,7 @@ test("welcome's Start a conversation focuses the message box", async ({
   await page
     .getByRole("button", { name: "Start a conversation", exact: true })
     .click();
-  await expect(page.getByLabel("Message Pi", { exact: true })).toBeFocused();
+  await expect(page.getByLabel("Message", { exact: true })).toBeFocused();
 });
 
 for (const viewport of [
@@ -210,7 +210,7 @@ for (const viewport of [
     await page.setViewportSize(viewport);
     await seed(page);
     const conversation = page.locator(".scroll-area");
-    const composer = page.getByLabel("Message Pi", { exact: true });
+    const composer = page.getByLabel("Message", { exact: true });
     const send = page.getByRole("button", {
       name: "Send message",
       exact: true,

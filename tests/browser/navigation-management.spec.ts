@@ -32,7 +32,7 @@ test("conversation creation and selection change URLs; deep links, panels and Cu
   const id = await seed(page);
   await expect(page).toHaveURL(new RegExp(`/chats/${id}$`));
   await page
-    .getByRole("textbox", { name: "Message Pi" })
+    .getByRole("textbox", { name: "Message" })
     .fill("Keep this draft while navigating");
   await page.getByRole("button", { name: "Notes", exact: true }).click();
   await expect(page).toHaveURL(
@@ -40,7 +40,7 @@ test("conversation creation and selection change URLs; deep links, panels and Cu
   );
   await page.reload();
   await expect(page.getByLabel("Project notes", { exact: true })).toBeVisible();
-  await expect(page.getByRole("textbox", { name: "Message Pi" })).toHaveValue(
+  await expect(page.getByRole("textbox", { name: "Message" })).toHaveValue(
     "Keep this draft while navigating",
   );
   await page
@@ -337,7 +337,7 @@ test("root restores the last chat and plugin navigation uses the same draft-awar
   await page.goto("/");
   await expect(page).toHaveURL(new RegExp(`/chats/${id}$`));
   await page
-    .getByRole("textbox", { name: "Message Pi" })
+    .getByRole("textbox", { name: "Message" })
     .fill("Plugin navigation preserves this");
   await page
     .getByRole("button", { name: "Open chat workspace", exact: true })
@@ -346,7 +346,7 @@ test("root restores the last chat and plugin navigation uses the same draft-awar
     new RegExp(`/workspaces/${state.session.projectId}$`),
   );
   await page.goBack();
-  await expect(page.getByRole("textbox", { name: "Message Pi" })).toHaveValue(
+  await expect(page.getByRole("textbox", { name: "Message" })).toHaveValue(
     "Plugin navigation preserves this",
   );
   await page

@@ -97,7 +97,7 @@ test("browser title follows conversation navigation, live naming, reload and non
   await expect(page.getByLabel("Starting skill")).toBeEnabled();
   await page.getByLabel("Starting skill").selectOption("");
   await page
-    .getByLabel("Message Pi", { exact: true })
+    .getByLabel("Message", { exact: true })
     .fill("Name this conversation");
   await page.getByRole("button", { name: "Send message", exact: true }).click();
   await expect(page).toHaveTitle("Margin · Name this conversation");

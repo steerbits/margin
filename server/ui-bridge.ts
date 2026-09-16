@@ -190,7 +190,7 @@ export class UiBridge {
           "This extension needs a terminal interface",
           {
             message:
-              "This interaction cannot be translated automatically. Stop this interaction, then use a browser-capable extension or continue in Pi’s terminal.",
+              "This interaction cannot be translated automatically. Stop this interaction, then use a browser-capable extension or continue in the runtime’s terminal.",
           },
         ) as Promise<T>,
       onTerminalInput: () => {

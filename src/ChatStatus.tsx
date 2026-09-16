@@ -10,19 +10,17 @@ const labels = {
 export function ChatStatus({
   activity,
   unread = false,
-  agent,
 }: {
   activity?: SessionActivity;
   unread?: boolean;
-  agent?: string;
 }) {
   const status = activity?.status ?? "idle";
   const label = `${labels[status]}${unread ? " · Unread" : ""}`;
   return (
     <span
       className={`chat-status ${status} ${unread ? "unread" : ""}`}
-      role={agent ? "status" : undefined}
-      aria-label={`${agent ? `${agent}: ` : ""}${label}`}
+      role="status"
+      aria-label={label}
       title={label}
     >
       <i aria-hidden="true" />

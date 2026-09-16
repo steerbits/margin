@@ -131,7 +131,7 @@ async function mockAccounts(page: Page, view: ProviderAccountsView) {
         flow.status = flow.method === "api_key" ? "connected" : "error";
         flow.message =
           flow.method === "api_key"
-            ? "Credentials saved in Pi."
+            ? "Credentials saved."
             : "Sign-in failed. Try again.";
       }
     } else if (method === "DELETE") {
@@ -235,9 +235,9 @@ test("Grok device sign-in works in Settings on mobile, refreshes models, and doe
   expect(bounds!.x + bounds!.width).toBeLessThanOrEqual(390);
   state.flow.status = "connected";
   state.flow.events = [];
-  state.flow.message = "Credentials saved in Pi.";
+  state.flow.message = "Credentials saved.";
   view.providers.find((p) => p.id === "xai")!.configured = true;
-  await expect(dialog.getByText("Credentials saved in Pi.")).toBeVisible();
+  await expect(dialog.getByText("Credentials saved.")).toBeVisible();
   await expect(
     dialog
       .getByLabel("Default model")
@@ -291,7 +291,7 @@ test("browser fallback, errors, secret entry, shared logout confirmation and clo
   await expect(input).toHaveValue("");
   await input.fill("fixture-secret");
   await dialog.getByRole("button", { name: "Continue", exact: true }).click();
-  await expect(dialog.getByText("Credentials saved in Pi.")).toBeVisible();
+  await expect(dialog.getByText("Credentials saved.")).toBeVisible();
   expect(state.answers).toContain("fixture-secret");
   expect(
     await page.evaluate(() =>
@@ -305,16 +305,16 @@ test("browser fallback, errors, secret entry, shared logout confirmation and clo
     .getByLabel("Provider", { exact: true })
     .selectOption("openai-codex");
   await dialog.getByRole("button", { name: "Remove saved login…" }).click();
-  await expect(dialog.getByText(/This also affects terminal Pi/)).toBeVisible();
+  await expect(dialog.getByText(/This also affects\s+terminal sessions sharing these credentials/)).toBeVisible();
   expect(state.removed).toBe(0);
   await dialog.getByRole("button", { name: "Keep login" }).click();
   await dialog.getByRole("button", { name: "Remove saved login…" }).click();
   await dialog
-    .getByRole("button", { name: "Remove from Pi", exact: true })
+    .getByRole("button", { name: "Remove saved credentials", exact: true })
     .click();
   await expect.poll(() => state.removed).toBe(1);
   await dialog.getByLabel("Provider", { exact: true }).selectOption("external");
-  await expect(dialog.getByText(/no interactive login/)).toBeVisible();
+  await expect(dialog.getByText(/Interactive login is unavailable/)).toBeVisible();
   await dialog.getByLabel("Provider", { exact: true }).selectOption("xai");
   await dialog
     .getByRole("button", { name: "Sign in with SuperGrok or X Premium" })

@@ -167,7 +167,7 @@ export function ToolCard({
           className="tool-outcome"
           title={
             tool.status === "error"
-              ? "Pi reported a tool error. Open the row for the command output."
+              ? "The tool reported an error. Open the row for the command output."
               : undefined
           }
         >

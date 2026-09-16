@@ -19,17 +19,18 @@ for (const width of [1440, 390]) {
     const dot = status.locator("i");
     await expect(status).toHaveCount(1);
     await expect(status).toHaveText("Ready");
-    // Keep the backend context for screen readers, not in the visible label.
     await expect(status).toHaveRole("status");
-    await expect(status).toHaveAccessibleName("Pi: Ready");
+    await expect(status).toHaveAccessibleName("Ready");
     await expect(dot).toBeVisible();
     await expect(dot).toHaveAttribute("aria-hidden", "true");
     await expect(dot).toHaveCSS("animation-name", "none");
 
-    await page.getByLabel("Message Pi", { exact: true }).fill("Check status");
-    await page.getByRole("button", { name: "Send message", exact: true }).click();
+    await page.getByLabel("Message", { exact: true }).fill("Check status");
+    await page
+      .getByRole("button", { name: "Send message", exact: true })
+      .click();
     await expect(status).toHaveText("Running");
-    await expect(status).toHaveAccessibleName("Pi: Running");
+    await expect(status).toHaveAccessibleName("Running");
     await expect(dot).toHaveCSS("animation-name", "status-pulse");
     await expect(dot).toHaveCSS("animation-duration", "1.4s");
     await page.emulateMedia({ reducedMotion: "reduce" });
@@ -39,12 +40,26 @@ for (const width of [1440, 390]) {
     await expect(dot).toHaveCSS("animation-name", "status-pulse");
 
     await expect(status).toHaveText("Finished");
+    await expect(status).toHaveAccessibleName("Finished");
     await expect(dot).toHaveCSS("animation-name", "none");
+    await expect(page.locator(".agent-label > span").first()).toHaveText(
+      "Assistant",
+    );
+    await expect(page.locator("body")).not.toContainText(/\bPi\b/);
+    await page.screenshot({ path: `.margin-data/status-cleanup-${width}.png` });
     const dialog = await page.request.post(`/api/test/${id}/dialog`, {
       data: {},
     });
     expect(dialog.ok()).toBe(true);
     await expect(status).toHaveText("Waiting for you");
+    await expect(status).toHaveAccessibleName("Waiting for you");
+    await expect(page.locator(".question-label")).toHaveText(
+      "Waiting for your answer",
+    );
+    await expect(page.locator("body")).not.toContainText(/\bPi\b/);
     await expect(dot).toHaveCSS("animation-name", "none");
+    // Do not leave a waiting source-workspace session blocking later tests.
+    await page.getByRole("button", { name: "SQLite", exact: true }).click();
+    await expect(status).toHaveText("Finished");
   });
 }

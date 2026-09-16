@@ -172,7 +172,7 @@ const host: BackendHost = { store, dataDir, appRoot, plugins };
 const backends = backendRegistry([
   {
     id: "pi",
-    label: "Pi",
+    label: "Assistant",
     models: async () => listModels(await createModels(dataDir)),
     create: (info, project, h) =>
       new LiveSession(info, project, h.store, h.dataDir, h.appRoot, h.plugins, {

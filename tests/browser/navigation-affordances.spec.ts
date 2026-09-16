@@ -14,7 +14,7 @@ async function seed(page: Page, title: string, historyCount = 7) {
   return (await response.json()) as { id: string; snapshot: Snapshot };
 }
 
-const composer = (page: Page) => page.getByLabel("Message Pi", { exact: true });
+const composer = (page: Page) => page.getByLabel("Message", { exact: true });
 const row = (page: Page, id: string) =>
   page.locator(`[data-session-id="${id}"]`);
 

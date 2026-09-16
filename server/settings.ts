@@ -44,7 +44,7 @@ export function validateSettings(
     !model?.thinkingLevels?.includes(settings.defaultThinkingLevel)
   )
     throw new Error(
-      "The default model does not support that thinking effort. Choose a supported level or Pi default.",
+      "The default model does not support that thinking effort. Choose a supported level or Runtime default.",
     );
 }
 
@@ -60,7 +60,7 @@ export function newConversationSettings(
     : settingsModel(settings, models);
   if (!model)
     throw new Error(
-      "No available model. Connect a provider account in Settings (or use npm run pi, then /login), then choose a model.",
+      "No available model. Connect a provider account in Settings, then choose a model.",
     );
   return {
     model,

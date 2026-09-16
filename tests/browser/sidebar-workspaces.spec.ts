@@ -443,7 +443,7 @@ test("real cross-workspace switching and search preserve drafts and discover a n
   ).json();
   await page.goto(`/chats/${seed.id}`);
   await expect(page.getByLabel("Starting skill")).toBeEnabled();
-  await page.getByLabel("Message Pi").fill("Keep the original workspace draft");
+  await page.getByLabel("Message", { exact: true }).fill("Keep the original workspace draft");
   const folder = mkdtempSync(join(tmpdir(), "margin-sidebar-search-"));
   try {
     const projectResponse = await page.request.post("/api/projects", {
@@ -464,19 +464,19 @@ test("real cross-workspace switching and search preserve drafts and discover a n
       page.getByRole("combobox", { name: "Project", exact: true }),
     ).toHaveValue(project.id);
     await expect(page.getByLabel("Starting skill")).toBeEnabled();
-    await page.getByLabel("Message Pi").fill("Keep the second workspace draft");
+    await page.getByLabel("Message", { exact: true }).fill("Keep the second workspace draft");
     await search(page).fill("Original workspace draft");
     await search(page).press("Enter");
     await expect(page).toHaveURL(new RegExp(`/chats/${seed.id}$`));
-    await expect(page.getByLabel("Message Pi")).toHaveValue(
+    await expect(page.getByLabel("Message", { exact: true })).toHaveValue(
       "Keep the original workspace draft",
     );
     await row(page, second.session.id).click();
-    await expect(page.getByLabel("Message Pi")).toHaveValue(
+    await expect(page.getByLabel("Message", { exact: true })).toHaveValue(
       "Keep the second workspace draft",
     );
     await page.goBack();
-    await expect(page.getByLabel("Message Pi")).toHaveValue(
+    await expect(page.getByLabel("Message", { exact: true })).toHaveValue(
       "Keep the original workspace draft",
     );
     await expect

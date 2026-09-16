@@ -73,7 +73,7 @@ for (const width of [1440, 390]) {
       await newChat.click();
       await expect.poll(() => nextId).not.toBe("");
       await expect(page).toHaveURL(new RegExp(`/chats/${nextId}$`));
-      const composer = page.getByLabel("Message Pi", { exact: true });
+      const composer = page.getByLabel("Message", { exact: true });
       await composer.fill("Keep this draft while A works");
       const send = page.getByRole("button", {
         name: "Send message",
@@ -157,7 +157,7 @@ test("stale pages and direct sends receive the same explanation; accepted batch 
       route.fulfill({ json: { block: null } }),
     );
     await page.goto(`/chats/${next.id}`);
-    const composer = page.getByLabel("Message Pi", { exact: true });
+    const composer = page.getByLabel("Message", { exact: true });
     await composer.fill("Draft from a stale tab");
     const send = page.getByRole("button", {
       name: "Send message",
@@ -186,7 +186,7 @@ test("a completed run unlocks sending automatically, without sending the saved d
   const next = await seed(page);
   try {
     await page.goto(`/chats/${next.id}`);
-    const composer = page.getByLabel("Message Pi", { exact: true });
+    const composer = page.getByLabel("Message", { exact: true });
     await composer.fill("Wait for completion");
     const send = page.getByRole("button", {
       name: "Send message",
@@ -222,7 +222,7 @@ test("ordinary workspaces can still send while Margin is busy", async ({
     const project = await response.json();
     const next = await seed(page, { projectId: project.id });
     await page.goto(`/chats/${next.id}`);
-    const composer = page.getByLabel("Message Pi", { exact: true });
+    const composer = page.getByLabel("Message", { exact: true });
     await composer.fill("Independent work");
     const send = page.getByRole("button", {
       name: "Send message",
@@ -251,7 +251,7 @@ test("availability failures keep drafts and offer a retry instead of silently en
     route.fulfill({ status: 503, json: { error: "Offline check" } }),
   );
   await page.goto(`/chats/${next.id}`);
-  const composer = page.getByLabel("Message Pi", { exact: true });
+  const composer = page.getByLabel("Message", { exact: true });
   await composer.fill("Saved while checking fails");
   const send = page.getByRole("button", { name: "Send message", exact: true });
   await expect(send).toBeDisabled();

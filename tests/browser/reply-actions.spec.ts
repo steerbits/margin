@@ -21,7 +21,7 @@ Syntax example: \`:reply[Not an action]\`
 `;
 const action = (page: Page) =>
   page.getByRole("button", { name: `Send reply: ${label}`, exact: true });
-const composer = (page: Page) => page.getByLabel("Message Pi", { exact: true });
+const composer = (page: Page) => page.getByLabel("Message", { exact: true });
 
 async function seed(page: Page, extra = {}) {
   await page.goto("/");

@@ -50,7 +50,7 @@ test("selecting files returns focus for typing, but finishing a late upload does
     await waiting;
     await route.continue().catch(() => {});
   });
-  const composer = page.getByLabel("Message Pi", { exact: true });
+  const composer = page.getByLabel("Message", { exact: true });
   const skill = page.getByLabel("Starting skill");
   try {
     const picker = page.waitForEvent("filechooser");
@@ -164,7 +164,7 @@ test("returning from the file picker can reconnect the chat without rejecting th
     await page.getByRole("button", { name: "Retry", exact: true }).click();
     await expect(drafts(page)).not.toContainText("Uploading…");
     await expect(drafts(page)).not.toContainText("Upload service unavailable");
-    await expect(page.getByLabel("Message Pi", { exact: true })).toBeFocused();
+    await expect(page.getByLabel("Message", { exact: true })).toBeFocused();
   } finally {
     release();
   }
@@ -184,7 +184,7 @@ for (const mobile of [false, true]) {
     await expect(chip).toHaveText(md.name);
     await expect(chip).toHaveAttribute("title", `${md.name} · 33 B`);
     const textLeft = await page
-      .getByLabel("Message Pi", { exact: true })
+      .getByLabel("Message", { exact: true })
       .evaluate((input) => {
         const style = getComputedStyle(input);
         return (
@@ -310,8 +310,8 @@ test("drop on chat history and paste an image; ordinary text dragging does not a
     page.getByText("Attach to this conversation", { exact: true }),
   ).toHaveCount(0);
   await expect(drafts(page)).toContainText("dropped.md");
-  await expect(page.getByLabel("Message Pi", { exact: true })).toBeFocused();
-  await page.getByLabel("Message Pi", { exact: true }).evaluate((input) => {
+  await expect(page.getByLabel("Message", { exact: true })).toBeFocused();
+  await page.getByLabel("Message", { exact: true }).evaluate((input) => {
     const data = new DataTransfer();
     data.items.add(
       new File([new Uint8Array([137, 80, 78, 71])], "clipboard.png", {
@@ -361,7 +361,7 @@ test("failed upload can retry; failed send retains its files and retry reuses th
   await page.getByRole("button", { name: "Retry", exact: true }).click();
   await expect(drafts(page)).not.toContainText("Uploading…");
   await expect(send(page)).toBeEnabled();
-  await page.getByLabel("Message Pi", { exact: true }).fill("Read this brief");
+  await page.getByLabel("Message", { exact: true }).fill("Read this brief");
   const ids: string[] = [];
   await page.route(`**/api/sessions/${id}/send`, (route) => {
     ids.push(route.request().postDataJSON().id);
@@ -373,7 +373,7 @@ test("failed upload can retry; failed send retains its files and retry reuses th
   await send(page).click();
   await expect(page.getByRole("alert")).toContainText("Simulated send failure");
   await expect(drafts(page)).toContainText(md.name);
-  await expect(page.getByLabel("Message Pi", { exact: true })).toHaveValue(
+  await expect(page.getByLabel("Message", { exact: true })).toHaveValue(
     "Read this brief",
   );
   await page.unroute(`**/api/sessions/${id}/send`);
