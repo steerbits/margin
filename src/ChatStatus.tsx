@@ -26,7 +26,6 @@ export function ChatStatus({
       title={label}
     >
       <i aria-hidden="true" />
-      {agent && <span>{agent} · </span>}
       {label}
     </span>
   );
