@@ -33,6 +33,29 @@ Plugins are enabled unless their folder ID is in `disabled`. A missing preferenc
 
 Plugin preferences are currently tracked in Git. Review `margin.plugins.json` before committing so a personal toggle does not accidentally change the defaults distributed to fresh installations. Keep Notes out of the shipped disabled list. Notes content and chats live in the ignored `.margin-data` directory and are not shipped with the plugin.
 
+## Ship a plugin installed but disabled by default
+
+An official plugin can ship with Margin while starting switched off. For a hypothetical `task-board` plugin, include its directory in the root `.gitignore` allowlist, keeping the existing Notes exception:
+
+```gitignore
+/plugins/*/
+!/plugins/project-notes/
+!/plugins/task-board/
+```
+
+Then add its folder ID to the committed `margin.plugins.json` disabled list:
+
+```json
+{
+  "version": 1,
+  "disabled": ["task-board"]
+}
+```
+
+If other IDs are already disabled, preserve them when adding the new ID. Commit the plugin's source, the allowlist change, and `margin.plugins.json` together. Fresh installations will include Task Board and list it in **Customize Margin → Plugins**, but it will remain switched off. Users can turn it on there, then restart Margin and refresh the browser. Notes stays enabled because `project-notes` is absent from the disabled list.
+
+The Git allowlist determines which plugin source ships; the disabled list determines which installed plugins run. Shipped defaults and personal toggle choices currently share `margin.plugins.json`, so editing it also changes the requested setting in your local installation. There is no separate user-settings override layer yet.
+
 ## Develop locally, then publish deliberately
 
 The root `.gitignore` contains:
