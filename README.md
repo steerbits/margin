@@ -33,6 +33,24 @@ bash install.sh --start
 
 The installer installs locked dependencies, builds Margin, verifies the real filesystem sandbox, and starts the app. Pi **0.85.1** and a pinned cco copy are included; no separate global Pi or cco installation is required. It leaves global Node/Git/Pi installations alone and refuses to replace existing dependency/build directories. Later starts use `bash start.sh`.
 
+## Screenshots
+
+**Comment directly on AI replies**
+
+![Select a passage and leave feedback in the margin.](docs/images/inline-feedback.gif)
+
+**Shape the task with AI**
+
+![Choose a direction, add your constraints, and refine the plan.](docs/images/shape-together.gif)
+
+**Point and comment on generated docs and apps** 
+
+![Point to an element and say what should change.](docs/images/review-web-app.gif)
+
+**Customize anything in Margin**
+
+![Pick a starting idea, then describe the change you want.](docs/images/customize-margin.gif)
+
 ## About
 
 Margin is built by [@paraschopra](x.com/paraschopra) and thanks the following projects
@@ -43,5 +61,3 @@ Margin is built by [@paraschopra](x.com/paraschopra) and thanks the following pr
 ## Margin is WIP, and currently meant for technical audience
 
 Please expect things to break. It is a very early release. Feedback welcome via Github issues.
-
-Feature ideas and priorities are maintained in [BACKLOG.md](BACKLOG.md).
