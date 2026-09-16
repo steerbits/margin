@@ -56,7 +56,9 @@ Both use a unique lowercase `id` and `apiVersion: 1`. Server plugins load at sta
 
 ## Where plugins and their data live
 
-The installed Notes plugin is source code under `plugins/project-notes/`, including its server/client entrypoints and local helper/style files. It is tracked in Git. Sharing this repository at a commit containing that directory includes the plugin; the recipient's build/start discovers it and respects `margin.plugins.json`. There is no external package installer yet.
+The installed Notes plugin is source code under `plugins/project-notes/`, including its server/client entrypoints and local helper/style files. It is tracked in Git and enabled by default: the shipped `margin.plugins.json` has an empty `disabled` list, so a fresh installation needs no manual toggle. Sharing this repository at a commit containing that directory includes the plugin; the recipient's build/start discovers it and respects any saved disabled setting. There is no external package installer yet.
+
+New plugin folders are ignored by Git by default; the root `.gitignore` explicitly includes official plugins such as Notes. Git's ignore rules do not prevent local plugin discovery, but ignored plugins are excluded from Margin's code checkpoints. See [plugin distribution and contributions](plugin-distribution.md) for the official-plugin policy, publishing workflow, and proposed community directory.
 
 Saved notes live in their workspace worker's SQLite database, under `plugin:project-notes:<project ID>`. External workspaces use `.margin-data/workspace-data/<ID>/margin.sqlite`; Margin-source data retains the original database. The data directory is ignored by Git: cloning the code does not copy your notes, chats, or credentials. Someone with their own existing Margin checkout can copy the plugin directory into `plugins/`, then rebuild/restart, provided the host API and any dependencies are compatible. Sharing the entire folder manually can include local data unless you deliberately exclude it.
 

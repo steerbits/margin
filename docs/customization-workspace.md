@@ -22,6 +22,8 @@ The Plugins tab lists local plugin directories and their browser/server entrypoi
 
 On/off choices are stored in the source-controlled `margin.plugins.json` file. They apply to the whole app and become active after restarting the server and refreshing the browser. The tab distinguishes the requested setting from what is currently loaded. Returning a toggle to the already active setting removes the restart requirement.
 
+Notes is bundled and enabled on a fresh installation; no manual toggle is needed. New plugin folders remain local by default through Git ignore rules, which also exclude them from code checkpoints. See [plugin distribution and contributions](plugin-distribution.md) for publishing official plugins and the proposed community directory.
+
 Disabling preserves plugin source and project data. Disabled server modules are skipped before import, and the browser imports only the active modules requested by the server. A failed server plugin is reported while the core app remains available. Pi's separate `.pi` extensions and packages are not managed by this list.
 
 ## Named code checkpoints

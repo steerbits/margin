@@ -12,3 +12,8 @@ workspaces/
 docker-trial-backup/
 preparation.json
 docker-reference-workbench/
+
+# Keep new plugin folders local; explicitly include official plugins below.
+# See docs/plugin-distribution.md before publishing a plugin.
+/plugins/*/
+!/plugins/project-notes/
