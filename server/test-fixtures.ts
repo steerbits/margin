@@ -209,7 +209,10 @@ export function installFixtures(
           "user",
           "Help me plan a small meeting-notes app. Start with a proposal before writing code.",
         );
-        append("assistant", fixtureMarkdown);
+        append(
+          "assistant",
+          typeof req.body.markdown === "string" ? req.body.markdown : fixtureMarkdown,
+        );
       }
       l.messages = transcript(l.agent.sessionManager.getBranch());
       l.busy = false;

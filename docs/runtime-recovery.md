@@ -65,6 +65,8 @@ The existing code-history protections remain intentional: Margin-source chat/fee
 
 `history/operation.lock` has not been replaced by the runtime owner database, and neither mechanism creates a Git worktree. This update does not assume that every historical history-lock warning had the same cause.
 
+The September 16 checkpoint hang was separately reproduced and addressed in commit `a9bac69` by replacing piped Git input and adding per-command timeouts. See [checkpoint behavior, the fix, and proposed improvements](checkpoints.md). That fix does not make checkpoint work asynchronous or replace the shutdown/recovery policy described here.
+
 ## Observed verification
 
 The same isolated production-handler probe used for diagnosis was rerun with a 0.58 MiB snapshot, 100 updates, and a stalled browser:

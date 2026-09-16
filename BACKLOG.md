@@ -55,6 +55,7 @@ Acceptance criteria:
 - Retain general panels, message actions/renderers, tools, project data, events, and runtime adapters.
 - Implemented: installed-plugin list, on/off preferences with pending-restart status, and named code checkpoints with diff preview and reversible restoration.
 - A separate running preview and automated server restart remain deferred.
+- Deferred discussion, 16 September 2026: investigate task worktrees for Margin self-customization, runnable previews, named change history, and undo/redo. The user suggested worktrees after finding code-diff-based restore too technical. Scope, activation UX, and integration policy remain open; this does not change the current direct-editing workflow or add an approval gate. See [the worktree proposal and resume checklist](docs/worktree-customization-proposal.md).
 - Keep server plugins and generated server code within the same cco envelope as the rest of the server.
 - Avoid coupling the system to the supervisor and issue-tracker examples.
 - Keep plugin source shareable independently of private project data; document host API/dependency compatibility when distributing a plugin.

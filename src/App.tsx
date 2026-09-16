@@ -58,6 +58,10 @@ import { ModelOptions } from "./ModelOptions.tsx";
 import { configureModelLabel, modelLabel } from "../shared/model-picker.ts";
 import { ChatCache, ChatDrafts } from "./chat-cache.ts";
 import { ChatOutbox } from "./chat-outbox.ts";
+import {
+  appendReplyAction,
+  replyActionMessageId,
+} from "../shared/reply-actions.ts";
 import { useUnread } from "./use-unread.ts";
 import { useSourceSend } from "./use-source-send.ts";
 import {
@@ -837,19 +841,38 @@ export function App() {
       fail(e);
     }
   }
-  async function send() {
-    if (
-      !snapshot ||
-      !connected ||
-      sending ||
-      sourceSend.disabled ||
-      outbox.get(sessionId) ||
-      editing ||
-      snapshot.busy ||
-      snapshot.dialogs.length ||
-      attachments.hasPending(snapshot.session.id)
-    )
-      return;
+  function sendDisabledReason(): string | undefined {
+    if (!snapshot || snapshot.session.id !== selectedId.current || !connected)
+      return "Wait for the conversation to connect.";
+    if (sending || outbox.get(sessionId))
+      return "A reply is already being sent.";
+    if (sourceSend.disabled)
+      return sourceSend.reason || "Sending is unavailable.";
+    if (editing) return "Finish or cancel your draft comment before sending.";
+    if (snapshot.busy) return "Wait for the assistant to finish.";
+    if (snapshot.dialogs.length)
+      return "Answer or cancel the pending dialog first.";
+    if (attachments.hasPending(snapshot.session.id))
+      return "Finish uploading or remove failed attachments before sending.";
+  }
+  async function send(reply?: {
+    sessionId: string;
+    messageId: string;
+    text: string;
+  }) {
+    if (!snapshot || sendDisabledReason()) return;
+    if (reply) {
+      if (
+        reply.sessionId !== snapshot.session.id ||
+        reply.messageId !== replyActionMessageId(snapshot.messages)
+      ) return;
+      // Save the combined draft before submission, so failures/reloads recover
+      // the choice as well as the user's original text. Do not replace feedback.
+      updateChatDraft(
+        snapshot.session.id,
+        appendReplyAction(draftRef.current, reply.text),
+      );
+    }
     setSending(true);
     setError("");
     if (saveTimer.current) clearTimeout(saveTimer.current);
@@ -1132,6 +1155,8 @@ export function App() {
     snapshot?.comments.filter((c) => c.status === "draft").length ?? 0;
   const busy = snapshot?.busy ?? false;
   const outgoing = outbox.get(sessionId);
+  const sendReason = sendDisabledReason();
+  const activeReplyMessageId = snapshot && replyActionMessageId(snapshot.messages);
   const messages = snapshot
     ? [...snapshot.messages, ...(outgoing ? [outgoing.message] : [])]
     : [];
@@ -1826,15 +1851,9 @@ export function App() {
                               }
                               type="submit"
                               disabled={
-                                sending ||
-                                sourceSend.disabled ||
-                                !!outgoing ||
-                                !!snapshot.dialogs.length ||
-                                !!editing ||
-                                attachments.pending ||
+                                !!sendReason ||
                                 (!draft.trim() && !draftCount &&
-                                  !attachments.files.length) ||
-                                !connected
+                                  !attachments.files.length)
                               }
                             >
                               <ArrowUp size={19} />
@@ -2147,6 +2166,18 @@ export function App() {
                                   <Markdown
                                     text={m.text}
                                     artifactSessionId={snapshot.session.id}
+                                    replyActions={{
+                                      onSend: (text) =>
+                                        void send({
+                                          sessionId: snapshot.session.id,
+                                          messageId: m.id,
+                                          text,
+                                        }),
+                                      disabledReason:
+                                        m.id !== activeReplyMessageId
+                                          ? "Only the latest completed reply can be sent."
+                                          : sendReason,
+                                    }}
                                   />
                                 </div>
                                 {m.error && (

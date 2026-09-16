@@ -6,6 +6,8 @@ Margin's source is now a special app workspace. The sidebar has a pinned **Custo
 
 Examples prepare a prompt in a new Margin-source conversation. They do not send the prompt or start model work automatically. Before a customization message is sent in the source workspace, Margin saves the current code as an automatic checkpoint. Identical saved states are reused, so interview turns that do not change code do not fill the history with duplicates.
 
+This applies to every source-workspace message, including follow-ups and read-only questions. Reuse happens after a full file capture, so unchanged turns still incur scanning/hashing work. See [checkpoint behavior and improvement recommendations](checkpoints.md) for the exact triggers, exclusions, Git operations, restore semantics, and remaining reliability limits.
+
 The examples cover tasks, agent access to notes, decisions, supervisors, and richer result rendering. They are starting prompts, not built-in feature implementations.
 
 ## While another task is running

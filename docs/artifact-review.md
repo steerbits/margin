@@ -35,7 +35,9 @@ The default `.margin-data/` directory and these generated examples under `worksp
 
 In Margin's own source workspace, both main-chat sends and artifact-feedback sends pass through the same automatic **Before customization** code checkpoint. “Another history operation is running” comes from `.margin-data/history/operation.lock`, not an artifact-comment SQLite lock. The checkpoint must succeed before the feedback is handed to the agent.
 
-A normally completed or failed checkpoint releases its lock. The existing implementation recovers a lock whose recorded process is confirmed dead on retry; it does not remove a lock belonging to a potentially live process. Restarting is not normally necessary. A reported persistent block remains undiagnosed: its lock/owner was no longer present when inspected. Do not blindly delete a live lock or bypass the checkpoint guard, because a restore may be in progress.
+A normally completed or failed checkpoint releases its lock. The existing implementation recovers a lock whose recorded process is confirmed dead on retry; it does not remove a lock belonging to a potentially live process. Restarting is not normally necessary. An earlier reported persistent block could not be diagnosed because its lock/owner was no longer present when inspected. Do not blindly delete a live lock or bypass the checkpoint guard, because a restore may be in progress.
+
+That earlier report is distinct from the September 16 incidents, where live process samples and a reproduction identified a stalled Git input pipe during capture. The shared checkpoint path now uses regular-file input and a five-second limit per Git command. See [checkpoint behavior and improvements](checkpoints.md) for the evidence, current limits, and recovery design.
 
 ## Architecture
 

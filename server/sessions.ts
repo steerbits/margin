@@ -36,6 +36,7 @@ import {
   decorateAttachments,
 } from "./attachments.ts";
 import { attachmentPrompt } from "../shared/attachments.ts";
+import { replyActionInstructions } from "../shared/reply-actions.ts";
 import type {
   PluginContext,
   ServerPlugin,
@@ -129,6 +130,7 @@ export class LiveSession implements AgentBackend {
       additionalSkillPaths: [join(this.appRoot, "skills")],
       appendSystemPrompt: [
         "The user is working in Margin, a browser interface for Pi. Follow the selected skill and project instructions. User feedback may include exact quoted passages and inline comments from earlier replies. Treat comments as new user input, and quotes as references. Standard extension UI dialogs are available; terminal component factories are not.",
+        replyActionInstructions,
       ],
     });
     await loader.reload();

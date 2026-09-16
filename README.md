@@ -6,6 +6,8 @@ Feature ideas and priorities are maintained in [BACKLOG.md](BACKLOG.md).
 
 Use the pinned **Customize Margin** area for example prompts, installed plugin controls, and named code checkpoints with preview, restore, and a return path. See [the customization workspace guide](docs/customization-workspace.md). The **New workspace** folder button opens the macOS system folder dialog.
 
+[Checkpoint behavior and recommendations](docs/checkpoints.md) explains what happens before each source-workspace message, what is saved, how restore works, and the checkpoint hang fix and remaining improvements.
+
 ## Projects and the workspace picker
 
 The workspace sidebar currently lists **local project folders**. A conversation runs with its selected folder as Pi's working directory. These entries are not containers or isolated worktrees.
@@ -62,6 +64,14 @@ The welcome screen’s **Default from Settings** uses the latest saved defaults.
 Inline comments are sent as a normal user message: a short instruction followed by JSON with `inlineComments` (original `messageId`, `quotedPassage`, and `comment`) and `overallReply`. Visual highlighting and offsets stay in Margin; the model receives the quotations and feedback.
 
 Tool rows show their outcome as text as well as color. Gray is normal running/success styling; red means Pi reported a tool error. For bash this may be a nonzero exit code (including a search returning no matches), a timeout, a stopped command, or a permission failure. Open the row for the actual output. Red is not a separate command-approval or danger classification.
+
+## Reply buttons
+
+Margin teaches the agent to offer complete next responses as `:reply[Use your defaults and go]`. Skills stay unchanged. Click the resulting send button to append its visible text to your message box on a new line and immediately send it with your saved comments and attachments. This sends the entire draft, including partial text; there is no insert-only mode yet.
+
+Buttons are enabled only on the latest completed assistant reply, while the normal Send action is available. They wait for unfinished comments, uploads, pending dialogs, and active work. A failed send restores the combined draft; retry with either the same button or the normal Send button. Earlier replies remain readable but their buttons are disabled. Code, blockquotes, links, user messages, tool output, and artifacts do not gain reply actions. Malformed or unsupported syntax remains ordinary Markdown.
+
+The format is declarative data, not Jinja or executable code. Labels are short, single-line plain text (up to 500 characters, no brackets, backslashes, or Markdown formatting). Margin's system-prompt guidance lives in `shared/reply-actions.ts`; the opt-in Markdown parser is `src/remark-reply-actions.ts`. New interaction types can be added later with both host behavior and matching prompt instructions. Restart Margin after building and refresh the browser to load the new instructions and renderer; existing prose is not retroactively converted into buttons.
 
 ## Chat attachments
 
