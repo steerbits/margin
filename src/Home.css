@@ -1,0 +1,143 @@
+.home-page {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 7vh 32px 40px;
+}
+.home-content {
+  max-width: 850px;
+  margin: 0 auto;
+}
+.home-content > .eyebrow {
+  margin-bottom: 16px;
+}
+.home-content h1 {
+  margin: 0;
+  font-size: 40px;
+  line-height: 1.2;
+  font-weight: 500;
+  letter-spacing: -1.2px;
+}
+.home-intro {
+  color: var(--muted);
+  font-size: 16px;
+  margin: 16px 0 32px;
+}
+.home-cards {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 20px;
+}
+.home-card {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 14px;
+  padding: 25px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+}
+.home-card-next {
+  background: #f8faf6;
+  border-color: #d6ded1;
+}
+.home-card-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.home-card h2 {
+  font-size: 18px;
+  font-weight: 600;
+  margin: 0;
+}
+.home-card p {
+  font-size: 14px;
+  line-height: 1.7;
+  color: var(--muted);
+  margin: 0;
+}
+.home-card button {
+  margin-top: auto;
+  font-size: 14px;
+  min-height: 42px;
+}
+.home-secondary {
+  border: 1px solid #d8d8d8;
+  background: white;
+}
+.home-connection-state {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.home-connection-state.configured {
+  color: #476543;
+}
+.home-card .home-provider-names {
+  font-size: 12px;
+  line-height: 1.5;
+}
+.home-recents {
+  margin-top: 36px;
+}
+.home-recents h2 {
+  font-size: 16px;
+  margin: 0 0 16px;
+}
+.home-recents .workspace-search {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 0 12px;
+}
+.home-recents .workspace-search input {
+  flex: 1;
+  min-width: 0;
+  width: 100%;
+  border: 0;
+  font-size: 14px;
+  padding: 12px 0;
+  outline-offset: 1px;
+}
+.home-recents .all-workspaces {
+  max-height: none;
+}
+.home-recents .all-workspaces button {
+  padding: 13px 15px;
+}
+.home-recents .all-workspaces span {
+  overflow-wrap: anywhere;
+}
+.home-customize {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--muted);
+  font-size: 13px;
+  margin-top: 28px;
+  text-decoration: none;
+}
+.home-customize:hover {
+  text-decoration: underline;
+}
+@media (max-width: 650px) {
+  .home-page {
+    padding: 32px 20px;
+  }
+  .home-content h1 {
+    font-size: 32px;
+  }
+  .home-intro {
+    font-size: 14px;
+    margin-bottom: 24px;
+  }
+  .home-cards {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 14px;
+  }
+  .home-card {
+    padding: 20px;
+  }
+}

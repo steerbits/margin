@@ -1,4 +1,5 @@
 import { test, expect, type Page } from "@playwright/test";
+import { openDefaultWorkspace } from "./navigation-helpers.ts";
 import {
   mkdirSync,
   mkdtempSync,
@@ -284,7 +285,7 @@ test("finished stays unread in Customize, across reload, and while the latest re
 test("Shape with me is the first-message default; choosing another skill and deleting it have predictable fallbacks", async ({
   page,
 }) => {
-  await page.goto("/");
+  await openDefaultWorkspace(page);
   const hub = await (await page.request.get("/api/customize")).json();
   const skills = join(hub.project.path, "skills");
   const original = join(skills, "shape-with-me", "SKILL.md");
@@ -329,12 +330,14 @@ test("Shape with me is the first-message default; choosing another skill and del
   }
 });
 
-test("root restores the last chat and plugin navigation uses the same draft-aware destinations", async ({
+test("root shows home with access to the last chat and plugin navigation preserves drafts", async ({
   page,
 }) => {
   const id = await seed(page);
   const state = await (await page.request.get(`/api/sessions/${id}`)).json();
   await page.goto("/");
+  await expect(page.getByRole("heading", { name: "Welcome to Margin", exact: true })).toBeVisible();
+  await chatRow(page, id).click();
   await expect(page).toHaveURL(new RegExp(`/chats/${id}$`));
   await page
     .getByRole("textbox", { name: "Message" })

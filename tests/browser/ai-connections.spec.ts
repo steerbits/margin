@@ -12,7 +12,7 @@ import type {
 } from "../../shared/provider-accounts.ts";
 
 const screenshots = ".margin-data/ai-connections-review";
-const onboardingScreenshots = ".margin-data/onboarding-review";
+const onboardingScreenshots = ".margin-data/homepage-review";
 let endpoint: string;
 let server: Server;
 const received: { authorization?: string; body: any }[] = [];
@@ -248,15 +248,40 @@ test("connections start expanded on every Settings visit and respect a manual co
 });
 
 for (const width of [1440, 390]) {
-  test(`connecting AI offers Open workspace in Settings and on the welcome screen at ${width}px`, async ({
+  test(`home guides AI setup then workspace selection at ${width}px`, async ({
     page,
   }) => {
     await page.setViewportSize({ width, height: width === 390 ? 844 : 1000 });
     await setup(page);
-    const dialog = await openConnections(page);
+    await page.goto("/");
+    const home = page.locator(".home-page");
+    const open = home.getByRole("button", {
+      name: "Open workspace",
+      exact: true,
+    });
+    await expect(open).toBeEnabled();
+    await expect(page.locator(".sidebar")).not.toBeVisible();
+    await expect(page.locator(".project-select")).toHaveValue("");
+    await expect(page).toHaveURL(/\/$/);
+    await page.screenshot({
+      animations: "disabled",
+      path: `${onboardingScreenshots}/01-fresh-home-${width}.png`,
+    });
+    await home
+      .getByRole("button", { name: "Connect an AI provider", exact: true })
+      .click();
+    const dialog = page.getByRole("dialog", { name: "Settings", exact: true });
+    await expect(dialog.locator(".settings-accounts")).toHaveAttribute(
+      "open",
+      "",
+    );
     await expect(
       dialog.getByRole("button", { name: "Open workspace", exact: true }),
     ).toHaveCount(0);
+    await page.screenshot({
+      animations: "disabled",
+      path: `${onboardingScreenshots}/02-settings-${width}.png`,
+    });
     await dialog.getByRole("button", { name: /OpenRouter Sign in or/ }).click();
     await dialog
       .getByRole("button", { name: "Use API key", exact: true })
@@ -267,114 +292,86 @@ for (const width of [1440, 390]) {
     await dialog
       .getByRole("button", { name: "Save API key", exact: true })
       .click();
-    const open = dialog.getByRole("button", {
-      name: "Open workspace",
-      exact: true,
-    });
+    await expect(
+      dialog.getByLabel("Default model").locator("option"),
+    ).toContainText(["Connected model"]);
+    await expect(
+      dialog.getByRole("button", { name: "Open workspace", exact: true }),
+    ).toHaveCount(0);
+    await dialog.getByRole("button", { name: "Close", exact: true }).click();
+    await expect(dialog).toHaveCount(0);
     await expect(open).toBeEnabled();
-    await expect(dialog.locator(".settings-accounts")).toHaveAttribute(
-      "open",
-      "",
+    await expect(home.getByRole("status")).toHaveText(
+      "1 connection configured",
     );
-    await expect(open).toBeInViewport();
-    await expect.poll(() => dialog.evaluate((el) => el.scrollTop)).toBe(0);
-    await expect(dialog.locator(".workspace-setup")).toBeInViewport({ ratio: 1 });
+    await expect(open).toHaveClass(/primary/);
+    await expect(page.locator(".sidebar")).not.toBeVisible();
     await page.screenshot({
-      path: `${onboardingScreenshots}/03-connected-settings-${width}.png`,
       animations: "disabled",
+      path: `${onboardingScreenshots}/03-connected-home-${width}.png`,
     });
     let pickerCalls = 0;
-    await page.route("**/api/workspaces/choose", async (route) => {
+    await page.route("**/api/workspaces/choose", (route) => {
       pickerCalls++;
-      await route.fulfill({ json: { project: null } });
+      return route.fulfill({ json: { project: null } });
     });
-    const project = page.locator(".project-select");
-    const marginId = await project.inputValue();
     await open.click();
-    await expect(dialog).toHaveCount(0);
     await expect.poll(() => pickerCalls).toBe(1);
-    await expect(project).toHaveValue(marginId);
-    const welcome = page.locator(".welcome");
-    await expect(
-      welcome.getByRole("button", { name: "Open workspace", exact: true }),
-    ).toBeEnabled();
-    await expect(
-      welcome.getByRole("button", { name: "Open workspace", exact: true }),
-    ).toHaveClass(/primary/);
-    await expect(
-      welcome.getByRole("button", {
-        name: "Start a conversation",
-        exact: true,
-      }),
-    ).toBeEnabled();
-    await expect(
-      welcome.getByRole("button", {
-        name: "Start a conversation",
-        exact: true,
-      }),
-    ).not.toHaveClass(/primary/);
-    await page.screenshot({
-      path: `${onboardingScreenshots}/04-open-workspace-${width}.png`,
-      animations: "disabled",
-    });
-    expect(
-      await page.evaluate(
-        () => document.documentElement.scrollWidth <= innerWidth,
-      ),
-    ).toBe(true);
-    await page.getByRole("button", { name: "Settings", exact: true }).click();
-    await expect(dialog.locator(".settings-accounts")).toHaveAttribute(
-      "open",
-      "",
-    );
-    await expect(
-      dialog.getByRole("button", { name: "Manage OpenRouter", exact: true }),
-    ).toBeVisible();
-    await dialog.getByRole("button", { name: "Close", exact: true }).click();
-    const folder = await mkdtemp(join(tmpdir(), "margin-onboarding-"));
+    await expect(open).toBeEnabled();
+    await expect(page).toHaveURL(/\/$/);
+    const folder = await mkdtemp(join(tmpdir(), "margin-home-"));
     try {
       const response = await page.request.post("/api/projects", {
         data: { path: folder },
       });
       expect(response.ok(), await response.text()).toBe(true);
-      const chosen = await response.json();
-      await page.request.patch(`/api/projects/${chosen.id}`, {
-        data: { name: "My project" },
+      const project = await response.json();
+      await page.request.patch(`/api/projects/${project.id}`, {
+        data: { name: "Notes app" },
       });
-      chosen.name = "My project";
+      project.name = "Notes app";
       const before = await (await page.request.get("/api/bootstrap")).json();
       await page.route("**/api/workspaces/choose", (route) =>
-        route.fulfill({ json: { project: chosen } }),
+        route.fulfill({ json: { project } }),
       );
-      await welcome
-        .getByRole("button", { name: "Open workspace", exact: true })
-        .click();
-      await expect(project).toHaveValue(chosen.id);
-      await expect(page).toHaveURL(new RegExp(`/workspaces/${chosen.id}$`));
-      await expect(page.locator(".workspace-setup")).toHaveCount(0);
+      await open.click();
+      await expect(page).toHaveURL(new RegExp(`/workspaces/${project.id}$`));
+      await expect(home).toHaveCount(0);
+      await expect(page.locator(".project-select")).toHaveValue(project.id);
+      if (width > 650) await expect(page.locator(".sidebar")).toBeVisible();
       await expect(
-        welcome.getByRole("button", {
-          name: "Start a conversation",
-          exact: true,
-        }),
-      ).toHaveClass(/primary/);
+        page.getByRole("button", { name: "Start a conversation", exact: true }),
+      ).toBeEnabled();
       const after = await (await page.request.get("/api/bootstrap")).json();
       expect(after.sessions.length).toBe(before.sessions.length);
       await page.screenshot({
-        path: `${onboardingScreenshots}/05-project-ready-${width}.png`,
         animations: "disabled",
+        path: `${onboardingScreenshots}/04-workspace-${width}.png`,
       });
-      await page.getByRole("button", { name: "Settings", exact: true }).click();
+      await page
+        .getByRole("button", { name: "Margin home", exact: true })
+        .click();
+      await expect(home).toBeVisible();
+      if (width > 650) await expect(page.locator(".sidebar")).toBeVisible();
       await expect(
-        dialog.getByRole("button", { name: "Open workspace", exact: true }),
-      ).toHaveCount(0);
+        home.locator(`[data-project-id="${project.id}"]`),
+      ).toBeVisible();
+      await page.screenshot({
+        animations: "disabled",
+        path: `${onboardingScreenshots}/05-returning-home-${width}.png`,
+      });
+      expect(
+        await page.evaluate(
+          () => document.documentElement.scrollWidth <= innerWidth,
+        ),
+      ).toBe(true);
     } finally {
       await rm(folder, { recursive: true, force: true });
     }
   });
 }
 
-test("Open workspace waits for pending settings saves and keeps Settings open on failure", async ({
+test("Settings Close waits for saves before returning to the homepage", async ({
   page,
 }) => {
   const state = await setup(page);
@@ -419,9 +416,7 @@ test("Open workspace waits for pending settings saves and keeps Settings open on
   await dialog.getByLabel("Default model").selectOption(modelKey(model));
   await expect.poll(() => writes).toBe(1);
   await dialog.getByLabel("Thinking effort").selectOption("high");
-  await dialog
-    .getByRole("button", { name: "Open workspace", exact: true })
-    .click();
+  await dialog.getByRole("button", { name: "Close", exact: true }).click();
   await expect(dialog).toBeVisible();
   expect(pickerCalls).toBe(0);
   release();
@@ -432,10 +427,12 @@ test("Open workspace waits for pending settings saves and keeps Settings open on
     .getByRole("button", { name: "Retry saving", exact: true })
     .click();
   await expect(dialog.locator(".settings-save-state")).toHaveText("Saved");
-  await dialog
+  await dialog.getByRole("button", { name: "Close", exact: true }).click();
+  await expect(dialog).toHaveCount(0);
+  await page
+    .locator(".home-page")
     .getByRole("button", { name: "Open workspace", exact: true })
     .click();
-  await expect(dialog).toHaveCount(0);
   await expect.poll(() => pickerCalls).toBe(1);
   expect(settings.defaultModel?.id).toBe(model.id);
   expect(settings.defaultThinkingLevel).toBe("high");

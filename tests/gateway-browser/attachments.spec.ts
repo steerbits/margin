@@ -26,7 +26,7 @@ test("gateway authenticates uploads, proxies bounded binary downloads, and isola
   ).toBe(401);
   await page.goto(link.url);
   await expect(
-    page.getByRole("combobox", { name: "Project", exact: true }),
+    page.getByRole("heading", { name: "Welcome to Margin", exact: true }),
   ).toBeVisible();
   const folder = mkdtempSync(join(tmpdir(), "margin-attachment-workspace-"));
   try {

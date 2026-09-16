@@ -76,18 +76,43 @@ export function WorkspacePicker({
   onSelect: (project: Project) => void;
   onClose: () => void;
 }) {
+  return (
+    <AppDialog title="All workspaces" onClose={onClose}>
+      <WorkspaceList
+        projects={projects}
+        current={current}
+        onSelect={onSelect}
+        autoFocus
+      />
+    </AppDialog>
+  );
+}
+export function WorkspaceList({
+  projects,
+  current,
+  onSelect,
+  autoFocus = false,
+  limit,
+}: {
+  projects: Project[];
+  current?: string;
+  onSelect: (project: Project) => void;
+  autoFocus?: boolean;
+  limit?: number;
+}) {
   const [query, setQuery] = useState("");
+  const [expanded, setExpanded] = useState(false);
   const filtered = projects.filter((project) =>
     `${project.name} ${project.path}`
       .toLocaleLowerCase()
       .includes(query.toLocaleLowerCase()),
   );
   return (
-    <AppDialog title="All workspaces" onClose={onClose}>
+    <>
       <label className="workspace-search">
         <Search size={17} />
         <input
-          autoFocus
+          autoFocus={autoFocus}
           aria-label="Search workspaces"
           placeholder="Search by name or folder…"
           value={query}
@@ -95,7 +120,10 @@ export function WorkspacePicker({
         />
       </label>
       <div className="all-workspaces">
-        {filtered.map((project) => (
+        {(limit && !query && !expanded
+          ? filtered.slice(0, limit)
+          : filtered
+        ).map((project) => (
           <button
             key={project.id}
             data-project-id={project.id}
@@ -108,7 +136,12 @@ export function WorkspacePicker({
         ))}
       </div>
       {!filtered.length && <p>No workspaces match your search.</p>}
-    </AppDialog>
+      {limit && !query && !expanded && filtered.length > limit && (
+        <button className="text-link" onClick={() => setExpanded(true)}>
+          Show all workspaces
+        </button>
+      )}
+    </>
   );
 }
 export function readRecentWorkspaces(): string[] {

@@ -10,7 +10,7 @@ test("settings save new-chat defaults, preserve existing chats, autosave edits, 
 }) => {
   await page.goto("/");
   await expect(
-    page.getByRole("combobox", { name: "Project", exact: true }),
+    page.getByRole("heading", { name: "Welcome to Margin", exact: true }),
   ).toBeVisible();
   const boot = await (await page.request.get("/api/bootstrap")).json();
   const before = (await (

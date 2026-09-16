@@ -54,7 +54,7 @@ import { ChatStatus } from "./ChatStatus.tsx";
 import { ConversationMenu } from "./ConversationMenu.tsx";
 import { SidebarConversations } from "./SidebarConversations.tsx";
 import { SettingsDialog } from "./SettingsDialog.tsx";
-import { WorkspaceSetup } from "./WorkspaceSetup.tsx";
+import { Home } from "./Home.tsx";
 import { ModelOptions } from "./ModelOptions.tsx";
 import { configureModelLabel, modelLabel } from "../shared/model-picker.ts";
 import { thinkingChoiceLabel, thinkingDefaultLabel } from "../shared/model-capabilities.ts";
@@ -123,10 +123,12 @@ export function App() {
   }, []);
   const [hubTab, setHubTab] = useState<CustomizeTab>("examples");
   const [routeMissing, setRouteMissing] = useState(false);
+  const [homeOpen, setHomeOpen] = useState(() => location.pathname === "/");
   const routeRef = useRef<AppRoute>(
     parseRoute(location.pathname, location.search),
   );
   const returnRoute = useRef<Destination | null>(null);
+  const customizePreviousProject = useRef<string | null>(null);
   const historyIndex = useRef(Number(history.state?.marginIndex ?? 0));
   const restoringHistory = useRef(false);
   const [recents, setRecents] = useState(readRecentWorkspaces);
@@ -158,7 +160,29 @@ export function App() {
   const skillChosen = useRef(false);
   const [snapshot, setSnapshot] = useState<Snapshot | null>(null),
     [rail, setRail] = useState(false),
-    [sidebar, setSidebar] = useState(() => window.innerWidth > 650);
+    [sidebar, setSidebar] = useState(() => {
+      if (window.innerWidth <= 650) return false;
+      const saved = localStorage.getItem("margin.sidebar");
+      return saved
+        ? saved === "open"
+        : location.pathname !== "/" || !!localStorage.getItem("margin.project");
+    });
+  const workspaceOpened = useRef(
+    localStorage.getItem("margin.workspace-opened") === "true" ||
+      !!localStorage.getItem("margin.project"),
+  );
+  function enterWorkspace() {
+    if (!workspaceOpened.current) {
+      workspaceOpened.current = true;
+      localStorage.setItem("margin.workspace-opened", "true");
+      setSidebar(window.innerWidth > 650);
+    }
+  }
+  function toggleSidebar() {
+    const open = !sidebar;
+    setSidebar(open);
+    localStorage.setItem("margin.sidebar", open ? "open" : "closed");
+  }
   const [draft, setDraft] = useState(""),
     [skill, setSkill] = useState(""),
     [editing, setEditing] = useState<DraftComment | null>(null),
@@ -245,7 +269,7 @@ export function App() {
       snapshot.session.id === sessionId &&
       // Uploads use ordinary HTTP, not the live-update stream. In particular,
       // returning from the OS file picker can trigger a temporary SSE reconnect.
-      !sending && !outbox.get(sessionId) && !hubOpen && !allWorkspaces && !routeMissing &&
+      !sending && !outbox.get(sessionId) && !homeOpen && !hubOpen && !allWorkspaces && !routeMissing &&
       !settingsOpen && !renameOpen && !deleteTarget && !choosingWorkspace,
     fail,
     composerEditor,
@@ -262,7 +286,11 @@ export function App() {
     } else history.replaceState({ marginIndex: historyIndex.current }, "", url);
     routeRef.current = next;
   }
-  function applyRoute(next: AppRoute, data: Bootstrap) {
+  function applyRoute(
+    next: AppRoute,
+    data: Bootstrap,
+    previousRoute = routeRef.current,
+  ) {
     setPendingComposerFocus(null);
     setCommentReveal(null);
     setRenameOpen(false);
@@ -271,7 +299,30 @@ export function App() {
     setAllWorkspaces(false);
     routeRef.current = next;
     setRouteMissing(false);
+    setHomeOpen(next.kind === "home");
+    if (next.kind === "home") {
+      setHubOpen(false);
+      const beforeCustomize = previousRoute.kind === "customize"
+        ? customizePreviousProject.current
+        : null;
+      setProjectId((current) => {
+        if (beforeCustomize !== null)
+          return data.projects.some((project) => project.id === beforeCustomize)
+            ? beforeCustomize
+            : "";
+        if (data.projects.some((project) => project.id === current)) return current;
+        const saved = localStorage.getItem("margin.project");
+        return data.projects.find((project) => project.id === saved)?.id ?? "";
+      });
+      activateSession(null);
+      setPanel(null);
+      setRail(false);
+      return;
+    }
     if (next.kind === "customize") {
+      if (previousRoute.kind !== "customize" || customizePreviousProject.current === null)
+        customizePreviousProject.current =
+          projectId || localStorage.getItem("margin.project") || "";
       const marginProject =
         data.projects.find((p) => p.id === data.marginProjectId) ??
         data.projects.find((p) => p.kind === "margin");
@@ -319,6 +370,7 @@ export function App() {
       return;
     }
     setProjectId(project.id);
+    enterWorkspace();
     activateSession(chat?.id ?? null);
     setPendingComposerFocus(chat?.id ?? null);
     const nextPanel =
@@ -362,12 +414,13 @@ export function App() {
           sticky: stickyBottom.current,
         });
       const previous = routeRef.current;
-      if (previous.kind === "chat" || previous.kind === "workspace")
+      if (previous.kind !== "not-found")
         returnRoute.current = previous;
     }
     setError("");
+    const previousRoute = routeRef.current;
     writeRoute(next, replace);
-    applyRoute(next, data);
+    applyRoute(next, data, previousRoute);
   }
   const refresh = useCallback(async () => {
     const route = parseRoute(location.pathname, location.search);
@@ -383,19 +436,8 @@ export function App() {
       );
     setBoot(b);
     setLoaded(true);
-    let next = parseRoute(location.pathname, location.search);
-    if (next.kind === "home") {
-      const chat = b.sessions.find(
-        (s) => s.id === localStorage.getItem("margin.session"),
-      );
-      const project =
-        b.projects.find(
-          (p) => p.id === localStorage.getItem("margin.project"),
-        ) ?? b.projects[0];
-      if (chat) next = { kind: "chat", sessionId: chat.id };
-      else if (project) next = { kind: "workspace", projectId: project.id };
-    }
-    if (next.kind !== "home" && next.kind !== "not-found")
+    const next = parseRoute(location.pathname, location.search);
+    if (next.kind !== "not-found")
       writeRoute(next, true);
     applyRoute(next, b);
   }, []);
@@ -411,17 +453,18 @@ export function App() {
       ];
       localStorage.setItem("margin.recent-workspaces", JSON.stringify(next));
       setRecents(next);
-    }
-  }, [projectId]);
+    } else if (loaded && homeOpen) localStorage.removeItem("margin.project");
+  }, [projectId, loaded, homeOpen]);
   function activateSession(id: string | null) {
     if (selectedId.current === id) return;
     const previous = selectedId.current;
     if (previous && snapshotRef.current?.session.id === previous) {
       histories.put({ ...snapshotRef.current, composer: draftRef.current });
-      positions.set(previous, {
-        top: scrollRef.current?.scrollTop ?? 0,
-        sticky: stickyBottom.current,
-      });
+      if (scrollRef.current)
+        positions.set(previous, {
+          top: scrollRef.current.scrollTop,
+          sticky: stickyBottom.current,
+        });
     }
     selectedId.current = id;
     const cached = id ? histories.get(id) : undefined;
@@ -516,7 +559,7 @@ export function App() {
   useEffect(() => {
     if (!loaded) return;
     if (!sessionId) {
-      if (!hubOpen) localStorage.removeItem("margin.session");
+      if (routeRef.current.kind !== "home" && !hubOpen) localStorage.removeItem("margin.session");
       return;
     }
     localStorage.setItem("margin.session", sessionId);
@@ -580,7 +623,7 @@ export function App() {
   >(async () => {});
   navigationHandler.current = async (next, index) => {
     if (index === undefined) {
-      if (next.kind === "home" || next.kind === "not-found")
+      if (next.kind === "not-found")
         throw new Error("Unknown destination.");
       return go(next);
     }
@@ -592,11 +635,6 @@ export function App() {
       void flushDraft().catch(fail);
       historyIndex.current = index;
       setError("");
-      if (next.kind === "home")
-        next = {
-          kind: "workspace",
-          projectId: projectId || boot.projects[0]?.id || "",
-        };
       applyRoute(next, boot);
     } catch (error) {
       restoringHistory.current = true;
@@ -1170,7 +1208,7 @@ export function App() {
   const isUnread = useUnread(
     sessionId,
     currentActivity,
-    !hubOpen &&
+    !homeOpen && !hubOpen &&
       !routeMissing &&
       !!snapshot &&
       !allWorkspaces &&
@@ -1386,27 +1424,41 @@ export function App() {
         <SettingsDialog
           onClose={() => setSettingsOpen(false)}
           onModelsChanged={(models) => setBoot((current) => ({ ...current, models }))}
-          onOpenWorkspace={
-            isMarginWorkspace ? () => void chooseWorkspace() : undefined
-          }
         />
       )}
       <header className="app-header">
-        <button
-          className="brand"
-          type="button"
-          aria-label="Open workspace from Margin"
-          title="Open workspace"
-          disabled={!loaded || choosingWorkspace}
-          onClick={() => void chooseWorkspace()}
-        >
-          <PanelRight size={21} />
-          <span>margin <small>by Steerbits</small></span>
-        </button>
+        <div className="header-left">
+          <button
+            className="sidebar-toggle"
+            type="button"
+            aria-label={sidebar ? "Hide sidebar" : "Show sidebar"}
+            title={sidebar ? "Hide sidebar" : "Show sidebar"}
+            aria-expanded={sidebar}
+            aria-controls="workspace-sidebar"
+            onClick={toggleSidebar}
+          >
+            {sidebar ? <PanelLeftClose size={21} /> : <PanelLeftOpen size={21} />}
+          </button>
+          <button
+            className="brand"
+            type="button"
+            aria-label="Margin home"
+            title="Go to homepage"
+            disabled={!loaded || choosingWorkspace}
+            onClick={() => void go({ kind: "home" }).catch(fail)}
+          >
+            <span>margin <small>by Steerbits</small></span>
+          </button>
+        </div>
         <div className="header-right">
-          <span className={`connection ${connected ? "connected" : ""}`}>
+          <span
+            className={`connection ${connected ? "connected" : ""}`}
+            title={sessionId ? (connected ? "Connected" : "Reconnecting…") : "Ready"}
+          >
             <Circle size={7} fill="currentColor" />
-            {sessionId ? (connected ? "Connected" : "Reconnecting…") : "Ready"}
+            <span className="connection-label">
+              {sessionId ? (connected ? "Connected" : "Reconnecting…") : "Ready"}
+            </span>
           </span>
           <button
             aria-label="Settings"
@@ -1419,7 +1471,11 @@ export function App() {
         </div>
       </header>
       <div className="workspace">
-        <aside className="sidebar">
+        <aside
+          className="sidebar"
+          id="workspace-sidebar"
+          aria-label="Workspace navigation"
+        >
           <button
             className="customize-entry"
             aria-pressed={hubOpen}
@@ -1478,6 +1534,7 @@ export function App() {
               if (project) void openProject(project).catch(fail);
             }}
           >
+            {!projectId && <option value="" disabled>Choose a workspace</option>}
             {recentProjects.map((p) => (
               <option value={p.id} key={p.id}>
                 {p.name}
@@ -1527,7 +1584,19 @@ export function App() {
               Choose or create a folder in the system dialog.
             </div>
           )}
-          {routeMissing ? (
+          {homeOpen ? (
+            <Home
+              loaded={loaded}
+              models={boot.models}
+              modelError={boot.modelError}
+              projects={orderedProjects.filter((project) => project.id !== boot.marginProjectId && project.kind !== "margin")}
+              choosingWorkspace={choosingWorkspace}
+              onSettings={() => setSettingsOpen(true)}
+              onOpenWorkspace={() => void chooseWorkspace()}
+              onSelectWorkspace={(project) => void openProject(project).catch(fail)}
+              onCustomize={() => void openCustomization().catch(fail)}
+            />
+          ) : routeMissing ? (
             <div className="empty-state">
               <h2>Destination unavailable</h2>
               <p>
@@ -1546,10 +1615,7 @@ export function App() {
               }
               onClose={() =>
                 void go(
-                  returnRoute.current ?? {
-                    kind: "workspace",
-                    projectId: projectId || boot.projects[0]?.id || "",
-                  },
+                  returnRoute.current ?? { kind: "home" },
                 ).catch(fail)
               }
               onPrompt={customizationPrompt}
@@ -1558,16 +1624,6 @@ export function App() {
             <>
               <div className="toolbar">
                 <div className="toolbar-left">
-                  <button
-                    aria-label={sidebar ? "Hide sidebar" : "Show sidebar"}
-                    onClick={() => setSidebar(!sidebar)}
-                  >
-                    {sidebar ? (
-                      <PanelLeftClose size={18} />
-                    ) : (
-                      <PanelLeftOpen size={18} />
-                    )}
-                  </button>
                   <Folder size={15} />
                   <button
                     className="project-breadcrumb"
@@ -1988,9 +2044,7 @@ export function App() {
                     <div />
                   </div>
                 ) : !snapshot ? (
-                  <div
-                    className={`welcome${boot.models.length && isMarginWorkspace ? " workspace-onboarding" : ""}`}
-                  >
+                  <div className="welcome">
                     <div className="welcome-icon">
                       <PanelRight size={32} />
                     </div>
@@ -2005,12 +2059,6 @@ export function App() {
                       <br className="desktop-break" /> and shape the next step
                       together.
                     </p>
-                    {boot.models.length > 0 && isMarginWorkspace && (
-                      <WorkspaceSetup
-                        onOpen={() => void chooseWorkspace()}
-                        disabled={choosingWorkspace}
-                      />
-                    )}
                     {!boot.models.length ? (
                       <div className="start-card first-connection-card">
                         <div className="first-connection-heading">
@@ -2058,9 +2106,7 @@ export function App() {
                           />
                         </select>
                         <button
-                          className={
-                            isMarginWorkspace ? "workspace-continue" : "primary"
-                          }
+                          className="primary"
                           onClick={() => void createSession()}
                           disabled={
                             sending ||

@@ -1,11 +1,13 @@
 export type CustomizeTab = "examples" | "plugins" | "history";
 export type Destination =
+  | { kind: "home" }
   | { kind: "workspace"; projectId: string; panel?: string }
   | { kind: "chat"; sessionId: string; panel?: string }
   | { kind: "customize"; tab: CustomizeTab };
-export type AppRoute = Destination | { kind: "home" } | { kind: "not-found" };
+export type AppRoute = Destination | { kind: "not-found" };
 
 export function destinationUrl(destination: Destination): string {
+  if (destination.kind === "home") return "/";
   if (destination.kind === "customize") return `/customize/${destination.tab}`;
   const path =
     destination.kind === "chat"

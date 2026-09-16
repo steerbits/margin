@@ -73,7 +73,7 @@ test("launcher needs a browser capability; merely loading its page does not gran
   }
   await page.goto(link().url);
   await expect(
-    page.getByRole("combobox", { name: "Project", exact: true }),
+    page.getByRole("heading", { name: "Welcome to Margin", exact: true }),
   ).toBeVisible();
   await expect(page.locator(".execution-mode")).toHaveCount(0);
   await expect(page).not.toHaveURL(/connect=/);
@@ -82,7 +82,7 @@ test("launcher needs a browser capability; merely loading its page does not gran
   expect((await bootstrap.json()).execution.mode).toBe("cco-workspaces");
   await page.reload();
   await expect(
-    page.getByRole("combobox", { name: "Project", exact: true }),
+    page.getByRole("heading", { name: "Welcome to Margin", exact: true }),
   ).toBeVisible();
   await expect(page.locator(".execution-mode")).toHaveCount(0);
 });
@@ -189,7 +189,7 @@ test("native picker registers existing and newly created folders, deduplicates, 
   });
   try {
     respond(folder);
-    await page.getByRole("button", { name: "Open workspace from Margin", exact: true }).click();
+    await page.getByRole("button", { name: "Open workspace", exact: true }).click();
     const selector = page.getByRole("combobox", {
       name: "Project",
       exact: true,
@@ -212,10 +212,11 @@ test("native picker registers existing and newly created folders, deduplicates, 
     const newId = await selector.inputValue();
     const before = await (await page.request.get("/api/bootstrap")).json();
     respond(null);
-    const brand = page.getByRole("button", { name: "Open workspace from Margin", exact: true });
-    await brand.focus();
+    await page.getByRole("button", { name: "Margin home", exact: true }).click();
+    const open = page.getByRole("button", { name: "Open workspace", exact: true });
+    await open.focus();
     await page.keyboard.press("Enter");
-    await expect(choose).toBeEnabled();
+    await expect(open).toBeEnabled();
     await expect(selector).toHaveValue(newId);
     const after = await (await page.request.get("/api/bootstrap")).json();
     expect(after.projects.length).toBe(before.projects.length);

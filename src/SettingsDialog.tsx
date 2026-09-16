@@ -13,7 +13,6 @@ import type { ModelInfo } from "../shared/types.ts";
 import { api } from "./api.ts";
 import { AppDialog } from "./WorkspacePicker.tsx";
 import { ProviderAccountsPanel } from "./ProviderAccounts.tsx";
-import { WorkspaceSetup } from "./WorkspaceSetup.tsx";
 import { ModelOptions } from "./ModelOptions.tsx";
 import { modelLabel, modelProviderLabel } from "../shared/model-picker.ts";
 import { SettingsAutosave } from "./settings-autosave.ts";
@@ -27,11 +26,9 @@ import "./SettingsDialog.css";
 export function SettingsDialog({
   onClose,
   onModelsChanged,
-  onOpenWorkspace,
 }: {
   onClose: () => void;
   onModelsChanged?: (models: ModelInfo[]) => void;
-  onOpenWorkspace?: () => void;
 }) {
   const [draft, setDraft] = useState<MarginSettings>({ ...defaultSettings });
   const [models, setModels] = useState<ModelInfo[]>([]);
@@ -44,8 +41,6 @@ export function SettingsDialog({
   const [accountBusy, setAccountBusy] = useState(false);
   const [accountsOpen, setAccountsOpen] = useState(true);
   const accountsRef = useRef<HTMLDetailsElement>(null);
-  const workspaceRef = useRef<HTMLDivElement>(null);
-  const revealWorkspace = useRef(false);
   const modelsChanged = useRef(onModelsChanged);
   modelsChanged.current = onModelsChanged;
   const [error, setError] = useState("");
@@ -88,11 +83,6 @@ export function SettingsDialog({
       mounted.current = false;
     };
   }, []);
-  useEffect(() => {
-    if (!revealWorkspace.current) return;
-    workspaceRef.current?.closest("dialog")?.scrollTo({ top: 0 });
-    revealWorkspace.current = false;
-  }, [models]);
   const model = settingsModel(draft, models);
   const levels = model?.thinkingLevels ?? [];
   const invalidModel = !!draft.defaultModel && !model;
@@ -108,17 +98,11 @@ export function SettingsDialog({
   async function close() {
     if (!autosave.current || (await autosave.current.flush())) onClose();
   }
-  async function openWorkspace() {
-    if (autosave.current && !(await autosave.current.flush())) return;
-    onClose();
-    onOpenWorkspace?.();
-  }
   async function refresh() {
     setLoading(true);
     setError("");
     try {
       const view = await api<SettingsView>("/settings");
-      revealWorkspace.current = models.length === 0 && view.models.length > 0;
       setModels(view.models);
       modelsChanged.current?.(view.models);
       initializeAutosave(view.settings);
@@ -131,14 +115,6 @@ export function SettingsDialog({
   }
   return (
     <AppDialog title="Settings" closeOnBackdrop onClose={() => void close()}>
-      {onOpenWorkspace && models.length > 0 && (
-        <div ref={workspaceRef}>
-          <WorkspaceSetup
-            onOpen={() => void openWorkspace()}
-            disabled={accountBusy || loading}
-          />
-        </div>
-      )}
       <details
         ref={accountsRef}
         className="settings-accounts"

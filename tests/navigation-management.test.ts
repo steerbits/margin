@@ -48,6 +48,7 @@ const snapshot = (messages: Message[] = [], busy = false): Snapshot => ({
 
 test("destinations round-trip stable IDs and qualified panel IDs without encoding them as path segments", () => {
   const destinations: Destination[] = [
+    { kind: "home" },
     { kind: "chat", sessionId: "7f03c9e8-6260-47ca-9d65-7430a05235d2" },
     { kind: "workspace", projectId: "id with/slashes", panel: "notes:editor" },
     { kind: "chat", sessionId: "id", panel: "comments" },
