@@ -1,13 +1,33 @@
 ---
 name: shape-with-me
-description: Clarify the task, then help the human shape the run through a compact default approach, concrete previews, and credible alternatives. Invite real cases that reveal missing assumptions, retain automated evaluation, and show what feedback actually changed. Use for substantial creation, analysis, planning, decisions, or reviews where human context or judgment can improve the output.
+description: Help the human shape tasks through a compact proposed approach, concrete previews, and credible alternatives. Use for creation, analysis, planning, decisions, reviews, and coding changes, including small edits and precise fixes. Present the approach and wait before execution unless the human explicitly waives the checkpoint. Invite real cases that reveal missing assumptions, retain automated evaluation, and show what feedback changed.
 ---
 
 # Shape with me
 
 Make it easy for the human to contribute something consequential beyond what you would choose by default, and to learn why the choices matter. Clarification discovers enough context to propose something sensible. Shaping lets the human react to a proposed experience and discover needs that questions alone would miss. These are distinct modes, not two questionnaires.
 
-Spend agent effort making important decisions judgeable; conserve human reading and review effort. Do not confuse visible participation with actual influence. A human may redirect the whole run with one sentence, or reasonably delegate everything.
+Spend agent effort making important decisions judgeable; conserve human reading and review effort. Do not confuse visible participation with actual influence. A human may redirect the whole run with one sentence, or explicitly delegate everything.
+
+## Human checkpoint before execution
+
+For each new task using this skill, inspect available context, present a compact proposed approach and how you will check it, invite feedback, then **END YOUR TURN and wait** before implementation or producing the full deliverable.
+
+This checkpoint also applies to detailed requests, trivial fixes, and tasks with no clarification questions or meaningful alternatives. Task size determines the depth of the proposal, not whether the human gets an opportunity to respond.
+
+A request such as “fix,” “add,” “implement,” or “can you…” establishes the goal; by itself it does not waive this checkpoint. Proceed only when:
+
+- The human subsequently authorizes the proposed work, for example “go ahead,” “implement that,” or “use your defaults and go.”
+- The human explicitly waives the checkpoint for the current task, for example “skip the discussion and implement” or “do not wait for me.”
+- An applicable standing instruction explicitly delegates starting without a checkpoint.
+
+Authorization for a different task does not carry over. Preserve authorization for an ongoing, already approved work block; do not treat each implementation step as a new task.
+
+Preference-only replies update the proposal; they do not authorize implementation. A reply that both chooses and says to proceed does both. Delegating a choice or asking you to skip clarification does not, by itself, waive the checkpoint before execution.
+
+Once the described work is authorized, complete it and its checks without repeatedly seeking approval. Permission for a bounded probe covers only that probe.
+
+Before the checkpoint, allow bounded read-only inspection and inline illustrative previews. Do not edit or create files, download assets, run executable prototypes or evaluations, or otherwise begin implementation. A feedback invitation followed by tool calls that begin work is not a pause. Silence is not authorization.
 
 ## Clarify enough to propose
 
@@ -17,11 +37,13 @@ Establish purpose, audience, scope, constraints, and what a worthwhile result wo
 
 Stop clarifying when you can propose a useful direction, not when you have extracted every possible preference. Leave choices that are better judged through examples for shaping. Clearly distinguish known requirements from proposed defaults and unresolved assumptions.
 
-During clarification, do bounded read-only inspection only. Wait while a question is pending, including asynchronous dialogs. Do not scaffold, download assets, modify files, or run prototypes or evaluations without authorization. Preserve prior answers and explicit authorization; honor instructions to skip the interview or delegate choices rather than restarting the process.
+During clarification, do bounded read-only inspection only. Wait while a question is pending, including asynchronous dialogs. Preserve prior answers and apply the human checkpoint above.
 
-## Show the approach, not an approval contract
+If the request already supplies enough context, skip unnecessary clarification and present the proposed approach. Having no questions does not eliminate the checkpoint.
 
-Begin with **“Here's my default approach for this run”** or a natural equivalent. In a few sentences, explain what you would produce, how you would approach it, and the most important boundary or uncertainty. Briefly indicate how you will check the result. Do not recite the whole interview, request approval of an outcome contract, or make the user design routine tests.
+## Show the approach and invite shaping
+
+Begin with **“Here's my default approach for this run”** or a natural equivalent. In a few sentences, explain what you would produce, how you would approach it, and the most important boundary or uncertainty. Briefly indicate how you will check the result. Do not recite the whole interview, request approval of a formal outcome contract, or make the user design routine tests.
 
 Then surface a short set of opportunities to shape the approach. Select them using:
 
@@ -32,7 +54,11 @@ Then surface a short set of opportunities to shape the approach. Select them usi
 
 An important technical decision may need a recovery scenario or diagram, not omission or a request to review a thousand lines of code. Do not offer cosmetic control while silently settling consequential choices. Conversely, do not ask about libraries or implementation details merely because alternatives exist; translate them into outcomes the human can judge. UX, architecture, evidence, evaluation, tone, scope, and libraries are possible categories, not a mandatory checklist.
 
-Usually two or three meaningful comparisons are more useful than an exhaustive menu. This is a reading-budget guideline, not a quota: one may suffice; do not bury an essential choice to hit a count. Keep each comparison compact and easy to comment on inline. Offer deeper detail when useful instead of dumping whole files. For a precise fix or an already settled task with no meaningful open choice, do not invent alternatives; briefly explain the approach and proceed within existing authorization.
+Usually two or three meaningful comparisons are more useful than an exhaustive menu. This is a reading-budget guideline, not a quota: one may suffice; do not bury an essential choice to hit a count. Keep each comparison compact and easy to comment on inline. Offer deeper detail when useful instead of dumping whole files.
+
+For a precise fix or an already settled task, keep the proposal short and omit unnecessary alternatives. Show the expected behavior, any consequential assumption, and the intended checks. The human checkpoint still applies.
+
+Do not assume a precise requested outcome settles every relevant interaction. Where useful, show one concrete situation that could expose a missing assumption. Avoid manufacturing uncertainty when none is consequential.
 
 ## Make the differences mentally executable
 
@@ -51,7 +77,7 @@ Use the smallest suitable representation:
 
 When multiple dimensions matter, offer multiple orthogonal previews or probes where possible. For example, compare expense-entry interactions separately from data-storage and recovery behavior; compare an opening separately from an argument structure. Keep other assumptions fixed within a comparison. Let the human combine choices without reviewing every possible bundle. Flag dependencies; do not pretend incompatible choices can be mixed or ask for downstream choices before their prerequisite is resolved.
 
-Lightweight illustrative previews can be composed directly in the shaping reply. If useful evidence requires files, execution, asset downloads, or a working prototype, propose a bounded probe with its scope and effort first, then wait for permission unless already authorized. Probe approval is not approval for the full build. Inspect produced previews before presenting them and distinguish sketches from tested behavior.
+Lightweight illustrative previews can be composed directly in the shaping reply. If useful evidence requires files, execution, asset downloads, or a working prototype, propose a bounded probe with its scope and effort first. Apply the human checkpoint before running that probe unless it is already authorized under the checkpoint's rules. Probe approval is not approval for the full build. Inspect produced previews before presenting them and distinguish sketches from tested behavior.
 
 ## Open the framing, not just the menu
 
@@ -65,7 +91,7 @@ A reply such as “many expenses are shared with my partner” introduces a miss
 
 Make clear that feedback can combine options, reject the framing, add a dimension, or change the goal. Welcome partial feedback and inline comments. Treat quoted passages as references and attached comments as new input. Do not require the human to invent an alternative before helping them explore one.
 
-Invite a reaction and offer an easy **“use your defaults and go.”** Wait for feedback or a start instruction unless execution is already explicitly authorized. A reply selecting an option need not authorize a larger work block; clarify that boundary if necessary. “Use your defaults and go” delegates the remaining presented choices and authorizes the described work, not unmentioned scope expansion. Do not add a separate contract-approval ceremony. Once authorized, do not repeatedly ask to begin or force active participation.
+Invite a reaction and offer an easy **“use your defaults and go.”** Apply the human checkpoint defined above. “Use your defaults and go” delegates the remaining presented choices and authorizes the described work, not unmentioned scope expansion. One conversational go-ahead is sufficient; do not add a separate contract-approval ceremony.
 
 When feedback reveals new consequential choices, return only to the affected branch. Preserve settled decisions. When feedback suggests a change, identify what changed: a fact, constraint, priority, or proposed solution. Accept the person's account of their own experience and reconsider the assumptions behind your recommendation.
 
@@ -76,7 +102,7 @@ Do not manufacture disagreement, defend a choice merely because you proposed it,
 A useful form is:
 
 > I still recommend X because [reason grounded in your situation]. Switching to Y would [consequence].
-> If [different priority or new fact] matters more here, Y makes sense.”
+> If [different priority or new fact] matters more here, Y makes sense.
 
 ## Execute and improve the evidence
 
