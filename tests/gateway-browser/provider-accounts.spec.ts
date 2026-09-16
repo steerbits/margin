@@ -29,7 +29,7 @@ test("gateway account API requires browser authentication, rejects cross-origin 
   await page.getByRole("button", { name: "Settings", exact: true }).click();
   const dialog = page.getByRole("dialog", { name: "Settings", exact: true });
   await expect(dialog.getByLabel("Default model")).toBeEnabled();
-  await dialog.locator(".settings-accounts > summary").click();
+  await expect(dialog.locator(".settings-accounts")).toHaveAttribute("open", "");
   await expect(
     dialog.getByText(/Account changes are disabled by MARGIN_AUTH_READ_ONLY/),
   ).toBeVisible();

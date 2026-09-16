@@ -13,12 +13,13 @@ async function open(page: Page, id: string) {
 }
 
 for (const width of [1440, 390, 320]) {
-  test(`brand has a smaller non-clickable byline without overflowing at ${width}px`, async ({
+  test(`workspace-opening brand has a smaller byline without overflowing at ${width}px`, async ({
     page,
   }) => {
     await page.setViewportSize({ width, height: 900 });
     await page.goto("/");
     await expect(page.locator(".brand")).toHaveText("margin by Steerbits");
+    await expect(page.getByRole("button", { name: "Open workspace from Margin", exact: true })).toBeVisible();
     const metrics = await page.locator(".brand").evaluate((brand) => {
       const title = brand.querySelector("span")!;
       const byline = brand.querySelector("small")!;

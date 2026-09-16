@@ -1,8 +1,10 @@
 import { test, expect, type Page } from "@playwright/test";
-import { mkdir } from "node:fs/promises";
+import { mkdir, mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
-import { defaultSettings } from "../../shared/settings.ts";
+import { defaultSettings, modelKey } from "../../shared/settings.ts";
 import type { ModelInfo } from "../../shared/types.ts";
 import type {
   ProviderAccountsView,
@@ -10,11 +12,13 @@ import type {
 } from "../../shared/provider-accounts.ts";
 
 const screenshots = ".margin-data/ai-connections-review";
+const onboardingScreenshots = ".margin-data/onboarding-review";
 let endpoint: string;
 let server: Server;
 const received: { authorization?: string; body: any }[] = [];
 test.beforeAll(async () => {
   await mkdir(screenshots, { recursive: true });
+  await mkdir(onboardingScreenshots, { recursive: true });
   server = createServer(async (req, res) => {
     if (req.url === "/v1/models") {
       res.setHeader("Content-Type", "application/json");
@@ -209,6 +213,234 @@ async function capture(page: Page, name: string) {
   });
 }
 
+test("connections start expanded on every Settings visit and respect a manual collapse during loading", async ({
+  page,
+}) => {
+  await setup(page);
+  let release!: () => void;
+  const waiting = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  await page.route("**/api/settings", async (route) => {
+    await waiting;
+    await route.fulfill({ json: { settings: defaultSettings, models: [] } });
+  });
+  const dialog = await openConnections(page);
+  const accounts = dialog.locator(".settings-accounts");
+  await expect(accounts).toHaveAttribute("open", "");
+  await dialog.locator(".settings-accounts > summary").click();
+  release();
+  await expect(dialog.getByLabel("Default model")).toBeEnabled();
+  await expect(accounts).not.toHaveAttribute("open", "");
+  await dialog.getByRole("button", { name: "Close", exact: true }).click();
+  await page.getByRole("button", { name: "Settings", exact: true }).click();
+  await expect(accounts).toHaveAttribute("open", "");
+  await expect(dialog.getByText("Choose your AI provider")).toBeVisible();
+  await page.screenshot({
+    path: `${onboardingScreenshots}/01-fresh-settings.png`,
+    animations: "disabled",
+  });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.screenshot({
+    path: `${onboardingScreenshots}/02-fresh-settings-mobile.png`,
+    animations: "disabled",
+  });
+});
+
+for (const width of [1440, 390]) {
+  test(`connecting AI offers Open workspace in Settings and on the welcome screen at ${width}px`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: width === 390 ? 844 : 1000 });
+    await setup(page);
+    const dialog = await openConnections(page);
+    await expect(
+      dialog.getByRole("button", { name: "Open workspace", exact: true }),
+    ).toHaveCount(0);
+    await dialog.getByRole("button", { name: /OpenRouter Sign in or/ }).click();
+    await dialog
+      .getByRole("button", { name: "Use API key", exact: true })
+      .click();
+    await dialog
+      .getByLabel("Enter API key", { exact: true })
+      .fill("onboarding-fixture-key");
+    await dialog
+      .getByRole("button", { name: "Save API key", exact: true })
+      .click();
+    const open = dialog.getByRole("button", {
+      name: "Open workspace",
+      exact: true,
+    });
+    await expect(open).toBeEnabled();
+    await expect(dialog.locator(".settings-accounts")).toHaveAttribute(
+      "open",
+      "",
+    );
+    await expect(open).toBeInViewport();
+    await expect.poll(() => dialog.evaluate((el) => el.scrollTop)).toBe(0);
+    await expect(dialog.locator(".workspace-setup")).toBeInViewport({ ratio: 1 });
+    await page.screenshot({
+      path: `${onboardingScreenshots}/03-connected-settings-${width}.png`,
+      animations: "disabled",
+    });
+    let pickerCalls = 0;
+    await page.route("**/api/workspaces/choose", async (route) => {
+      pickerCalls++;
+      await route.fulfill({ json: { project: null } });
+    });
+    const project = page.locator(".project-select");
+    const marginId = await project.inputValue();
+    await open.click();
+    await expect(dialog).toHaveCount(0);
+    await expect.poll(() => pickerCalls).toBe(1);
+    await expect(project).toHaveValue(marginId);
+    const welcome = page.locator(".welcome");
+    await expect(
+      welcome.getByRole("button", { name: "Open workspace", exact: true }),
+    ).toBeEnabled();
+    await expect(
+      welcome.getByRole("button", { name: "Open workspace", exact: true }),
+    ).toHaveClass(/primary/);
+    await expect(
+      welcome.getByRole("button", {
+        name: "Start a conversation",
+        exact: true,
+      }),
+    ).toBeEnabled();
+    await expect(
+      welcome.getByRole("button", {
+        name: "Start a conversation",
+        exact: true,
+      }),
+    ).not.toHaveClass(/primary/);
+    await page.screenshot({
+      path: `${onboardingScreenshots}/04-open-workspace-${width}.png`,
+      animations: "disabled",
+    });
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= innerWidth,
+      ),
+    ).toBe(true);
+    await page.getByRole("button", { name: "Settings", exact: true }).click();
+    await expect(dialog.locator(".settings-accounts")).toHaveAttribute(
+      "open",
+      "",
+    );
+    await expect(
+      dialog.getByRole("button", { name: "Manage OpenRouter", exact: true }),
+    ).toBeVisible();
+    await dialog.getByRole("button", { name: "Close", exact: true }).click();
+    const folder = await mkdtemp(join(tmpdir(), "margin-onboarding-"));
+    try {
+      const response = await page.request.post("/api/projects", {
+        data: { path: folder },
+      });
+      expect(response.ok(), await response.text()).toBe(true);
+      const chosen = await response.json();
+      await page.request.patch(`/api/projects/${chosen.id}`, {
+        data: { name: "My project" },
+      });
+      chosen.name = "My project";
+      const before = await (await page.request.get("/api/bootstrap")).json();
+      await page.route("**/api/workspaces/choose", (route) =>
+        route.fulfill({ json: { project: chosen } }),
+      );
+      await welcome
+        .getByRole("button", { name: "Open workspace", exact: true })
+        .click();
+      await expect(project).toHaveValue(chosen.id);
+      await expect(page).toHaveURL(new RegExp(`/workspaces/${chosen.id}$`));
+      await expect(page.locator(".workspace-setup")).toHaveCount(0);
+      await expect(
+        welcome.getByRole("button", {
+          name: "Start a conversation",
+          exact: true,
+        }),
+      ).toHaveClass(/primary/);
+      const after = await (await page.request.get("/api/bootstrap")).json();
+      expect(after.sessions.length).toBe(before.sessions.length);
+      await page.screenshot({
+        path: `${onboardingScreenshots}/05-project-ready-${width}.png`,
+        animations: "disabled",
+      });
+      await page.getByRole("button", { name: "Settings", exact: true }).click();
+      await expect(
+        dialog.getByRole("button", { name: "Open workspace", exact: true }),
+      ).toHaveCount(0);
+    } finally {
+      await rm(folder, { recursive: true, force: true });
+    }
+  });
+}
+
+test("Open workspace waits for pending settings saves and keeps Settings open on failure", async ({
+  page,
+}) => {
+  const state = await setup(page);
+  const model: ModelInfo = {
+    id: "reasoner",
+    provider: "fixture",
+    name: "Reasoner",
+    subscription: false,
+    thinkingLevels: ["low", "high"],
+  };
+  state.setModels([model]);
+  state.accounts.providers[1].configured =
+    state.accounts.providers[1].stored = true;
+  let settings = { ...defaultSettings };
+  let release!: () => void;
+  let writes = 0;
+  let failSave = true;
+  let pickerCalls = 0;
+  await page.route("**/api/settings", async (route) => {
+    if (route.request().method() === "PUT") {
+      writes++;
+      if (writes === 1)
+        await new Promise<void>((resolve) => {
+          release = resolve;
+        });
+      if (failSave)
+        return route.fulfill({
+          status: 500,
+          json: { error: "Storage unavailable" },
+        });
+      settings = route.request().postDataJSON();
+    }
+    await route.fulfill({ json: { settings, models: [model] } });
+  });
+  await page.route("**/api/workspaces/choose", (route) => {
+    pickerCalls++;
+    return route.fulfill({ json: { project: null } });
+  });
+  await page.goto("/");
+  await page.getByRole("button", { name: "Settings", exact: true }).click();
+  const dialog = page.getByRole("dialog", { name: "Settings", exact: true });
+  await dialog.getByLabel("Default model").selectOption(modelKey(model));
+  await expect.poll(() => writes).toBe(1);
+  await dialog.getByLabel("Thinking effort").selectOption("high");
+  await dialog
+    .getByRole("button", { name: "Open workspace", exact: true })
+    .click();
+  await expect(dialog).toBeVisible();
+  expect(pickerCalls).toBe(0);
+  release();
+  await expect(dialog.getByRole("alert")).toContainText("Storage unavailable");
+  expect(pickerCalls).toBe(0);
+  failSave = false;
+  await dialog
+    .getByRole("button", { name: "Retry saving", exact: true })
+    .click();
+  await expect(dialog.locator(".settings-save-state")).toHaveText("Saved");
+  await dialog
+    .getByRole("button", { name: "Open workspace", exact: true })
+    .click();
+  await expect(dialog).toHaveCount(0);
+  await expect.poll(() => pickerCalls).toBe(1);
+  expect(settings.defaultModel?.id).toBe(model.id);
+  expect(settings.defaultThinkingLevel).toBe("high");
+});
+
 test("first installation and connection picker use the existing Settings overlay", async ({
   page,
 }) => {
@@ -278,7 +510,10 @@ test("all saved providers and custom servers are visible without selecting or hi
   await page.goto("/");
   await page.getByRole("button", { name: "Settings", exact: true }).click();
   const dialog = page.getByRole("dialog", { name: "Settings", exact: true });
-  await dialog.locator(".settings-accounts > summary").click();
+  await expect(dialog.locator(".settings-accounts")).toHaveAttribute(
+    "open",
+    "",
+  );
   await expect(
     dialog.getByRole("button", { name: "Manage ChatGPT / Codex", exact: true }),
   ).toBeVisible();
@@ -461,13 +696,10 @@ test("custom test-and-save reaches a real HTTP server, persists, refreshes model
 }) => {
   await setup(page, true);
   const dialog = await openConnections(page);
-  // The backend fixture has built-in models, so expand connections explicitly if needed.
-  if (
-    !(await dialog
-      .locator(".settings-accounts")
-      .evaluate((el) => (el as HTMLDetailsElement).open))
-  )
-    await dialog.locator(".settings-accounts > summary").click();
+  await expect(dialog.locator(".settings-accounts")).toHaveAttribute(
+    "open",
+    "",
+  );
   await dialog.getByRole("button", { name: /Add custom connection/ }).click();
   await dialog.getByLabel("Base URL", { exact: true }).fill(endpoint);
   await dialog
@@ -507,7 +739,10 @@ test("custom test-and-save reaches a real HTTP server, persists, refreshes model
   await dialog.getByRole("button", { name: "Close dialog" }).click();
   await page.reload();
   await page.getByRole("button", { name: "Settings", exact: true }).click();
-  await dialog.locator(".settings-accounts > summary").click();
+  await expect(dialog.locator(".settings-accounts")).toHaveAttribute(
+    "open",
+    "",
+  );
   await expect(dialog.locator(".saved-custom-connection")).toContainText(
     "local-coder",
   );

@@ -189,7 +189,7 @@ test("native picker registers existing and newly created folders, deduplicates, 
   });
   try {
     respond(folder);
-    await choose.click();
+    await page.getByRole("button", { name: "Open workspace from Margin", exact: true }).click();
     const selector = page.getByRole("combobox", {
       name: "Project",
       exact: true,
@@ -205,14 +205,16 @@ test("native picker registers existing and newly created folders, deduplicates, 
     const child = join(folder, "Created in New Folder 日本語");
     mkdirSync(child);
     respond(child);
-    await choose.click();
+    await page.locator(".project-breadcrumb").click();
     await expect(selector.locator("option:checked")).toHaveText(
       "Created in New Folder 日本語",
     );
     const newId = await selector.inputValue();
     const before = await (await page.request.get("/api/bootstrap")).json();
     respond(null);
-    await choose.click();
+    const brand = page.getByRole("button", { name: "Open workspace from Margin", exact: true });
+    await brand.focus();
+    await page.keyboard.press("Enter");
     await expect(choose).toBeEnabled();
     await expect(selector).toHaveValue(newId);
     const after = await (await page.request.get("/api/bootstrap")).json();

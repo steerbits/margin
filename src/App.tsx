@@ -54,6 +54,7 @@ import { ChatStatus } from "./ChatStatus.tsx";
 import { ConversationMenu } from "./ConversationMenu.tsx";
 import { SidebarConversations } from "./SidebarConversations.tsx";
 import { SettingsDialog } from "./SettingsDialog.tsx";
+import { WorkspaceSetup } from "./WorkspaceSetup.tsx";
 import { ModelOptions } from "./ModelOptions.tsx";
 import { configureModelLabel, modelLabel } from "../shared/model-picker.ts";
 import { thinkingChoiceLabel, thinkingDefaultLabel } from "../shared/model-capabilities.ts";
@@ -232,11 +233,9 @@ export function App() {
   const snapshotRef = useRef(snapshot);
   snapshotRef.current = snapshot;
   const currentProject = boot.projects.find((p) => p.id === projectId);
-  const sourceSend = useSourceSend(
-    projectId === boot.marginProjectId || currentProject?.kind === "margin"
-      ? sessionId
-      : null,
-  );
+  const isMarginWorkspace =
+    projectId === boot.marginProjectId || currentProject?.kind === "margin";
+  const sourceSend = useSourceSend(isMarginWorkspace ? sessionId : null);
   const fail = (e: unknown) =>
     setError(e instanceof Error ? e.message : String(e));
   const attachments = useChatAttachments(
@@ -1387,13 +1386,23 @@ export function App() {
         <SettingsDialog
           onClose={() => setSettingsOpen(false)}
           onModelsChanged={(models) => setBoot((current) => ({ ...current, models }))}
+          onOpenWorkspace={
+            isMarginWorkspace ? () => void chooseWorkspace() : undefined
+          }
         />
       )}
       <header className="app-header">
-        <div className="brand">
+        <button
+          className="brand"
+          type="button"
+          aria-label="Open workspace from Margin"
+          title="Open workspace"
+          disabled={!loaded || choosingWorkspace}
+          onClick={() => void chooseWorkspace()}
+        >
           <PanelRight size={21} />
           <span>margin <small>by Steerbits</small></span>
-        </div>
+        </button>
         <div className="header-right">
           <span className={`connection ${connected ? "connected" : ""}`}>
             <Circle size={7} fill="currentColor" />
@@ -1560,12 +1569,17 @@ export function App() {
                     )}
                   </button>
                   <Folder size={15} />
-                  <span
+                  <button
                     className="project-breadcrumb"
-                    title={currentProject?.path}
+                    type="button"
+                    title={`Open workspace${currentProject?.path ? ` · ${currentProject.path}` : ""}`}
+                    aria-label={`Open workspace: ${currentProject?.name ?? "Margin"}`}
+                    disabled={!loaded || choosingWorkspace}
+                    onClick={() => void chooseWorkspace()}
                   >
-                    {currentProject?.name ?? "Workspace"}
-                  </span>
+                    <span>{currentProject?.name ?? "Workspace"}</span>
+                    <ChevronDown size={12} aria-hidden="true" />
+                  </button>
                   <span className="crumb-separator">/</span>
                   <span className="conversation-title">
                     {conversationTitle}
@@ -1974,7 +1988,9 @@ export function App() {
                     <div />
                   </div>
                 ) : !snapshot ? (
-                  <div className="welcome">
+                  <div
+                    className={`welcome${boot.models.length && isMarginWorkspace ? " workspace-onboarding" : ""}`}
+                  >
                     <div className="welcome-icon">
                       <PanelRight size={32} />
                     </div>
@@ -1989,6 +2005,12 @@ export function App() {
                       <br className="desktop-break" /> and shape the next step
                       together.
                     </p>
+                    {boot.models.length > 0 && isMarginWorkspace && (
+                      <WorkspaceSetup
+                        onOpen={() => void chooseWorkspace()}
+                        disabled={choosingWorkspace}
+                      />
+                    )}
                     {!boot.models.length ? (
                       <div className="start-card first-connection-card">
                         <div className="first-connection-heading">
@@ -2036,7 +2058,9 @@ export function App() {
                           />
                         </select>
                         <button
-                          className="primary"
+                          className={
+                            isMarginWorkspace ? "workspace-continue" : "primary"
+                          }
                           onClick={() => void createSession()}
                           disabled={
                             sending ||
