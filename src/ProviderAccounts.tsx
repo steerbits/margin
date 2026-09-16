@@ -1,14 +1,22 @@
 import { useEffect, useRef, useState } from "react";
-import { RefreshCw, ExternalLink } from "lucide-react";
+import {
+  RefreshCw,
+  ExternalLink,
+  ArrowUpRight,
+  CheckCircle2,
+} from "lucide-react";
 import {
   loginPending,
   providerBillingNote,
+  providerKeyUrl,
   safeAuthUrl,
   type LoginPrompt,
   type ProviderAccountsView,
   type ProviderLogin,
 } from "../shared/provider-accounts.ts";
 import { api, ApiError } from "./api.ts";
+import { CustomConnectionsPanel } from "./CustomConnections.tsx";
+import { customProviderPrefix } from "../shared/custom-connections.ts";
 
 export function ProviderAccountsPanel({
   onChanged,
@@ -27,6 +35,8 @@ export function ProviderAccountsPanel({
   const [pollError, setPollError] = useState("");
   const [notice, setNotice] = useState("");
   const [confirmRemove, setConfirmRemove] = useState(false);
+  const [customBusy, setCustomBusy] = useState(false);
+  const [customEditing, setCustomEditing] = useState(false);
   const mounted = useRef(false);
   const currentLogin = useRef(login);
   currentLogin.current = login;
@@ -41,7 +51,8 @@ export function ProviderAccountsPanel({
   useEffect(() => {
     if (hasLoginLink) loginPanel.current?.scrollIntoView({ block: "nearest" });
   }, [login?.id, hasLoginLink]);
-  const busy = acting || loginPending(login);
+  const accountBusy = acting || loginPending(login);
+  const busy = accountBusy || customBusy;
   const provider = accounts?.providers.find((p) => p.id === selected);
   const filtered =
     accounts?.providers.filter((p) =>
@@ -50,6 +61,9 @@ export function ProviderAccountsPanel({
 
   async function load(adoptLogin = false) {
     const view = await api<ProviderAccountsView>("/provider-accounts");
+    view.providers = view.providers.filter(
+      (p) => !p.id.startsWith(customProviderPrefix),
+    );
     if (!mounted.current) return;
     setAccounts(view);
     setSelected(
@@ -57,7 +71,6 @@ export function ProviderAccountsPanel({
         id ||
         view.login?.providerId ||
         view.providers.find((p) => p.configured)?.id ||
-        view.providers[0]?.id ||
         "",
     );
     if (adoptLogin && loginPending(view.login)) {
@@ -179,7 +192,9 @@ export function ProviderAccountsPanel({
       aria-labelledby="provider-accounts-heading"
     >
       <div className="settings-section-heading">
-        <h3 id="provider-accounts-heading">Connect a provider</h3>
+        <h3 id="provider-accounts-heading">
+          {customEditing ? "Connect your server" : "Choose your AI provider"}
+        </h3>
         <button
           type="button"
           aria-label="Refresh provider accounts"
@@ -195,8 +210,9 @@ export function ProviderAccountsPanel({
         </button>
       </div>
       <p className="settings-description">
-        Saved privately in this Margin installation, across all workspaces. Account
-        changes apply immediately, independently of Save or Cancel below.
+        Connect an account you already use, bring an API key, or add your own
+        server. Connections are saved privately in Margin and work across your
+        workspaces.
       </p>
       {loading && <p>Loading provider accounts…</p>}
       {accounts?.readOnly && (
@@ -206,59 +222,110 @@ export function ProviderAccountsPanel({
           tokens cannot refresh in this mode.
         </p>
       )}
-      {accounts && (
+      {accounts && !customEditing && (
         <>
-          <label className="account-label">
-            Find a provider
-            <input
-              type="search"
-              value={query}
-              placeholder="Search providers, e.g. Grok or Gemini"
-              disabled={busy}
-              onChange={(e) => {
-                const value = e.target.value;
-                setQuery(value);
-                const match = accounts.providers.find((p) =>
-                  `${p.name} ${p.id}`
-                    .toLowerCase()
-                    .includes(value.toLowerCase()),
-                );
-                if (
-                  match &&
-                  !`${provider?.name} ${provider?.id}`
-                    .toLowerCase()
-                    .includes(value.toLowerCase())
-                )
-                  setSelected(match.id);
-                setConfirmRemove(false);
-              }}
-            />
-          </label>
-          <label className="account-label">
-            Provider
-            <select
-              aria-label="Provider"
-              value={filtered.some((p) => p.id === selected) ? selected : ""}
-              disabled={busy || !filtered.length}
-              onChange={(e) => {
-                setSelected(e.target.value);
-                setConfirmRemove(false);
-                setLogin(undefined);
-                setError("");
-                setNotice("");
-              }}
-            >
-              {!filtered.length && (
-                <option value="">No matching providers</option>
-              )}
-              {filtered.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.name}
-                  {p.configured ? " · configured" : ""}
-                </option>
+          <div className="provider-grid">
+            {accounts.providers
+              .filter((p) =>
+                ["openai-codex", "openrouter", "anthropic", "google"].includes(
+                  p.id,
+                ),
+              )
+              .map((p) => (
+                <button
+                  type="button"
+                  key={p.id}
+                  className={
+                    selected === p.id
+                      ? "provider-tile selected"
+                      : "provider-tile"
+                  }
+                  disabled={busy}
+                  aria-pressed={selected === p.id}
+                  onClick={() => {
+                    setSelected(p.id);
+                    setQuery("");
+                    setLogin(undefined);
+                    setError("");
+                    setNotice("");
+                    setConfirmRemove(false);
+                  }}
+                >
+                  <span className="provider-tile-top">
+                    <strong>{p.name}</strong>
+                    {p.configured ? (
+                      <CheckCircle2 size={16} />
+                    ) : (
+                      <ArrowUpRight size={16} />
+                    )}
+                  </span>
+                  <span>
+                    {p.configured
+                      ? "Connected"
+                      : p.id === "openai-codex"
+                        ? "Use your ChatGPT subscription"
+                        : p.id === "google"
+                          ? "Connect a Gemini API key"
+                          : "Sign in or use an API key"}
+                  </span>
+                </button>
               ))}
-            </select>
-          </label>
+          </div>
+          <details className="provider-browse">
+            <summary>Browse all providers</summary>
+            <label className="account-label">
+              Find a provider
+              <input
+                type="search"
+                value={query}
+                placeholder="Search providers, e.g. Grok or Gemini"
+                disabled={busy}
+                onChange={(e) => {
+                  const value = e.target.value;
+                  setQuery(value);
+                  const match = accounts.providers.find((p) =>
+                    `${p.name} ${p.id}`
+                      .toLowerCase()
+                      .includes(value.toLowerCase()),
+                  );
+                  if (
+                    match &&
+                    !`${provider?.name} ${provider?.id}`
+                      .toLowerCase()
+                      .includes(value.toLowerCase())
+                  )
+                    setSelected(match.id);
+                  setConfirmRemove(false);
+                }}
+              />
+            </label>
+            <label className="account-label">
+              Provider
+              <select
+                aria-label="Provider"
+                value={filtered.some((p) => p.id === selected) ? selected : ""}
+                disabled={busy || !filtered.length}
+                onChange={(e) => {
+                  setSelected(e.target.value);
+                  setConfirmRemove(false);
+                  setLogin(undefined);
+                  setError("");
+                  setNotice("");
+                }}
+              >
+                <option value="">Choose a provider</option>
+                {!filtered.length && (
+                  <option value="">No matching providers</option>
+                )}
+                {filtered.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.name}
+                    {p.configured ? " · configured" : ""}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </details>
           {provider && filtered.length > 0 && (
             <div className="account-card">
               <strong>{provider.name}</strong>
@@ -266,12 +333,19 @@ export function ProviderAccountsPanel({
                 {provider.statusError
                   ? "Could not check account status. Try refreshing."
                   : provider.configured
-                    ? `Configured · ${provider.authType === "oauth" ? "provider sign-in" : "API / external credentials"}${provider.stored ? " · saved in Pi" : " · configured externally"}`
-                    : "Not configured"}
+                    ? `Connected · ${provider.authType === "oauth" ? "provider sign-in" : "API / external credentials"}${provider.stored ? " · saved in Margin" : " · configured externally"}`
+                    : "Ready to connect"}
               </p>
               <p className="settings-help">
                 {providerBillingNote(provider.id)}
               </p>
+              {providerKeyUrl(provider.id) && (
+                <p className="settings-help">
+                  <AuthLink url={providerKeyUrl(provider.id)!}>
+                    Create an API key on {provider.name}
+                  </AuthLink>
+                </p>
+              )}
               {!provider.methods.length && (
                 <p className="settings-help">
                   Pi has no interactive login for this provider. Configure its
@@ -280,9 +354,9 @@ export function ProviderAccountsPanel({
               )}
               {provider.configured && (
                 <p className="settings-help">
-                  Connecting again replaces this provider’s saved login for both
-                  Margin and terminal Pi. Existing conversations keep their
-                  model but subsequent requests use the new credentials.
+                  Connecting again replaces this provider’s saved login in this
+                  Margin installation. Existing conversations keep their model
+                  but subsequent requests use the new credentials.
                 </p>
               )}
               <div className="account-actions">
@@ -309,9 +383,9 @@ export function ProviderAccountsPanel({
               {confirmRemove && (
                 <div className="account-notice">
                   <p>
-                    Remove {provider.name} credentials from Pi? This also
-                    affects terminal Pi and future requests in existing chats.
-                    Environment or external credentials may still provide
+                    Remove {provider.name} credentials from this Margin
+                    installation? This also affects future requests in existing
+                    chats. Environment or external credentials may still provide
                     access.
                   </p>
                   <div className="account-actions">
@@ -343,7 +417,7 @@ export function ProviderAccountsPanel({
                         })
                       }
                     >
-                      Remove from Pi
+                      Remove saved connection
                     </button>
                   </div>
                 </div>
@@ -352,6 +426,22 @@ export function ProviderAccountsPanel({
           )}
         </>
       )}
+      {accounts && (
+        <CustomConnectionsPanel
+          readOnly={accounts.readOnly}
+          disabled={accountBusy}
+          onBusyChange={setCustomBusy}
+          onEditingChange={setCustomEditing}
+          onChanged={async () => {
+            await load();
+            await callbacks.current.onChanged();
+          }}
+        />
+      )}
+      <p className="connection-footnote">
+        Connections save immediately. Save below applies to conversation
+        defaults.
+      </p>
       {login && (
         <div
           ref={loginPanel}
@@ -360,11 +450,15 @@ export function ProviderAccountsPanel({
         >
           {loginPending(login) && (
             <p>
-              Signing in to{" "}
+              {login.method === "api_key"
+                ? "Add credentials for "
+                : "Signing in to "}
               {accounts?.providers.find((p) => p.id === login.providerId)
                 ?.name ?? login.providerId}
-              . Closing Settings cancels unfinished sign-in. This attempt
-              expires after ten minutes.
+              .{" "}
+              {login.method === "api_key"
+                ? "Paste your key below. Closing Settings cancels this step."
+                : "Complete authorization in your browser, then return here. This attempt expires after ten minutes."}
             </p>
           )}
           {login.events.map((event) => (
@@ -402,6 +496,11 @@ export function ProviderAccountsPanel({
             <LoginStep
               key={login.prompt.id}
               prompt={login.prompt}
+              submitLabel={
+                login.method === "api_key" && login.prompt.type === "secret"
+                  ? "Save API key"
+                  : undefined
+              }
               disabled={acting}
               onAnswer={(value) =>
                 act(async () => {
@@ -436,7 +535,11 @@ export function ProviderAccountsPanel({
                 })
               }
             >
-              {login.status === "cancelling" ? "Cancelling…" : "Cancel sign-in"}
+              {login.status === "cancelling"
+                ? "Cancelling…"
+                : login.method === "api_key"
+                  ? "Cancel key entry"
+                  : "Cancel sign-in"}
             </button>
           )}
         </div>
@@ -478,10 +581,12 @@ function AuthLink({
 }
 function LoginStep({
   prompt,
+  submitLabel,
   disabled,
   onAnswer,
 }: {
   prompt: LoginPrompt;
+  submitLabel?: string;
   disabled: boolean;
   onAnswer: (value: string) => Promise<void>;
 }) {
@@ -534,7 +639,7 @@ function LoginStep({
       <button type="submit" disabled={disabled}>
         {prompt.type === "manual_code"
           ? "Submit code / redirect URL"
-          : "Continue"}
+          : (submitLabel ?? "Continue")}
       </button>
     </form>
   );

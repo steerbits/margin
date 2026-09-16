@@ -6,6 +6,10 @@ test("gateway account API requires browser authentication, rejects cross-origin 
   request,
 }) => {
   expect((await request.get("/api/provider-accounts")).status()).toBe(401);
+  expect((await request.get("/api/custom-connections")).status()).toBe(401);
+  expect(
+    (await request.post("/api/custom-connections/save", { data: {} })).status(),
+  ).toBe(401);
   expect(
     (
       await request.post("/api/provider-accounts/login", {
@@ -25,7 +29,7 @@ test("gateway account API requires browser authentication, rejects cross-origin 
   await page.getByRole("button", { name: "Settings", exact: true }).click();
   const dialog = page.getByRole("dialog", { name: "Settings", exact: true });
   await expect(dialog.getByLabel("Default model")).toBeEnabled();
-  await dialog.locator("summary").click();
+  await dialog.locator(".settings-accounts > summary").click();
   await expect(
     dialog.getByText(/Account changes are disabled by MARGIN_AUTH_READ_ONLY/),
   ).toBeVisible();
@@ -33,6 +37,23 @@ test("gateway account API requires browser authentication, rejects cross-origin 
   expect(response.ok()).toBe(true);
   expect(response.headers()["x-margin-host"]).toBe("gateway");
   expect(response.headers()["cache-control"]).toBe("no-store");
+  const custom = await page.request.get("/api/custom-connections");
+  expect(custom.headers()["x-margin-host"]).toBe("gateway");
+  expect(custom.headers()["cache-control"]).toBe("no-store");
+  expect((await custom.json()).readOnly).toBe(true);
+  expect(
+    (
+      await page.request.post("/api/custom-connections/save", {
+        data: {},
+        headers: { Origin: "https://evil.example" },
+      })
+    ).status(),
+  ).toBe(403);
+  expect(
+    (
+      await page.request.post("/api/custom-connections/save", { data: {} })
+    ).status(),
+  ).toBe(400);
   const accounts = await response.json();
   expect(accounts.providers.some((p: { id: string }) => p.id === "xai")).toBe(
     true,

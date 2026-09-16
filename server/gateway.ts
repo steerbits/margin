@@ -21,6 +21,7 @@ import type { ModelInfo, Project, SessionInfo } from "../shared/types.ts";
 import { installSettingsRoutes, readSettings } from "./settings.ts";
 import { createModels } from "./models.ts";
 import { ProviderAccounts, installProviderAccountRoutes } from "./provider-accounts.ts";
+import { installCustomConnectionRoutes } from "./custom-connections.ts";
 import { withinPath } from "./execution.ts";
 
 // This process handles browser requests and worker lifecycle. It deliberately
@@ -390,6 +391,7 @@ const providerAccounts = new ProviderAccounts(() =>
   createModels(dataDir, AbortSignal.timeout(15_000)),
 );
 installProviderAccountRoutes(app, providerAccounts);
+installCustomConnectionRoutes(app);
 installSettingsRoutes(app, registry, async () => {
   const response = await workerFetch(
     projectById(initial.id),

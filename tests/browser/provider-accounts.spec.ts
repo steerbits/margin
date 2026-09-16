@@ -174,10 +174,11 @@ async function openSettings(page: Page) {
   await expect(dialog.getByLabel("Default model")).toBeEnabled();
   if (
     !(await dialog
-      .locator("details")
+      .locator("details.settings-accounts")
       .evaluate((el) => (el as HTMLDetailsElement).open))
   )
-    await dialog.locator("summary").click();
+    await dialog.locator(".settings-accounts > summary").click();
+  await dialog.locator(".provider-browse > summary").click();
   return dialog;
 }
 
@@ -279,7 +280,7 @@ test("browser fallback, errors, secret entry, shared logout confirmation and clo
   const input = dialog.getByLabel("Enter API key");
   await expect(input).toHaveAttribute("type", "password");
   await input.fill("!echo key");
-  await dialog.getByRole("button", { name: "Continue", exact: true }).click();
+  await dialog.getByRole("button", { name: "Save API key", exact: true }).click();
   await expect(
     dialog.getByText("Enter a literal API key, not a shell command."),
   ).toBeVisible();
@@ -290,7 +291,7 @@ test("browser fallback, errors, secret entry, shared logout confirmation and clo
   ).toBeVisible();
   await expect(input).toHaveValue("");
   await input.fill("fixture-secret");
-  await dialog.getByRole("button", { name: "Continue", exact: true }).click();
+  await dialog.getByRole("button", { name: "Save API key", exact: true }).click();
   await expect(dialog.getByText("Credentials saved in Pi.")).toBeVisible();
   expect(state.answers).toContain("fixture-secret");
   expect(
@@ -305,12 +306,12 @@ test("browser fallback, errors, secret entry, shared logout confirmation and clo
     .getByLabel("Provider", { exact: true })
     .selectOption("openai-codex");
   await dialog.getByRole("button", { name: "Remove saved login…" }).click();
-  await expect(dialog.getByText(/This also affects terminal Pi/)).toBeVisible();
+  await expect(dialog.getByText(/affects future requests in existing chats/)).toBeVisible();
   expect(state.removed).toBe(0);
   await dialog.getByRole("button", { name: "Keep login" }).click();
   await dialog.getByRole("button", { name: "Remove saved login…" }).click();
   await dialog
-    .getByRole("button", { name: "Remove from Pi", exact: true })
+    .getByRole("button", { name: "Remove saved connection", exact: true })
     .click();
   await expect.poll(() => state.removed).toBe(1);
   await dialog.getByLabel("Provider", { exact: true }).selectOption("external");

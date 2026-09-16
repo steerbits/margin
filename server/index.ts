@@ -19,6 +19,7 @@ import { deleteSavedSession } from "./delete-session.ts";
 import { LiveSession, errorText } from "./sessions.ts";
 import { createModels, listModels } from "./models.ts";
 import { ProviderAccounts, installProviderAccountRoutes } from "./provider-accounts.ts";
+import { installCustomConnectionRoutes } from "./custom-connections.ts";
 import {
   installSettingsRoutes,
   modelReferenceSchema,
@@ -558,6 +559,7 @@ const providerAccounts = new ProviderAccounts(() =>
 if (!workerToken) {
   installSettingsRoutes(app, store, availableModels);
   installProviderAccountRoutes(app, providerAccounts);
+  installCustomConnectionRoutes(app);
 }
 app.post(
   "/api/models/refresh",
