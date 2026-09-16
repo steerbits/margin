@@ -153,12 +153,10 @@ test("welcome and Settings share ordered groups, provider-first labels, exact id
   ).toBeDisabled();
   models.splice(0);
   await page.getByRole("button", { name: "Settings", exact: true }).click();
-  await expect(dialog.locator("details")).toHaveAttribute("open", "");
+  await expect(dialog.locator("details.settings-accounts")).toHaveAttribute("open", "");
   await dialog.getByRole("button", { name: "Cancel", exact: true }).click();
-  await expect(welcome.locator("option:checked")).toHaveText(
-    "Configure a model in Settings",
-  );
-  await expect(welcome).toBeDisabled();
+  await expect(welcome).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Connect an AI provider", exact: true })).toBeVisible();
   expect(requests).toHaveLength(1);
   expect(
     consoleErrors.filter((text) =>
@@ -231,28 +229,18 @@ test("empty pickers explain setup and link directly to provider accounts without
 }) => {
   await mockModels(page, []);
   await page.goto("/");
-  const welcome = page.getByLabel("Start with a model");
-  await expect(welcome).toBeDisabled();
-  await expect(welcome.locator("option")).toHaveText([
-    "Configure a model in Settings",
-  ]);
-  await expect(welcome.locator("optgroup, hr")).toHaveCount(0);
-  await expect(
-    page.getByRole("button", { name: "Start a conversation", exact: true }),
-  ).toBeDisabled();
-  await page
-    .getByRole("button", { name: "Open Settings", exact: true })
-    .click();
+  await expect(page.getByLabel("Start with a model")).toHaveCount(0);
+  await page.getByRole("button", { name: "Connect an AI provider", exact: true }).click();
   const dialog = page.getByRole("dialog", { name: "Settings", exact: true });
   await expect(dialog.getByLabel("Default model").locator("option")).toHaveText(
-    ["Configure a model in Settings"],
+    ["Connect a provider first"],
   );
-  await expect(dialog.locator("details")).toHaveAttribute("open", "");
-  await dialog.locator("summary").click();
+  await expect(dialog.locator("details.settings-accounts")).toHaveAttribute("open", "");
+  await dialog.locator(".settings-accounts > summary").click();
   await dialog
     .getByRole("button", { name: "Connect a provider", exact: true })
     .click();
-  await expect(dialog.locator("details")).toHaveAttribute("open", "");
+  await expect(dialog.locator("details.settings-accounts")).toHaveAttribute("open", "");
 });
 
 test("native group headers and keyboard selection work in an expanded listbox preview", async ({

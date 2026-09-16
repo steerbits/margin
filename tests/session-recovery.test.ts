@@ -105,6 +105,33 @@ const usage = {
   totalTokens: 0,
   cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
 };
+
+test("Stop during custom-connection refresh cannot start a model request after refresh resolves", async () => {
+  const f = fixture();
+  try {
+    let release!: () => void;
+    let refreshing!: () => void;
+    const started = new Promise<void>(resolve => { refreshing = resolve; });
+    const current = { provider: "margin-custom-fixture", id: "local", contextWindow: 4096 };
+    f.l.agent.model = current;
+    f.l.models = {
+      async refresh() {
+        refreshing();
+        await new Promise<void>(resolve => { release = resolve; });
+      },
+      async getAvailable() { return [current]; },
+    };
+    let prompts = 0;
+    const run = f.l.runPrompt(async () => { prompts++; });
+    const rejected = assert.rejects(run, /abort/i);
+    await started;
+    await f.l.stop();
+    release();
+    await rejected;
+    assert.equal(prompts, 0);
+    assert.equal(f.l.busy, false);
+  } finally { f.close(); }
+});
 function modelResult(f: ReturnType<typeof fixture>, error?: string) {
   f.manager.appendMessage({
     role: "assistant",

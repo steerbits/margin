@@ -67,7 +67,7 @@ for (const width of [1440, 390]) {
     ).toBeEnabled();
     await expect(
       settings.getByLabel("Thinking effort").locator('option[value=""]'),
-    ).toHaveText("Runtime default");
+    ).toHaveText("Automatic");
     await expect(settings).not.toContainText(/\bpi\b/i);
     await settings.getByRole("button", { name: "Cancel", exact: true }).click();
 

@@ -107,7 +107,7 @@ done
   const originalLog = console.log;
   console.log = (...args) => {
     const link = String(args[0]).match(
-      /http:\/\/127\.0\.0\.1:4329\/#connect=([a-f0-9]+)/,
+      /http:\/\/127\.0\.0\.1:\d+\/#connect=([a-f0-9]+)/,
     );
     if (link)
       writeFileSync(

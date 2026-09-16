@@ -14,11 +14,7 @@ import { api } from "./api.ts";
 import { AppDialog } from "./WorkspacePicker.tsx";
 import { ProviderAccountsPanel } from "./ProviderAccounts.tsx";
 import { ModelOptions } from "./ModelOptions.tsx";
-import {
-  configureModelLabel,
-  modelLabel,
-  modelProviderLabel,
-} from "../shared/model-picker.ts";
+import { modelLabel, modelProviderLabel } from "../shared/model-picker.ts";
 import "./SettingsDialog.css";
 
 export function SettingsDialog({
@@ -68,7 +64,7 @@ export function SettingsDialog({
     !!draft.defaultThinkingLevel &&
     !levels.includes(draft.defaultThinkingLevel);
   const pending = loading || saving || accountBusy;
-  const runtimeDefault = "Runtime default";
+  const runtimeDefault = "Automatic";
   async function refresh() {
     setLoading(true);
     setError("");
@@ -99,11 +95,11 @@ export function SettingsDialog({
         onToggle={(event) => setAccountsOpen(event.currentTarget.open)}
       >
         <summary>
-          Provider accounts{" "}
+          AI connections{" "}
           <span>
             {accountBusy
-              ? "Sign-in in progress"
-              : "Connect subscriptions or API keys"}
+              ? "Connection in progress"
+              : "Accounts, API keys, and custom servers"}
           </span>
         </summary>
         <ProviderAccountsPanel
@@ -184,7 +180,7 @@ export function SettingsDialog({
                 <option value="">
                   {models.length
                     ? "Automatic · prefer ChatGPT subscription"
-                    : configureModelLabel}
+                    : "Connect a provider first"}
                 </option>
                 {invalidModel && (
                   <option value={modelKey(draft.defaultModel)} disabled>
@@ -207,7 +203,7 @@ export function SettingsDialog({
             {!models.length && loaded && (
               <button
                 type="button"
-                className="text-link"
+                className="text-link connect-provider-link"
                 onClick={() => {
                   setAccountsOpen(true);
                   requestAnimationFrame(() =>
@@ -257,7 +253,7 @@ export function SettingsDialog({
                   ? "This model does not support thinking."
                   : !levels.length && model
                     ? "This runtime does not expose thinking effort."
-                    : "Only supported levels are shown. Runtime default uses your existing runtime configuration."}
+                    : "Only supported levels are shown. Automatic uses the model's default thinking effort."}
             </p>
           </div>
         </section>

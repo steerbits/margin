@@ -4,11 +4,25 @@
 
 1. Install and launch Margin normally (`npm ci --ignore-scripts`, `npm run build`, `npm start`; Node 22.13+ and cco are required).
 2. Open the connection link printed in Terminal. This authorizes your browser to use your local Margin server; it is separate from provider sign-in.
-3. Open the gear → **Provider accounts**. Search/select your provider and choose its sign-in or API-key/configuration method.
+3. On a fresh installation, choose **Connect an AI provider**. Later, open the gear → **AI connections**. Both open the same Settings overlay. Choose a featured provider or expand **Browse all providers**.
 4. Follow Pi's prompts. For browser authorization, click **Open sign-in page**, authorize on the provider's site, and return to Margin. If the callback cannot reach this machine, paste the final redirect URL/code in the fallback field. For device login, open the verification page and enter the displayed code; Margin checks completion automatically.
 5. After credentials are saved, models refresh automatically. Pick a default model and thinking effort, then **Save**. Start a conversation.
 
 Margin uses private Pi storage for this installation. Use Settings to sign in, or run the bundled Pi CLI with npm run pi; a separate global terminal Pi login is not reused automatically. Other people installing Margin connect **their own accounts**; credentials are not bundled with Margin or stored in Git.
+
+## Custom connections
+
+Choose **Add custom connection** inside AI connections. Select an API format, enter the base URL, and choose **API key** or **No authentication** explicitly. The key field is hidden only for the latter. The current Pi Google Generative AI adapter requires a key; the form explains that limitation. OpenAI Chat Completions, OpenAI Responses, and Anthropic Messages support the no-auth option.
+
+**Find models** is optional. Choose a discovered model or enter its exact ID manually when the server does not expose a catalog. **Test & save** sends a small inference request and saves only after a usable reply; provider usage charges may apply. Invalid credentials, unavailable models and connection failures leave the form editable and do not create a saved connection. Closing the dialog or cancelling aborts an unfinished check.
+
+Connections receive a name from their server hostname. **Edit → Advanced** can rename one, override its context/reply limits, enter literal custom headers, and configure reasoning compatibility. API keys and header values are not returned to the browser when editing: a blank key preserves the saved key only for the same authenticated endpoint and API format. Switching from no-auth to API-key requires a new key. Blank headers preserve saved headers on the same endpoint; `{}` removes them.
+
+Custom entries, keys, and headers live in `.margin-data/pi/models.json`, written atomically with owner-only permissions. Keys/header values must be literals; web input cannot execute Pi shell commands or interpolate environment variables. Unrelated provider entries are retained. Existing Pi line comments/trailing commas are accepted and normalized to JSON when saving. No-auth connections use an internal placeholder for Pi availability; it is removed from outgoing authentication headers. Google uses its native SDK transport; other custom transports reject redirects.
+
+Margin uses a server-reported context limit where available. For llama.cpp it reads the active context from `/props`, never the larger training maximum. Unknown limits use an explicitly described **provisional 16K budget**, which is not a guarantee of capacity; Advanced provides an override. Detection is performed when testing/saving, so retest after changing a server's context configuration. Small custom contexts receive proportional reply headroom and session-local compaction thresholds, avoiding Pi 0.85.1's fixed 4K-reserve behavior without modifying the SDK or global settings.
+
+Connection edits and removals take effect in existing chats before their next user turn; an active response is not retargeted. Removed connections remain visibly unavailable until another model is chosen. Account changes save immediately; the Settings **Save** button separately applies conversation defaults.
 
 ## Model pickers
 
@@ -63,6 +77,6 @@ Use **Refresh provider accounts** after signing in externally through `pi` → `
 
 ## Boundaries and verification
 
-Provider account routes live on the authenticated gateway (or the legacy standalone native host), not project workers. Loading the gateway's `ModelRuntime` does not start agent sessions or load project extensions. Existing host/Origin/cookie/JSON guards protect these endpoints. This remains a personal, loopback-only application—not multi-user account isolation or a hosted OAuth broker. Custom provider editors and project-only provider-extension account management are not included.
+Provider account routes live on the authenticated gateway (or the legacy standalone native host), not project workers. Loading the gateway's `ModelRuntime` does not start agent sessions or load project extensions. Existing host/Origin/cookie/JSON guards protect these endpoints. This remains a personal, loopback-only application—not multi-user account isolation or a hosted OAuth broker. Custom connections are edited in Settings and stored in the installation-owned Pi configuration. Project-only provider-extension account management is not included.
 
-Automated coverage includes SDK credential persistence in disposable directories, owner-only file permissions, fresh-runtime Claude/Grok model discovery, Claude/Grok session-default restoration, and the real xAI device-code implementation with mocked HTTP. Browser tests exercise generic authorization, fallback, secret entry, cancellation, server-lost interaction recovery, model refresh, mobile layout and shared-login removal confirmation. Gateway tests check authentication, cross-origin rejection and read-only enforcement. Tests do not authenticate a real vendor account or make live Claude/Grok inference requests; those remain manual checks. No live Margin process was restarted.
+Automated coverage includes SDK credential persistence in disposable directories, owner-only file permissions, fresh-runtime Claude/Grok model discovery, Claude/Grok session-default restoration, and the real xAI device-code implementation with mocked HTTP. Browser tests exercise generic authorization, fallback, secret entry, cancellation, server-lost interaction recovery, model refresh, mobile layout and shared-login removal confirmation. Gateway tests check authentication, cross-origin rejection and read-only enforcement. Tests do not authenticate a real vendor account or make live Claude/Grok inference requests; those remain manual checks. No live Margin process was restarted. See [AI connections evaluation](ai-connections-review.md) for custom-provider coverage, screenshots, and live OpenRouter/Codex results.

@@ -6,6 +6,8 @@ import base from "../playwright.config.ts";
 export default defineConfig({
   ...base,
   testDir: "./browser",
+  // Writable connection flows run in connections.playwright.config.ts.
+  testIgnore: /ai-connections\.spec\.ts/,
   outputDir: "../.margin-data/project-notes-test-results",
   use: { ...base.use, baseURL: "http://127.0.0.1:4328" },
   webServer: {

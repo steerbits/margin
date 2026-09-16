@@ -28,6 +28,7 @@ import type {
 import { Store } from "./store.ts";
 import { UiBridge } from "./ui-bridge.ts";
 import { createModels, modelInfo } from "./models.ts";
+import { configureCustomCompaction, refreshCustomSessionModel } from "./custom-model-runtime.ts";
 import { contentText, diffFrom, transcript } from "./transcript.ts";
 import { formatFeedback } from "./feedback.ts";
 import {
@@ -121,6 +122,7 @@ export class LiveSession implements AgentBackend {
         "No authenticated models found. Connect a provider in Settings.",
       );
     const settings = SettingsManager.create(this.project.path, getAgentDir());
+    configureCustomCompaction(settings, () => this.agent?.model ?? model);
     // Adding a project explicitly selects the local workspace whose Pi resources are loaded.
     settings.setProjectTrusted(true);
     const loader = new DefaultResourceLoader({
@@ -371,6 +373,18 @@ export class LiveSession implements AgentBackend {
       );
     };
     try {
+      const currentModel = this.agent.model;
+      if (currentModel) {
+        const latestModel = await refreshCustomSessionModel(this.models, currentModel, controller.signal);
+        controller.signal.throwIfAborted();
+        if (JSON.stringify(latestModel) !== JSON.stringify(currentModel)) {
+          await this.agent.setModel(latestModel);
+          this.info.model = modelInfo(this.models, latestModel);
+        }
+      }
+      controller.signal.throwIfAborted();
+      if (this.disposing) throw new Error("This conversation is closing.");
+      this.assertOwnership();
       await start();
       while (
         !controller.signal.aborted &&
@@ -861,6 +875,7 @@ export class LiveSession implements AgentBackend {
   async setModel(provider: string, id: string) {
     if (this.busy)
       throw new Error("Stop or finish the response before changing models.");
+    await this.models.refresh({ allowNetwork: false });
     const m = (await this.models.getAvailable(provider)).find(
       (m) => m.id === id,
     );

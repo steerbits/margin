@@ -1991,49 +1991,69 @@ export function App() {
                       <br className="desktop-break" /> and shape the next step
                       together.
                     </p>
-                    <div className="start-card">
-                      <label htmlFor="start-model">Start with a model</label>
-                      <select
-                        id="start-model"
-                        value={boot.models.length ? newModel : ""}
-                        disabled={!boot.models.length}
-                        onChange={(e) => setNewModel(e.target.value)}
-                      >
-                        <option value="">
-                          {boot.models.length
-                            ? "Default from Settings"
-                            : configureModelLabel}
-                        </option>
-                        {unavailableNewModel && boot.models.length > 0 && (
-                          <option value={newModel} disabled>
-                            Selected model unavailable — choose another
-                          </option>
-                        )}
-                        <ModelOptions models={boot.models} keyFor={modelKey} />
-                      </select>
-                      <button
-                        className="primary"
-                        onClick={() => void createSession()}
-                        disabled={
-                          sending ||
-                          !boot.models.length ||
-                          !projectId ||
-                          unavailableNewModel
-                        }
-                      >
-                        <Plus size={16} />
-                        Start a conversation
-                      </button>
-                    </div>
-                    {!boot.models.length && (
-                      <p className="setup-hint">
+                    {!boot.models.length ? (
+                      <div className="start-card first-connection-card">
+                        <div className="first-connection-heading">
+                          <Plug size={20} />
+                          <strong>Bring your AI to Margin</strong>
+                        </div>
+                        <p>
+                          Use your ChatGPT subscription, connect an API key,
+                          <br className="desktop-break" /> or work with a local
+                          model.
+                        </p>
                         <button
-                          className="text-link"
+                          className="primary"
                           onClick={() => setSettingsOpen(true)}
                         >
-                          Open Settings
-                        </button>{" "}
-                        to connect a provider, or{" "}
+                          Connect an AI provider{" "}
+                          <ArrowUp size={16} className="connection-arrow" />
+                        </button>
+                        <span>
+                          Your connections stay private to this installation.
+                        </span>
+                      </div>
+                    ) : (
+                      <div className="start-card">
+                        <label htmlFor="start-model">Start with a model</label>
+                        <select
+                          id="start-model"
+                          value={boot.models.length ? newModel : ""}
+                          disabled={!boot.models.length}
+                          onChange={(e) => setNewModel(e.target.value)}
+                        >
+                          <option value="">
+                            {boot.models.length
+                              ? "Default from Settings"
+                              : configureModelLabel}
+                          </option>
+                          {unavailableNewModel && boot.models.length > 0 && (
+                            <option value={newModel} disabled>
+                              Selected model unavailable — choose another
+                            </option>
+                          )}
+                          <ModelOptions
+                            models={boot.models}
+                            keyFor={modelKey}
+                          />
+                        </select>
+                        <button
+                          className="primary"
+                          onClick={() => void createSession()}
+                          disabled={
+                            sending ||
+                            !boot.models.length ||
+                            !projectId ||
+                            unavailableNewModel
+                          }
+                        >
+                          <Plus size={16} />
+                          Start a conversation
+                        </button>
+                      </div>
+                    )}
+                    {!boot.models.length && (
+                      <p className="setup-hint">
                         <button
                           className="text-link"
                           onClick={() =>
@@ -2042,7 +2062,7 @@ export function App() {
                               .catch(fail)
                           }
                         >
-                          refresh models
+                          Refresh models
                         </button>
                         .
                       </p>

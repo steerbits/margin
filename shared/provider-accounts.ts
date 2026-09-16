@@ -65,3 +65,16 @@ export function providerBillingNote(id: string) {
     return "Uses Gemini API access, not a consumer Gemini subscription. API quotas and billing apply.";
   return "Provider eligibility, quotas, and billing apply. A saved credential does not verify access to every model.";
 }
+
+export function providerKeyUrl(id: string): string | undefined {
+  return ({
+    openrouter: "https://openrouter.ai/settings/keys",
+    openai: "https://platform.openai.com/api-keys",
+    anthropic: "https://platform.claude.com/settings/keys",
+    google: "https://aistudio.google.com/apikey",
+    xai: "https://console.x.ai/",
+    deepseek: "https://platform.deepseek.com/api_keys",
+    groq: "https://console.groq.com/keys",
+    mistral: "https://console.mistral.ai/api-keys",
+  } as Record<string, string>)[id];
+}

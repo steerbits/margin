@@ -9,6 +9,7 @@ import {
   type CredentialStore,
 } from "@earendil-works/pi-ai";
 import type { ModelConnectionSource, ModelInfo } from "../shared/types.ts";
+import { installCustomModelSupport } from "./custom-model-runtime.ts";
 
 // Optional mode for hosts that allow reading Pi credentials but cannot acquire its write lock.
 // No credential copies are persisted. Expired credentials must be refreshed by Pi externally.
@@ -33,13 +34,15 @@ export function readOnlyCredentials(authPath: string): CredentialStore {
   };
 }
 export async function createModels(dataDir: string, signal?: AbortSignal) {
-  return ModelRuntime.create({
-    signal,
-    modelsStorePath: join(dataDir, "models-store.json"),
-    ...(process.env.MARGIN_AUTH_READ_ONLY === "1"
-      ? { credentials: readOnlyCredentials(join(getAgentDir(), "auth.json")) }
-      : {}),
-  });
+  return installCustomModelSupport(
+    await ModelRuntime.create({
+      signal,
+      modelsStorePath: join(dataDir, "models-store.json"),
+      ...(process.env.MARGIN_AUTH_READ_ONLY === "1"
+        ? { credentials: readOnlyCredentials(join(getAgentDir(), "auth.json")) }
+        : {}),
+    }),
+  );
 }
 export function modelConnectionSource(
   runtime: Pick<ModelRuntime, "getProviderAuthStatus">,
