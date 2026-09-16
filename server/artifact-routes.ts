@@ -4,6 +4,7 @@ import { ArtifactStore, ReviewConflict } from "./artifacts.ts";
 import type { ArtifactPreviews } from "./artifact-preview.ts";
 import type { Store } from "./store.ts";
 import type { FeedbackBatch, Project, Snapshot } from "../shared/types.ts";
+import type { SendBlock } from "../shared/source-send.ts";
 
 export function installArtifactRoutes(
   app: express.Express,
@@ -12,6 +13,7 @@ export function installArtifactRoutes(
     previews: ArtifactPreviews;
     project: (sessionId: string) => Project;
     snapshot: (sessionId: string) => Snapshot;
+    sendBlock?: (sessionId: string) => SendBlock | null;
     send: (
       sessionId: string,
       batch: FeedbackBatch,
@@ -44,16 +46,17 @@ export function installArtifactRoutes(
     "/api/sessions/:id/artifacts",
     route((req, res, store) => {
       const snapshot = host.snapshot(String(req.params.id));
+      const block = host.sendBlock?.(String(req.params.id));
       const batch = z.string().uuid().optional().parse(req.query.batch);
       res.json({
         ...store.state(),
         ...(batch ? { submission: store.submission(batch) } : {}),
-        busy: snapshot.busy || snapshot.dialogs.length > 0,
+        busy: snapshot.busy || snapshot.dialogs.length > 0 || !!block,
         sendBlockReason: snapshot.dialogs.length
           ? "Answer the agent's question in chat before sending. Your feedback is saved."
           : snapshot.busy
             ? "The agent is working. Your feedback is saved; send when it is ready."
-            : null,
+            : (block?.reason ?? null),
       });
     }),
   );

@@ -12,6 +12,7 @@ import { installAttachmentRoutes } from "./attachment-routes.ts";
 import { attachmentUploadRoute, ATTACHMENT_JSON_LIMIT, MAX_DRAFT_ATTACHMENTS } from "../shared/attachments.ts";
 import { readSessionPreview } from "./session-preview.ts";
 import { SessionActivityTracker } from "./session-activity.ts";
+import { SourceSendGuard } from "./source-send.ts";
 import { snapshotStream } from "./snapshot-stream.ts";
 import { RuntimeOwner } from "./runtime-owner.ts";
 import { runtimeLog } from "./runtime-log.ts";
@@ -309,8 +310,25 @@ const marginProject = () =>
 let maintenance = false,
   sourceNeedsRestart = false,
   workspacePluginOperations = 0;
+const sourceSends = new SourceSendGuard(
+  () => [...live.values()]
+    .filter((session) => session.hasActiveWork?.() ?? session.snapshot().busy)
+    .map((session) => session.info.id),
+  () => maintenance || workspacePluginOperations > 0,
+);
+// Ordinary scripted UI fixtures intentionally overlap runs. The dedicated
+// source-send suite opts into the production guard, without saving checkpoints.
+const protectSourceSends =
+  process.env.MARGIN_TEST_MODE !== "1" ||
+  process.env.MARGIN_TEST_SOURCE_SEND_GUARD === "1";
+function sourceSendBlock(info: SessionInfo) {
+  return protectSourceSends && info.projectId === marginProject().id
+    ? sourceSends.block()
+    : null;
+}
 function requireIdle() {
   if (
+    sourceSends.isStarting ||
     maintenance ||
     workspacePluginOperations > 0 ||
     [...live.values()].some((s) => s.hasActiveWork?.() ?? s.snapshot().busy)
@@ -342,6 +360,7 @@ if (workerToken) {
   app.get("/api/worker/status", (_req, res) =>
     res.json({
       busy:
+        sourceSends.isStarting ||
         maintenance ||
         workspacePluginOperations > 0 ||
         [...live.values()].some(
@@ -635,6 +654,13 @@ app.get(
   ),
 );
 app.get(
+  "/api/sessions/:id/send-availability",
+  asyncRoute((req, res) => {
+    const session = getLive(String(req.params.id));
+    res.json({ block: sourceSendBlock(session.info) });
+  }),
+);
+app.get(
   "/api/sessions/:id/preview",
   asyncRoute((req, res) => {
     const id = String(req.params.id);
@@ -742,18 +768,26 @@ async function sendBatch(
     );
   const l = getLive(id);
   await l.ready;
-  if (
-    l.info.projectId === marginProject().id &&
-    process.env.MARGIN_TEST_MODE !== "1"
-  ) {
-    requireIdle();
-    history.save("Before customization", "automatic", true);
+  const send = async () => {
+    if (batch.attachmentIds?.length && !l.attachmentsChanged)
+      throw new Error("This runtime does not support attachments.");
+    if (
+      l.info.projectId === marginProject().id &&
+      process.env.MARGIN_TEST_MODE !== "1"
+    )
+      history.save("Before customization", "automatic", true);
+    const result = await l.send(batch);
+    observe(l.snapshot());
+    return result;
+  };
+  if (protectSourceSends && l.info.projectId === marginProject().id) {
+    // An acknowledgement lost in transit must still be safely retryable while
+    // its original run is active, rather than looking like conflicting new work.
+    const prior = store.batch(id, batch.id);
+    if (prior) return { status: prior.status };
+    return sourceSends.run(id, send);
   }
-  if (batch.attachmentIds?.length && !l.attachmentsChanged)
-    throw new Error("This runtime does not support attachments.");
-  const result = await l.send(batch);
-  observe(l.snapshot());
-  return result;
+  return send();
 }
 app.post(
   "/api/sessions/:id/send",
@@ -768,6 +802,7 @@ installArtifactRoutes(app, {
   previews: artifactPreviews,
   send: sendBatch,
   snapshot: (id) => getLive(id).snapshot(),
+  sendBlock: (id) => sourceSendBlock(getLive(id).info),
   project: (id) => {
     const session = store.get<SessionInfo>("session", id);
     const project = session && store.get<Project>("project", session.projectId);

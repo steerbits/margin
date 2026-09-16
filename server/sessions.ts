@@ -229,7 +229,7 @@ export class LiveSession implements AgentBackend {
     this.info.sessionFile = manager.getSessionFile();
     if (this.disposing) return;
     this.info.model = modelInfo(this.models, model);
-    this.persist();
+    this.persist(false);
     this.agent.subscribe((e) => this.onEvent(e));
     this.messages = transcript(manager.getBranch());
     if (result.modelFallbackMessage)
@@ -299,7 +299,7 @@ export class LiveSession implements AgentBackend {
     }
     this.busy = this.autoResume;
     this.refreshMessages();
-    this.persist();
+    this.persist(false);
     this.changed();
     this.pluginEvent("session.ready");
   }
@@ -560,8 +560,9 @@ export class LiveSession implements AgentBackend {
     if (this.agent)
       this.messages = transcript(this.agent.sessionManager.getBranch());
   }
-  private persist() {
-    this.info.updatedAt = Date.now();
+  private persist(activity = true) {
+    // Loading/reconnecting saves runtime metadata, but is not conversation activity.
+    if (activity) this.info.updatedAt = Date.now();
     this.store.put("session", this.info.id, this.info);
     this.store.put("transcript", this.info.id, this.messages);
     this.store.put("interrupted", this.info.id, this.busy);
@@ -630,6 +631,7 @@ export class LiveSession implements AgentBackend {
         composer: this.ui.editorText,
         composerRevision:
           this.store.get<number>("composer-revision", this.info.id) ?? 0,
+        submission: this.submission(),
         busy: this.busy,
         dialogs: [...this.ui.dialogs.values()],
         notices: this.ui.notices,
@@ -651,6 +653,11 @@ export class LiveSession implements AgentBackend {
       },
       new AttachmentStore(this.store, this.dataDir, this.info.id).list(),
     );
+  }
+  private submission(): Snapshot["submission"] {
+    const pending = this.store.get<PendingInput>("pending-input", this.info.id);
+    const batch = pending && this.store.batch(this.info.id, pending.batchId);
+    return pending && batch ? { id: pending.batchId, status: batch.status } : undefined;
   }
   async send(batch: FeedbackBatch) {
     this.assertOwnership();
@@ -813,6 +820,7 @@ export class LiveSession implements AgentBackend {
     this.changed();
   }
   async stop() {
+    const wasActive = this.hasActiveWork();
     // Persist explicit Stop before awaiting cancellation; a crash during abort
     // must not transform the user's Stop into an automatic continuation.
     this.autoResume = false;
@@ -828,7 +836,7 @@ export class LiveSession implements AgentBackend {
     this.busy = false;
     this.live = undefined;
     this.refreshMessages();
-    this.persist();
+    this.persist(wasActive);
     this.changed();
   }
   async reload() {

@@ -75,15 +75,16 @@ test("launcher needs a browser capability; merely loading its page does not gran
   await expect(
     page.getByRole("combobox", { name: "Project", exact: true }),
   ).toBeVisible();
-  await expect(page.locator(".execution-mode")).toHaveText(
-    "cco · per workspace",
-  );
+  await expect(page.locator(".execution-mode")).toHaveCount(0);
   await expect(page).not.toHaveURL(/connect=/);
-  expect((await page.request.get("/api/bootstrap")).ok()).toBe(true);
+  const bootstrap = await page.request.get("/api/bootstrap");
+  expect(bootstrap.ok()).toBe(true);
+  expect((await bootstrap.json()).execution.mode).toBe("cco-workspaces");
   await page.reload();
-  await expect(page.locator(".execution-mode")).toHaveText(
-    "cco · per workspace",
-  );
+  await expect(
+    page.getByRole("combobox", { name: "Project", exact: true }),
+  ).toBeVisible();
+  await expect(page.locator(".execution-mode")).toHaveCount(0);
 });
 
 test("external folders have independent workers and Notes shared by their chats; SSE survives workspace switching", async ({

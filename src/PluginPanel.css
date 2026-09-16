@@ -32,9 +32,6 @@
 .composer-dock .composer {
   margin-top: 0;
 }
-.composer-dock .model-footer {
-  margin-top: 12px;
-}
 /* Before the first send, use the original in-flow layout. Keep the same
    composer DOM node so docking never interrupts keyboard focus or a draft. */
 .conversation-column.composer-inline {
@@ -51,9 +48,6 @@
 .composer-inline > .composer-dock > .review {
   padding-top: 30px;
   padding-bottom: 70px;
-}
-.composer-inline .model-footer {
-  margin-top: 23px;
 }
 .plugin-panel {
   position: relative;

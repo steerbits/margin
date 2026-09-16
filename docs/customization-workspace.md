@@ -8,6 +8,12 @@ Examples prepare a prompt in a new Margin-source conversation. They do not send 
 
 The examples cover tasks, agent access to notes, decisions, supervisors, and richer result rendering. They are starting prompts, not built-in feature implementations.
 
+## While another task is running
+
+You can create conversations and save drafts while Margin is working. In its source workspace, **Send** is disabled while conflicting agent/background/plugin work is active. A visible explanation beneath the composer says why, on desktop and mobile; **View running conversation** opens the blocking chat when one is identifiable. Its existing Stop control remains available. Other workspaces can still send.
+
+Availability is checked with the owning server approximately once a second. When work finishes or stops, Send becomes available again; drafts are **not queued or sent automatically**. Failed availability checks keep Send disabled with a retry action. The server enforces the same guard for stale pages and simultaneous requests. This is not worktree isolation: conversations still share source files and uncommitted changes.
+
 ## Plugins
 
 The Plugins tab lists local plugin directories and their browser/server entrypoints. Optional `plugin.json` metadata supplies a short name and description. Existing plugins without that file remain supported.

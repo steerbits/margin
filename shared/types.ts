@@ -119,6 +119,8 @@ export interface Snapshot {
   comments: Comment[];
   composer: string;
   composerRevision?: number;
+  /** Latest batch outcome, for reconciling optimistic sends (including async rejection). */
+  submission?: { id: string; status: string };
   composerAttachments?: Attachment[];
   attachmentRevision?: number;
   attachmentSupport?: boolean;

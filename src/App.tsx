@@ -19,7 +19,6 @@ import {
   PanelLeftOpen,
   PanelRight,
   Plus,
-  RefreshCw,
   Square,
   Terminal,
   Trash2,
@@ -58,7 +57,9 @@ import { SettingsDialog } from "./SettingsDialog.tsx";
 import { ModelOptions } from "./ModelOptions.tsx";
 import { configureModelLabel, modelLabel } from "../shared/model-picker.ts";
 import { ChatCache, ChatDrafts } from "./chat-cache.ts";
+import { ChatOutbox } from "./chat-outbox.ts";
 import { useUnread } from "./use-unread.ts";
+import { useSourceSend } from "./use-source-send.ts";
 import {
   AppDialog,
   WorkspacePicker,
@@ -134,6 +135,7 @@ export function App() {
     y: number;
   } | null>(null);
   const histories = useRef(new ChatCache()).current;
+  const outbox = useRef(new ChatOutbox()).current;
   const pendingDrafts = useRef(
     new ChatDrafts((id, text) =>
       api(`/sessions/${id}/composer`, { text }, "PUT"),
@@ -163,9 +165,6 @@ export function App() {
     [error, setError] = useState(""),
     [connected, setConnected] = useState(false),
     [sending, setSending] = useState(false);
-  const [submittedSessionId, setSubmittedSessionId] = useState<string | null>(
-    null,
-  );
   const [choosingWorkspace, setChoosingWorkspace] = useState(false),
     [newModel, setNewModel] = useState("");
   const unavailableNewModel =
@@ -228,6 +227,11 @@ export function App() {
   const snapshotRef = useRef(snapshot);
   snapshotRef.current = snapshot;
   const currentProject = boot.projects.find((p) => p.id === projectId);
+  const sourceSend = useSourceSend(
+    projectId === boot.marginProjectId || currentProject?.kind === "margin"
+      ? sessionId
+      : null,
+  );
   const fail = (e: unknown) =>
     setError(e instanceof Error ? e.message : String(e));
   const attachments = useChatAttachments(
@@ -237,7 +241,7 @@ export function App() {
       snapshot.session.id === sessionId &&
       // Uploads use ordinary HTTP, not the live-update stream. In particular,
       // returning from the OS file picker can trigger a temporary SSE reconnect.
-      !sending && !hubOpen && !allWorkspaces && !routeMissing &&
+      !sending && !outbox.get(sessionId) && !hubOpen && !allWorkspaces && !routeMissing &&
       !settingsOpen && !renameOpen && !deleteTarget && !choosingWorkspace,
     fail,
     composerEditor,
@@ -427,7 +431,7 @@ export function App() {
     setActive(null);
     setCommentGaps({});
     const text = id
-      ? pendingDrafts.text(id, cached?.composer ?? "", cached?.composerRevision)
+      ? outbox.text(id, pendingDrafts.text(id, cached?.composer ?? "", cached?.composerRevision))
       : "";
     setDraft(text);
     draftRef.current = text;
@@ -449,11 +453,11 @@ export function App() {
         if (selectedId.current === id && !snapshotRef.current) {
           setSnapshot(preview);
           snapshotRef.current = preview;
-          const text = pendingDrafts.text(
+          const text = outbox.text(id, pendingDrafts.text(
             id,
             preview.composer,
             preview.composerRevision,
-          );
+          ));
           setDraft(text);
           draftRef.current = text;
         }
@@ -533,12 +537,23 @@ export function App() {
           setSkill((current) =>
             s.skills.some((x) => x.name === current) ? current : "",
           );
+        const completed = outbox.observe(s);
+        if (completed) {
+          // Re-save any typing done during submission after the server's preflight
+          // clear, or restore the original draft if preflight rejected the batch.
+          pendingDrafts.set(s.session.id, completed.draft);
+          void pendingDrafts.flush(s.session.id).catch(fail);
+          if (completed.rejected) {
+            lastAccepted.current = "";
+            fail(new Error("Pi did not accept that message. Your draft is restored; try again."));
+          }
+        }
         const pending = pendingDrafts.get(s.session.id);
-        const text = pendingDrafts.text(
+        const text = outbox.text(s.session.id, pendingDrafts.text(
           s.session.id,
           s.composer,
           s.composerRevision,
-        );
+        ));
         setDraft(text);
         draftRef.current = text;
         dirty.current = !!pending;
@@ -638,20 +653,24 @@ export function App() {
       clearTimeout(timer);
     };
   }, [loaded]);
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (stickyBottom.current && scrollRef.current)
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
   }, [
     snapshot?.messages.length,
     snapshot?.messages.at(-1)?.text,
     snapshot?.dialogs.length,
+    outbox.get(sessionId)?.id,
   ]);
   function updateDraft(text: string) {
     updateChatDraft(sessionId, text);
   }
   function updateChatDraft(id: string | null, text: string) {
     if (id && deletedSessions.has(id)) return;
-    if (id) pendingDrafts.set(id, text);
+    if (id) {
+      outbox.edit(id, text);
+      pendingDrafts.set(id, text);
+    }
     if (selectedId.current !== id) {
       if (id) void pendingDrafts.flush(id).catch(fail);
       return;
@@ -823,6 +842,8 @@ export function App() {
       !snapshot ||
       !connected ||
       sending ||
+      sourceSend.disabled ||
+      outbox.get(sessionId) ||
       editing ||
       snapshot.busy ||
       snapshot.dialogs.length ||
@@ -833,8 +854,7 @@ export function App() {
     setError("");
     if (saveTimer.current) clearTimeout(saveTimer.current);
     const note = draftRef.current,
-      version = draftVersion.current,
-      sendingSession = sessionId,
+      sendingSession = snapshot.session.id,
       ids = snapshot.comments
         .filter((c) => c.status === "draft")
         .map((c) => c.id);
@@ -851,14 +871,20 @@ export function App() {
       prior?.fingerprint === fingerprint ? prior.id : crypto.randomUUID();
     lastAccepted.current = JSON.stringify({ fingerprint, id });
     try {
+      const batch = {
+        id, note, commentIds: ids,
+        ...(attachmentIds.length ? { attachmentIds } : {}),
+        ...(skill ? { skill } : {}),
+      };
+      outbox.begin(snapshot, batch, attachments.files);
+      // One React update moves the composer, empties it, and paints the bubble.
+      // Do not persist this visual clear: keep the original draft recoverable.
+      setDraft("");
+      draftRef.current = "";
+      stickyBottom.current = true;
       await flushDraft();
       const result = await api<{ status: string }>(
-        `/sessions/${sendingSession}/send`,
-        {
-          id, note, commentIds: ids,
-          ...(attachmentIds.length ? { attachmentIds } : {}),
-          ...(skill ? { skill } : {}),
-        },
+        `/sessions/${sendingSession}/send`, batch,
       );
       if (result.status === "rejected") {
         lastAccepted.current = "";
@@ -866,16 +892,20 @@ export function App() {
           "Pi did not accept that message. Your draft is saved; try again.",
         );
       }
+      if (result.status === "accepted") outbox.accept(sendingSession, id);
       if (selectedId.current === sendingSession) {
-        // Keep the dock in place even if acceptance arrives before the live messages.
-        setSubmittedSessionId(sendingSession);
-        if (draftVersion.current === version) dirty.current = false;
         setSkill("");
         if (sendingSession) skillChoices.set(sendingSession, "");
         skillChosen.current = true;
         stickyBottom.current = true;
       }
     } catch (e) {
+      // A lost HTTP response must not restore a duplicate if the stream already
+      // confirmed acceptance. Otherwise restore both the note and newer typing.
+      if (outbox.get(sendingSession)?.status !== "accepted") {
+        const restored = outbox.reject(sendingSession, id);
+        if (restored !== undefined) updateChatDraft(sendingSession, restored);
+      }
       fail(e);
     } finally {
       setSending(false);
@@ -1101,6 +1131,10 @@ export function App() {
   const draftCount =
     snapshot?.comments.filter((c) => c.status === "draft").length ?? 0;
   const busy = snapshot?.busy ?? false;
+  const outgoing = outbox.get(sessionId);
+  const messages = snapshot
+    ? [...snapshot.messages, ...(outgoing ? [outgoing.message] : [])]
+    : [];
   const currentActivity =
     boot.sessions.find((s) => s.id === sessionId)?.activity ??
     snapshot?.session.activity;
@@ -1145,6 +1179,18 @@ export function App() {
   }
   const model = snapshot?.session.model;
   const agentName = snapshot?.session.backendLabel ?? "Pi";
+  const conversationTitle =
+    (snapshot?.session.id === sessionId ? snapshot.session.title : undefined) ??
+    boot.sessions.find((s) => s.id === sessionId)?.title ??
+    "New conversation";
+  const pageTitle = hubOpen
+    ? "Margin · Customize Margin"
+    : sessionId && !routeMissing
+      ? `Margin · ${conversationTitle}`
+      : "Margin";
+  useEffect(() => {
+    document.title = pageTitle;
+  }, [pageTitle]);
   return (
     <div className={`app ${sidebar ? "" : "sidebar-hidden"}`}>
       {contextMenu && (
@@ -1313,30 +1359,9 @@ export function App() {
       <header className="app-header">
         <div className="brand">
           <PanelRight size={21} />
-          <span>margin</span>
-          <span className="local-badge">
-            <i />
-            local workspace
-          </span>
+          <span>margin <small>by Steerbits</small></span>
         </div>
         <div className="header-right">
-          <span
-            className="execution-mode"
-            title={
-              boot.execution?.mode === "cco-workspaces"
-                ? "Each workspace runs its own Pi server inside cco defaults."
-                : boot.execution?.mode === "cco"
-                  ? `Whole server launched through cco defaults. Writable application paths: ${boot.execution.writablePaths.join(", ")}. cco also permits its normal state and temporary paths.`
-                  : "This server was started directly, without the cco wrapper."
-            }
-          >
-            {boot.execution?.mode === "cco-workspaces"
-              ? "cco · per workspace"
-              : boot.execution?.mode === "cco"
-                ? "cco sandbox"
-                : "Native"}
-          </span>
-          <span className="powered">Powered by Pi</span>
           <span className={`connection ${connected ? "connected" : ""}`}>
             <Circle size={7} fill="currentColor" />
             {sessionId ? (connected ? "Connected" : "Reconnecting…") : "Ready"}
@@ -1510,9 +1535,7 @@ export function App() {
                   </span>
                   <span className="crumb-separator">/</span>
                   <span className="conversation-title">
-                    {snapshot?.session.title ??
-                      boot.sessions.find((s) => s.id === sessionId)?.title ??
-                      "New conversation"}
+                    {conversationTitle}
                   </span>
                 </div>
                 <div className="toolbar-actions">
@@ -1624,9 +1647,8 @@ export function App() {
                 scrollRef={scrollRef}
                 inlineComposer={
                   !!snapshot &&
-                  !snapshot.messages.length &&
-                  !sending &&
-                  submittedSessionId !== sessionId
+                  !messages.length &&
+                  !sending
                 }
                 composer={snapshot && (
                   <div className={`review ${rail ? "with-rail" : ""}`}>
@@ -1638,7 +1660,7 @@ export function App() {
                           void send();
                         }}
                       >
-                        {draftCount > 0 && (
+                        {draftCount > 0 && !outgoing && (
                           <button
                             type="button"
                             className="batch-chip"
@@ -1649,7 +1671,7 @@ export function App() {
                             {draftCount === 1 ? "" : "s"} attached
                           </button>
                         )}
-                        {attachments.chips}
+                        {!outgoing && attachments.chips}
                         <textarea
                           ref={composerEditor}
                           onPaste={attachments.paste}
@@ -1695,25 +1717,91 @@ export function App() {
                                 ))}
                               </select>
                             </label>
-                            <button
-                              type="button"
-                              aria-label="Reload skills"
-                              title="Reload Pi skills and extensions"
-                              disabled={busy || !connected}
-                              onClick={() =>
-                                void api(
-                                  `/sessions/${sessionId}/reload`,
-                                  {},
-                                ).catch(fail)
-                              }
-                            >
-                              <RefreshCw size={13} />
-                            </button>
+                            {model && (
+                              <>
+                                <select
+                                  className="model-choice"
+                                  aria-label="Model"
+                                  disabled={
+                                    busy || !connected || !boot.models.length
+                                  }
+                                  title={modelLabel(model)}
+                                  value={modelKey(model)}
+                                  onChange={(e) => {
+                                    const m = boot.models.find(
+                                      (m) => modelKey(m) === e.target.value,
+                                    );
+                                    if (m)
+                                      void api(`/sessions/${sessionId}/model`, {
+                                        provider: m.provider,
+                                        id: m.id,
+                                      }).catch(fail);
+                                  }}
+                                >
+                                  {!boot.models.length ? (
+                                    <option value={modelKey(model)}>
+                                      {configureModelLabel}
+                                    </option>
+                                  ) : (
+                                    !boot.models.some(
+                                      (m) => modelKey(m) === modelKey(model),
+                                    ) && (
+                                      <option value={modelKey(model)} disabled>
+                                        {modelLabel(model)} (unavailable)
+                                      </option>
+                                    )
+                                  )}
+                                  <ModelOptions
+                                    models={boot.models}
+                                    keyFor={modelKey}
+                                  />
+                                </select>
+                                {!boot.models.length && (
+                                  <button
+                                    type="button"
+                                    className="text-link"
+                                    onClick={() => setSettingsOpen(true)}
+                                  >
+                                    Open Settings
+                                  </button>
+                                )}
+                                {snapshot.thinking && (
+                                  <label className="thinking-choice">
+                                    <span>Thinking</span>
+                                    <select
+                                      aria-label="Thinking effort"
+                                      disabled={
+                                        busy ||
+                                        !connected ||
+                                        snapshot.thinking.available.length < 2
+                                      }
+                                      value={snapshot.thinking.level}
+                                      onChange={(event) =>
+                                        void api(
+                                          `/sessions/${sessionId}/thinking`,
+                                          { level: event.target.value },
+                                        ).catch(fail)
+                                      }
+                                    >
+                                      {snapshot.thinking.available.map((level) => (
+                                        <option key={level} value={level}>
+                                          {level === "xhigh"
+                                            ? "Extra high"
+                                            : level.charAt(0).toUpperCase() +
+                                              level.slice(1)}
+                                        </option>
+                                      ))}
+                                    </select>
+                                  </label>
+                                )}
+                              </>
+                            )}
                           </div>
                           {busy ? (
                             <button
                               type="button"
                               className="stop-button"
+                              key="stop"
                               onClick={() =>
                                 void api(
                                   `/sessions/${sessionId}/stop`,
@@ -1727,6 +1815,10 @@ export function App() {
                           ) : (
                             <button
                               className="send-button"
+                              key="send"
+                              aria-describedby={
+                                sourceSend.reason ? "source-send-reason" : undefined
+                              }
                               aria-label={
                                 draftCount
                                   ? `Send ${draftCount} comment${draftCount === 1 ? "" : "s"}`
@@ -1735,6 +1827,8 @@ export function App() {
                               type="submit"
                               disabled={
                                 sending ||
+                                sourceSend.disabled ||
+                                !!outgoing ||
                                 !!snapshot.dialogs.length ||
                                 !!editing ||
                                 attachments.pending ||
@@ -1748,100 +1842,45 @@ export function App() {
                           )}
                         </div>
                       </form>
-                      <div className="composer-hint">
-                        <span>
-                          {editing
-                            ? "Finish or cancel your draft comment before sending."
-                            : skill
-                              ? `${skillLabel(skill)} will guide your next message`
-                              : "Your skill sets the pace. Your comments shape the work."}
-                        </span>
-                        <kbd>⌘ ↵</kbd>
-                      </div>
-                      {model && (
-                        <div className="model-footer">
-                          <span className="model-dot" />
-                          <select
-                            aria-label="Model"
-                            disabled={
-                              busy || !connected || !boot.models.length
-                            }
-                            title={modelLabel(model)}
-                            value={modelKey(model)}
-                            onChange={(e) => {
-                              const m = boot.models.find(
-                                (m) => modelKey(m) === e.target.value,
-                              );
-                              if (m)
-                                void api(`/sessions/${sessionId}/model`, {
-                                  provider: m.provider,
-                                  id: m.id,
-                                }).catch(fail);
-                            }}
-                          >
-                            {!boot.models.length ? (
-                              <option value={modelKey(model)}>
-                                {configureModelLabel}
-                              </option>
-                            ) : (
-                              !boot.models.some(
-                                (m) => modelKey(m) === modelKey(model),
-                              ) && (
-                                <option value={modelKey(model)} disabled>
-                                  {modelLabel(model)} (unavailable)
-                                </option>
-                              )
+                      {!busy && sourceSend.reason && (
+                        <div
+                          className="source-send-notice"
+                          id="source-send-reason"
+                          role="status"
+                        >
+                          <span>{sourceSend.reason}</span>
+                          {sourceSend.blockingSessionId &&
+                            sourceSend.blockingSessionId !== sessionId && (
+                              <a
+                                href={destinationUrl({
+                                  kind: "chat",
+                                  sessionId: sourceSend.blockingSessionId,
+                                })}
+                                onClick={(event) => {
+                                  if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey)
+                                    return;
+                                  event.preventDefault();
+                                  void switchSession(sourceSend.blockingSessionId!);
+                                }}
+                              >
+                                View running conversation
+                              </a>
                             )}
-                            <ModelOptions
-                              models={boot.models}
-                              keyFor={modelKey}
-                            />
-                          </select>
-                          {!boot.models.length && (
-                            <button
-                              className="text-link"
-                              onClick={() => setSettingsOpen(true)}
-                            >
-                              Open Settings
+                          {sourceSend.failed && (
+                            <button type="button" onClick={sourceSend.retry}>
+                              Retry
                             </button>
                           )}
-                          {snapshot.thinking && (
-                            <label className="thinking-choice">
-                              <span>Thinking</span>
-                              <select
-                                aria-label="Thinking effort"
-                                disabled={
-                                  busy || snapshot.thinking.available.length < 2
-                                }
-                                value={snapshot.thinking.level}
-                                onChange={(event) =>
-                                  void api(`/sessions/${sessionId}/thinking`, {
-                                    level: event.target.value,
-                                  }).catch(fail)
-                                }
-                              >
-                                {snapshot.thinking.available.map((level) => (
-                                  <option key={level} value={level}>
-                                    {level === "xhigh"
-                                      ? "Extra high"
-                                      : level.charAt(0).toUpperCase() +
-                                        level.slice(1)}
-                                  </option>
-                                ))}
-                              </select>
-                            </label>
-                          )}
-                          <span>
-                            {model.provider === "openai-codex" &&
-                            model.subscription
-                              ? "ChatGPT subscription"
-                              : model.provider === "anthropic" &&
-                                  model.subscription
-                                ? "Claude · extra usage"
-                                : model.provider}
-                          </span>
                         </div>
                       )}
+                      <div className="composer-hint">
+                        {editing && (
+                          <span>
+                            Finish or cancel your draft comment before sending.
+                          </span>
+                        )}
+                        <kbd>⌘ ↵</kbd>
+                      </div>
                     </div>
                   </div>
                 )}
@@ -2009,7 +2048,7 @@ export function App() {
                           day: "numeric",
                         })}
                       </div>
-                      {!snapshot.messages.length && (
+                      {!messages.length && (
                         <div className="empty-conversation">
                           <div className="agent-avatar">
                             <Terminal size={18} />
@@ -2022,7 +2061,7 @@ export function App() {
                           </p>
                         </div>
                       )}
-                      {snapshot.messages.map((m) =>
+                      {messages.map((m) =>
                         m.role === "tool" && m.tool ? (
                           <ToolCard
                             key={m.id}
@@ -2173,6 +2212,11 @@ export function App() {
                                   sessionId={snapshot.session.id}
                                   files={m.attachments}
                                 />
+                                {m.id === outgoing?.message.id && (
+                                  <span className="send-status" role="status">
+                                    {outgoing.status === "accepted" ? "Sent" : "Sending…"}
+                                  </span>
+                                )}
                               </div>
                             )}
                             {m.role === "assistant" && !m.streaming && (

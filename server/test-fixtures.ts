@@ -168,9 +168,9 @@ export function installFixtures(
         projectId: store
           .projects()
           .find(
-            (p) =>
-              resolve(p.path) ===
-              resolve(dirname(fileURLToPath(import.meta.url)), ".."),
+            (p) => req.body.projectId
+              ? p.id === req.body.projectId
+              : resolve(p.path) === resolve(dirname(fileURLToPath(import.meta.url)), ".."),
           )!.id,
         title: String(req.body.title ?? "Meeting notes app").slice(0, 64),
         createdAt: Date.now(),
@@ -214,6 +214,10 @@ export function installFixtures(
       l.messages = transcript(l.agent.sessionManager.getBranch());
       l.busy = false;
       l.agent.prompt = async (text, options) => {
+        if (req.body.rejectSend) {
+          options?.preflightResult?.(false);
+          return;
+        }
         options?.preflightResult?.(true);
         append("user", text);
         l.busy = true;

@@ -90,10 +90,20 @@ for (const mobile of [false, true]) {
     });
     try {
       if (mobile) await page.keyboard.press("Control+Enter");
-      else
-        await page
-          .getByRole("button", { name: "Send message", exact: true })
-          .click();
+      else {
+        const firstFrame = await page.evaluate(async () => {
+          document.querySelector<HTMLButtonElement>('button[aria-label="Send message"]')!.click();
+          await new Promise(requestAnimationFrame);
+          return {
+            draft: document.querySelector<HTMLTextAreaElement>('textarea[aria-label="Message Pi"]')!.value,
+            bubble: document.querySelector(".message.user")?.textContent,
+            inline: !!document.querySelector(".composer-inline"),
+          };
+        });
+        expect(firstFrame.draft).toBe("");
+        expect(firstFrame.bubble).toContain("Begin the conversation");
+        expect(firstFrame.inline).toBe(false);
+      }
       await expect(
         page.getByRole("button", { name: "Send message", exact: true }),
       ).toBeDisabled();
@@ -108,13 +118,19 @@ for (const mobile of [false, true]) {
         .toBeLessThan(2);
       // Keyboard submission retains focus when the composer changes position.
       if (mobile) await expect(composer).toBeFocused();
-      await expect(composer).toHaveValue("Begin the conversation");
+      await expect(composer).toHaveValue("");
+      await expect(page.locator(".message.user")).toHaveCount(1);
+      await expect(page.locator(".message.user")).toContainText("Begin the conversation");
+      await expect(page.locator(".send-status")).toHaveText("Sending…");
     } finally {
       release();
     }
     await expect(page.locator(".message.user").last()).toContainText(
       "Begin the conversation",
     );
+    await expect(page.locator(".send-status")).toHaveCount(0);
+    await expect(page.locator(".message.user")).toHaveCount(1);
+    await expect(composer).toHaveValue("");
     await expect(
       page.getByRole("button", { name: "Stop", exact: true }),
     ).toHaveCount(0);
@@ -129,7 +145,7 @@ for (const mobile of [false, true]) {
   });
 }
 
-test("failed first send restores the inline draft; accepted send stays docked before live messages arrive", async ({
+test("failed first send restores the inline draft; accepted send keeps its bubble before live messages arrive", async ({
   page,
 }) => {
   await seed(page);
@@ -163,8 +179,10 @@ test("failed first send restores the inline draft; accepted send stays docked be
     }),
   );
   await send.click();
-  await expect(send).toBeEnabled();
-  await expect(page.locator(".message")).toHaveCount(0);
+  await expect(page.locator(".send-status")).toHaveText("Sent");
+  await expect(composer).toHaveValue("");
+  await expect(page.locator(".message.user")).toHaveCount(1);
+  await expect(page.locator(".message.user")).toContainText("Preserve this first draft");
   const dock = (await page.locator(".composer-dock").boundingBox())!;
   expect(dock.y + dock.height).toBeCloseTo(page.viewportSize()!.height, 0);
 });

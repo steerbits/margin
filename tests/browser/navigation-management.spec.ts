@@ -309,9 +309,11 @@ test("Shape with me is the first-message default; choosing another skill and del
     await chatRow(page, chosen).click();
     await expect(picker).toHaveValue("test-added-skill");
     await picker.selectOption("");
-    await page
-      .getByRole("button", { name: "Reload skills", exact: true })
-      .click();
+    // Resource reloads still preserve the selection, without a composer button.
+    const reloaded = await page.request.post(`/api/sessions/${chosen}/reload`, {
+      data: {},
+    });
+    expect(reloaded.ok()).toBe(true);
     await expect(picker).toBeEnabled();
     await expect(picker).toHaveValue("");
     rmSync(original);
