@@ -28,7 +28,8 @@ import type {
 import { Store } from "./store.ts";
 import { UiBridge } from "./ui-bridge.ts";
 import { createModels, modelInfo } from "./models.ts";
-import { configureCustomCompaction, refreshCustomSessionModel } from "./custom-model-runtime.ts";
+import { configureCustomCompaction, refreshCustomSessionModel, customThinkingControl, setCustomThinkingSelection, getCustomThinkingSelection, refreshRuntimeCapabilities } from "./custom-model-runtime.ts";
+import { capabilityLevels } from "../shared/model-capabilities.ts";
 import { contentText, diffFrom, transcript } from "./transcript.ts";
 import { formatFeedback } from "./feedback.ts";
 import {
@@ -205,6 +206,14 @@ export class LiveSession implements AgentBackend {
       (manager.getEntries().length
         ? undefined
         : this.info.initialThinkingLevel);
+    const control = customThinkingControl(this.models, model);
+    if (control) {
+      const saved = this.store.get<{ model: string; level: import("../shared/settings.ts").ThinkingLevel | null }>("custom-thinking", this.info.id);
+      const choice = saved?.model === `${model.provider}/${model.id}` ? saved.level : this.info.initialThinkingLevel ?? null;
+      const resolved = choice && capabilityLevels(control).includes(choice) ? choice : null;
+      setCustomThinkingSelection(this.models, resolved);
+      this.store.put("custom-thinking", this.info.id, { model: `${model.provider}/${model.id}`, level: resolved });
+    }
     const result = await createAgentSession({
       cwd: this.project.path,
       modelRuntime: this.models,
@@ -379,7 +388,14 @@ export class LiveSession implements AgentBackend {
         controller.signal.throwIfAborted();
         if (JSON.stringify(latestModel) !== JSON.stringify(currentModel)) {
           await this.agent.setModel(latestModel);
-          this.info.model = modelInfo(this.models, latestModel);
+        }
+        this.info.model = modelInfo(this.models, latestModel);
+        const control = this.info.model.thinkingControl;
+        const selection = getCustomThinkingSelection(this.models);
+        if (control && selection && !capabilityLevels(control).includes(selection)) {
+          setCustomThinkingSelection(this.models, null);
+          this.store.put("custom-thinking", this.info.id, { model: `${latestModel.provider}/${latestModel.id}`, level: null });
+          this.ui.notify("Thinking controls changed. This conversation now uses Server default.", "info");
         }
       }
       controller.signal.throwIfAborted();
@@ -662,8 +678,10 @@ export class LiveSession implements AgentBackend {
         pluginState: this.pluginState,
         thinking: this.agent
           ? {
-              level: this.agent.thinkingLevel,
-              available: this.agent.getAvailableThinkingLevels(),
+              level: this.info.model?.thinkingControl ? getCustomThinkingSelection(this.models) ?? "server" : this.agent.thinkingLevel,
+              available: this.info.model?.thinkingControl
+                ? ["server", ...(this.info.model.thinkingControl.mode === "always" ? [] : capabilityLevels(this.info.model.thinkingControl))]
+                : this.agent.getAvailableThinkingLevels(),
             }
           : undefined,
       },
@@ -876,11 +894,14 @@ export class LiveSession implements AgentBackend {
     if (this.busy)
       throw new Error("Stop or finish the response before changing models.");
     await this.models.refresh({ allowNetwork: false });
+    await refreshRuntimeCapabilities(this.models);
     const m = (await this.models.getAvailable(provider)).find(
       (m) => m.id === id,
     );
     if (!m) throw new Error("This model is not authenticated or available.");
     this.info.model = modelInfo(this.models, m);
+    setCustomThinkingSelection(this.models, null);
+    this.store.put("custom-thinking", this.info.id, { model: `${m.provider}/${m.id}`, level: null });
     if (!this.agent) {
       this.busy = true;
       this.ready = this.initialize();
@@ -904,6 +925,15 @@ export class LiveSession implements AgentBackend {
       throw new Error(
         "Another operation has started. Try again when it finishes.",
       );
+    const control = this.info.model?.thinkingControl;
+    if (control) {
+      const selected = level === "server" ? null : capabilityLevels(control).find(candidate => candidate === level);
+      if (selected === undefined) throw new Error("This model does not support that thinking choice.");
+      setCustomThinkingSelection(this.models, selected);
+      this.store.put("custom-thinking", this.info.id, { model: `${this.agent.model!.provider}/${this.agent.model!.id}`, level: selected });
+      if (selected) this.agent.setThinkingLevel(selected, { persist: false });
+      this.persist(); this.changed(); return;
+    }
     const supported = this.agent.getAvailableThinkingLevels();
     const selected = supported.find((candidate) => candidate === level);
     if (!selected)

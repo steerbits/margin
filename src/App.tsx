@@ -56,6 +56,7 @@ import { SidebarConversations } from "./SidebarConversations.tsx";
 import { SettingsDialog } from "./SettingsDialog.tsx";
 import { ModelOptions } from "./ModelOptions.tsx";
 import { configureModelLabel, modelLabel } from "../shared/model-picker.ts";
+import { thinkingChoiceLabel, thinkingDefaultLabel } from "../shared/model-capabilities.ts";
 import { ChatCache, ChatDrafts } from "./chat-cache.ts";
 import { ChatOutbox } from "./chat-outbox.ts";
 import {
@@ -1815,10 +1816,7 @@ export function App() {
                                     >
                                       {snapshot.thinking.available.map((level) => (
                                         <option key={level} value={level}>
-                                          {level === "xhigh"
-                                            ? "Extra high"
-                                            : level.charAt(0).toUpperCase() +
-                                              level.slice(1)}
+                                          {level === "server" ? thinkingDefaultLabel(model.thinkingControl) : thinkingChoiceLabel(level, model.thinkingControl)}
                                         </option>
                                       ))}
                                     </select>

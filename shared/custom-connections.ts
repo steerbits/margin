@@ -1,3 +1,7 @@
+import type {
+  ThinkingCapability,
+  ThinkingOverride,
+} from "./model-capabilities.ts";
 export const customApiFormats = [
   { id: "openai-completions", name: "OpenAI Chat Completions" },
   { id: "openai-responses", name: "OpenAI Responses" },
@@ -19,6 +23,7 @@ export interface CustomConnectionInput {
   supportsDeveloperRole?: boolean;
   supportsReasoningEffort?: boolean;
   reasoning?: boolean;
+  thinking?: ThinkingOverride;
 }
 export interface CustomConnectionView {
   id: string;
@@ -30,10 +35,13 @@ export interface CustomConnectionView {
   contextWindow: number;
   contextSource: "server" | "manual" | "provisional";
   maxTokens: number;
+  maxTokensSource?: "automatic" | "manual";
   hasHeaders: boolean;
   supportsDeveloperRole: boolean;
   supportsReasoningEffort: boolean;
   reasoning: boolean;
+  thinking?: ThinkingOverride;
+  thinkingControl?: ThinkingCapability;
 }
 export interface DiscoveredModel {
   id: string;

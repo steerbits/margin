@@ -173,6 +173,10 @@ async function setup(page: Page, realCustom = false) {
   });
   return {
     answers,
+    accounts,
+    setModels(value: ModelInfo[]) {
+      models = value;
+    },
     connectCodex() {
       login!.status = "connected";
       login!.events = [];
@@ -232,6 +236,108 @@ test("first installation and connection picker use the existing Settings overlay
   await dialog.getByRole("button", { name: "Close dialog" }).click();
   await page.getByRole("button", { name: "Settings", exact: true }).click();
   await expect(dialog.getByText("Choose your AI provider")).toBeVisible();
+});
+
+test("all saved providers and custom servers are visible without selecting or highlighting Codex", async ({
+  page,
+}) => {
+  const state = await setup(page);
+  state.accounts.providers[0].configured =
+    state.accounts.providers[0].stored = true;
+  state.accounts.providers[1].configured =
+    state.accounts.providers[1].stored = true;
+  state.accounts.providers.push({
+    id: "deepseek",
+    name: "DeepSeek",
+    configured: true,
+    stored: true,
+    methods: [{ type: "api_key", label: "Use API key" }],
+  });
+  await page.route("**/api/custom-connections", (route) =>
+    route.fulfill({
+      json: {
+        connections: [
+          {
+            id: "margin-custom-local",
+            name: "Local model",
+            modelId: "my-model",
+          },
+        ],
+      },
+    }),
+  );
+  state.setModels([
+    {
+      provider: "openai-codex",
+      id: "codex",
+      name: "Codex",
+      subscription: true,
+      thinkingLevels: ["low", "high"],
+    },
+  ]);
+  await page.goto("/");
+  await page.getByRole("button", { name: "Settings", exact: true }).click();
+  const dialog = page.getByRole("dialog", { name: "Settings", exact: true });
+  await dialog.locator(".settings-accounts > summary").click();
+  await expect(
+    dialog.getByRole("button", { name: "Manage ChatGPT / Codex", exact: true }),
+  ).toBeVisible();
+  await expect(
+    dialog.getByRole("button", { name: "Manage OpenRouter", exact: true }),
+  ).toBeVisible();
+  await expect(
+    dialog.getByRole("button", { name: "Manage DeepSeek", exact: true }),
+  ).toBeVisible();
+  await expect(dialog.locator(".saved-custom-connection")).toContainText(
+    "Local model",
+  );
+  await expect(dialog.locator(".provider-tile.selected")).toHaveCount(0);
+  await expect(
+    dialog.getByRole("button", { name: "+ Add connection", exact: true }),
+  ).toBeVisible();
+  await capture(page, "13-all-saved-connections");
+  await dialog
+    .getByRole("button", { name: "+ Add connection", exact: true })
+    .click();
+  await expect(dialog.locator(".provider-grid")).toBeVisible();
+});
+
+test("unknown, toggle, exact-level and always-enabled thinking render distinct controls", async ({
+  page,
+}) => {
+  const state = await setup(page);
+  const controls = [
+    { mode: "server", source: "unknown", levels: [] },
+    { mode: "toggle", source: "server", levels: ["off", "medium"] },
+    { mode: "effort", source: "manual", levels: ["low", "high"] },
+    { mode: "always", source: "manual", levels: [] },
+  ] as const;
+  for (const control of controls) {
+    state.setModels([
+      {
+        id: control.mode,
+        provider: "margin-custom-test",
+        name: control.mode,
+        subscription: false,
+        thinkingLevels: [...control.levels],
+        thinkingControl: { mode: control.mode, source: control.source },
+      },
+    ]);
+    await page.goto("/");
+    await page.getByRole("button", { name: "Settings", exact: true }).click();
+    const dialog = page.getByRole("dialog", { name: "Settings", exact: true });
+    const thinking = dialog.getByLabel("Thinking effort", { exact: true });
+    const expected =
+      control.mode === "server"
+        ? ["Server default"]
+        : control.mode === "toggle"
+          ? ["Server default", "Off", "On"]
+          : control.mode === "effort"
+            ? ["Server default", "Low", "High"]
+            : ["Always enabled"];
+    await expect(thinking.locator("option")).toHaveText(expected);
+    await dialog.getByRole("button", { name: "Close", exact: true }).click();
+  }
 });
 
 test("OpenRouter API key entry, invalid key recovery and model refresh", async ({
@@ -390,7 +496,7 @@ test("custom test-and-save reaches a real HTTP server, persists, refreshes model
     dialog.getByText(/Reply received and connection saved/),
   ).toBeVisible();
   expect(received.at(-1)?.authorization).toBeUndefined();
-  expect(received.at(-1)?.body.max_completion_tokens).toBe(64);
+  expect(received.at(-1)?.body.max_completion_tokens).toBe(1024);
   await expect(
     dialog.getByLabel("Default model").locator("option"),
   ).toContainText(["local-coder"]);
@@ -421,4 +527,28 @@ test("custom test-and-save reaches a real HTTP server, persists, refreshes model
     .getByRole("button", { name: "Remove connection", exact: true })
     .click();
   await expect(dialog.locator(".saved-custom-connection")).toHaveCount(0);
+});
+
+test("changing API format resets an incompatible thinking transport to automatic detection", async ({
+  page,
+}) => {
+  await setup(page);
+  const dialog = await openConnections(page);
+  await dialog.getByRole("button", { name: /Add custom connection/ }).click();
+  await dialog.locator(".connection-advanced > summary").click();
+  await dialog
+    .getByLabel("Thinking controls", { exact: true })
+    .selectOption("toggle");
+  await dialog
+    .getByLabel("Thinking API", { exact: true })
+    .selectOption("llama-cpp");
+  await dialog
+    .getByLabel("API format", { exact: true })
+    .selectOption("google-generative-ai");
+  await expect(
+    dialog.getByLabel("Thinking controls", { exact: true }),
+  ).toHaveValue("auto");
+  await expect(dialog.getByLabel("Thinking API", { exact: true })).toHaveCount(
+    0,
+  );
 });

@@ -9,7 +9,11 @@ import {
   type CredentialStore,
 } from "@earendil-works/pi-ai";
 import type { ModelConnectionSource, ModelInfo } from "../shared/types.ts";
-import { installCustomModelSupport } from "./custom-model-runtime.ts";
+import {
+  loadCustomModelSupport,
+  customThinkingControl,
+} from "./custom-model-runtime.ts";
+import { capabilityLevels } from "../shared/model-capabilities.ts";
 
 // Optional mode for hosts that allow reading Pi credentials but cannot acquire its write lock.
 // No credential copies are persisted. Expired credentials must be refreshed by Pi externally.
@@ -34,7 +38,7 @@ export function readOnlyCredentials(authPath: string): CredentialStore {
   };
 }
 export async function createModels(dataDir: string, signal?: AbortSignal) {
-  return installCustomModelSupport(
+  return loadCustomModelSupport(
     await ModelRuntime.create({
       signal,
       modelsStorePath: join(dataDir, "models-store.json"),
@@ -42,6 +46,7 @@ export async function createModels(dataDir: string, signal?: AbortSignal) {
         ? { credentials: readOnlyCredentials(join(getAgentDir(), "auth.json")) }
         : {}),
     }),
+    join(getAgentDir(), "models.json"),
   );
 }
 export function modelConnectionSource(
@@ -55,13 +60,17 @@ export function modelConnectionSource(
   return "custom";
 }
 export function modelInfo(runtime: ModelRuntime, model: Model<Api>): ModelInfo {
+  const control = customThinkingControl(runtime, model);
   return {
     ...modelFields(model),
     backend: "pi",
     providerName: runtime.getProvider(model.provider)?.name,
     connectionSource: modelConnectionSource(runtime, model.provider),
     subscription: runtime.isUsingSubscription(model.provider),
-    thinkingLevels: getSupportedThinkingLevels(model),
+    thinkingLevels: control
+      ? capabilityLevels(control)
+      : getSupportedThinkingLevels(model),
+    ...(control ? { thinkingControl: control } : {}),
   };
 }
 function modelFields(m: { id: string; provider: string; name: string }) {

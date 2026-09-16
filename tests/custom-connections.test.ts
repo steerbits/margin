@@ -16,7 +16,7 @@ import { InMemoryCredentialStore } from "@earendil-works/pi-ai";
 import { listModels } from "../server/models.ts";
 import type { CustomConnectionInput } from "../shared/custom-connections.ts";
 
-function completion(model = "local-coder") {
+function completion(model = "local-coder", thinkingOnly = false) {
   const events = [
     {
       id: "test",
@@ -25,7 +25,9 @@ function completion(model = "local-coder") {
       choices: [
         {
           index: 0,
-          delta: { role: "assistant", content: "OK" },
+          delta: thinkingOnly
+            ? { role: "assistant", reasoning_content: "Working on it" }
+            : { role: "assistant", content: "OK" },
           finish_reason: null,
         },
       ],
@@ -34,7 +36,13 @@ function completion(model = "local-coder") {
       id: "test",
       object: "chat.completion.chunk",
       model,
-      choices: [{ index: 0, delta: {}, finish_reason: "stop" }],
+      choices: [
+        {
+          index: 0,
+          delta: {},
+          finish_reason: thinkingOnly ? "length" : "stop",
+        },
+      ],
       usage: { prompt_tokens: 12, completion_tokens: 1, total_tokens: 13 },
     },
   ];
@@ -51,6 +59,8 @@ async function fixture(
     error?: number;
     context?: number;
     unknownContext?: boolean;
+    thinkingOnly?: boolean;
+    outputLimit?: number;
   } = {},
 ) {
   const dir = await mkdtemp(join(tmpdir(), "margin-custom-test-"));
@@ -77,6 +87,7 @@ async function fixture(
             id: "local-coder",
             owned_by: options.unknownContext ? "custom" : "llamacpp",
             meta: { n_ctx_train: 262144 },
+            max_output_tokens: options.outputLimit,
           },
         ],
       });
@@ -90,7 +101,7 @@ async function fixture(
         { error: { message: "fixture-secret DO NOT EXPOSE upstream error" } },
         { status: options.error },
       );
-    return completion();
+    return completion("local-coder", options.thinkingOnly);
   };
   const service = new CustomConnections(dir, false, fetcher);
   const input: CustomConnectionInput = {
@@ -127,7 +138,7 @@ test("custom no-auth connection discovers active 4K context, performs inference,
     );
     assert.equal(
       request.body.max_completion_tokens,
-      64,
+      1024,
       "Pi's fixed 4K reserve must not reduce this to one token",
     );
     assert.equal((await stat(join(f.dir, "models.json"))).mode & 0o777, 0o600);
@@ -196,6 +207,42 @@ test("manual model entry works without discovery and exposes provisional context
     const explicit = await f.service.save({ ...f.input, contextWindow: 6000 });
     assert.equal(explicit.connection.contextWindow, 6000);
     assert.equal(explicit.connection.contextSource, "manual");
+  } finally {
+    await f.close();
+  }
+});
+
+test("reported output limits constrain automatic budgets without turning them into manual overrides", async () => {
+  const f = await fixture({ outputLimit: 128 });
+  try {
+    const saved = await f.service.save(f.input);
+    assert.equal(saved.connection.maxTokens, 128);
+    assert.equal(saved.connection.maxTokensSource, "automatic");
+    assert.equal(
+      f.requests.find((request) => request.body)!.body.max_completion_tokens,
+      128,
+    );
+    await assert.rejects(
+      f.service.save({ ...f.input, maxTokens: 1024 }),
+      /exceeds the limit/,
+    );
+  } finally {
+    await f.close();
+  }
+});
+
+test("a server-default reasoning response that exhausts its budget gets actionable recovery without disabling thinking", async () => {
+  const f = await fixture({ thinkingOnly: true });
+  try {
+    await assert.rejects(
+      f.service.save(f.input),
+      /used the test budget on thinking/,
+    );
+    const body = f.requests.find((request) => request.body)!.body;
+    assert.equal(body.max_completion_tokens, 1024);
+    assert.equal(body.reasoning_effort, undefined);
+    assert.equal(body.chat_template_kwargs?.enable_thinking, undefined);
+    assert.equal((await f.service.list()).connections.length, 0);
   } finally {
     await f.close();
   }
@@ -307,7 +354,7 @@ test("saved reasoning/compatibility and explicit reply limits roundtrip; no-auth
   try {
     const result = await f.service.save({
       ...f.input,
-      reasoning: true,
+      thinking: { mode: "effort", levels: ["off", "low", "high"] },
       supportsDeveloperRole: true,
       supportsReasoningEffort: true,
       maxTokens: 2000,
@@ -551,11 +598,11 @@ test("Responses, Anthropic and Google custom API formats complete a real HTTP pr
       assert.equal(result.connection.api, api);
     }
     assert.equal(requests[0].headers.authorization, "Bearer fixture-secret");
-    assert.equal(requests[0].body.max_output_tokens, 64);
+    assert.equal(requests[0].body.max_output_tokens, 1024);
     assert.equal(requests[1].headers["x-api-key"], "fixture-secret");
-    assert.equal(requests[1].body.max_tokens, 64);
+    assert.equal(requests[1].body.max_tokens, 1024);
     assert.equal(requests[2].headers["x-goog-api-key"], "fixture-secret");
-    assert.equal(requests[2].body.generationConfig.maxOutputTokens, 64);
+    assert.equal(requests[2].body.generationConfig.maxOutputTokens, 1024);
   } finally {
     server.closeAllConnections();
     await new Promise<void>((resolve) => server.close(() => resolve()));

@@ -178,11 +178,13 @@ async function openSettings(page: Page) {
       .evaluate((el) => (el as HTMLDetailsElement).open))
   )
     await dialog.locator(".settings-accounts > summary").click();
+  const add = dialog.getByRole("button", { name: "+ Add connection", exact: true });
+  if (await add.isVisible()) await add.click();
   await dialog.locator(".provider-browse > summary").click();
   return dialog;
 }
 
-test("Grok device sign-in works in Settings on mobile, refreshes models, and does not save default edits", async ({
+test("Grok device sign-in works in Settings on mobile, refreshes models, and autosaves default edits independently", async ({
   page,
 }) => {
   const view = fixture();
@@ -215,8 +217,8 @@ test("Grok device sign-in works in Settings on mobile, refreshes models, and doe
     .click();
   await expect(dialog.getByText("ABCD-EFGH")).toBeVisible();
   await expect(
-    dialog.getByRole("button", { name: "Save", exact: true }),
-  ).toBeDisabled();
+    dialog.getByRole("button", { name: "Close", exact: true }),
+  ).toBeEnabled();
   await expect(
     dialog.getByRole("link", { name: "Open verification page" }),
   ).toHaveAttribute("href", "https://auth.x.ai/activate");
@@ -247,8 +249,8 @@ test("Grok device sign-in works in Settings on mobile, refreshes models, and doe
   await dialog
     .getByLabel("Default model")
     .selectOption({ label: "Anthropic • Claude fixture (extra usage)" });
-  await dialog.getByRole("button", { name: "Cancel", exact: true }).click();
-  expect(saves).toBe(0);
+  await dialog.getByRole("button", { name: "Close", exact: true }).click();
+  expect(saves).toBe(1);
   expect(state.cancelled).toBe(0);
 });
 
@@ -257,6 +259,7 @@ test("browser fallback, errors, secret entry, shared logout confirmation and clo
 }) => {
   const state = await mockAccounts(page, fixture());
   const dialog = await openSettings(page);
+  await dialog.getByLabel("Provider", { exact: true }).selectOption("openai-codex");
   await dialog.getByRole("button", { name: "Sign in with OpenAI" }).click();
   await dialog.getByLabel("Select login method").selectOption("browser");
   await dialog.getByRole("button", { name: "Continue", exact: true }).click();
@@ -368,5 +371,5 @@ test("real native host exposes read-only account status and rejects credential m
   });
   expect(res.status()).toBe(400);
   expect(await res.text()).toContain("MARGIN_AUTH_READ_ONLY");
-  await dialog.getByRole("button", { name: "Cancel", exact: true }).click();
+  await dialog.getByRole("button", { name: "Close", exact: true }).click();
 });

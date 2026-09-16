@@ -184,8 +184,48 @@
 }
 .provider-tile:hover:not(:disabled),
 .provider-tile.selected {
-  background: #f7f8f5;
-  border-color: #7b8877;
+  background: #f6f6f6;
+  border-color: #777;
+}
+.saved-provider-connection {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 13px 0;
+  border-bottom: 1px solid var(--line);
+}
+.saved-provider-connection > div {
+  flex: 1;
+  min-width: 0;
+}
+.saved-provider-connection strong {
+  font-size: 13px;
+}
+.saved-provider-connection span {
+  display: block;
+  color: var(--muted);
+  font-size: 12px;
+  margin-top: 3px;
+}
+.saved-provider-connection button,
+.add-connection,
+.settings-error button {
+  padding: 7px 12px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: white;
+  font: inherit;
+  font-size: 12px;
+}
+.add-connection {
+  margin: 15px 0 0;
+}
+.settings-save-state {
+  color: var(--muted);
+  font-size: 12px !important;
+}
+.settings-error button {
+  margin-right: 8px;
 }
 .provider-browse summary,
 .connection-advanced summary {

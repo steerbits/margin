@@ -4,9 +4,9 @@
 
 1. Install and launch Margin normally (`npm ci --ignore-scripts`, `npm run build`, `npm start`; Node 22.13+ and cco are required).
 2. Open the connection link printed in Terminal. This authorizes your browser to use your local Margin server; it is separate from provider sign-in.
-3. On a fresh installation, choose **Connect an AI provider**. Later, open the gear → **AI connections**. Both open the same Settings overlay. Choose a featured provider or expand **Browse all providers**.
+3. On a fresh installation, choose **Connect an AI provider**. Later, open the gear → **AI connections**. Both open the same Settings overlay. All configured providers and custom servers appear under **Saved connections**. Choose **Add connection** to see featured providers or **Browse all providers**. Nothing is selected automatically, and selection uses a neutral outline.
 4. Follow Pi's prompts. For browser authorization, click **Open sign-in page**, authorize on the provider's site, and return to Margin. If the callback cannot reach this machine, paste the final redirect URL/code in the fallback field. For device login, open the verification page and enter the displayed code; Margin checks completion automatically.
-5. After credentials are saved, models refresh automatically. Pick a default model and thinking effort, then **Save**. Start a conversation.
+5. After credentials are saved, models refresh automatically. Pick a default model and thinking effort; changes autosave. **Close** dismisses Settings after pending saves finish. Start a conversation.
 
 Margin uses private Pi storage for this installation. Use Settings to sign in, or run the bundled Pi CLI with npm run pi; a separate global terminal Pi login is not reused automatically. Other people installing Margin connect **their own accounts**; credentials are not bundled with Margin or stored in Git.
 
@@ -16,13 +16,31 @@ Choose **Add custom connection** inside AI connections. Select an API format, en
 
 **Find models** is optional. Choose a discovered model or enter its exact ID manually when the server does not expose a catalog. **Test & save** sends a small inference request and saves only after a usable reply; provider usage charges may apply. Invalid credentials, unavailable models and connection failures leave the form editable and do not create a saved connection. Closing the dialog or cancelling aborts an unfinished check.
 
-Connections receive a name from their server hostname. **Edit → Advanced** can rename one, override its context/reply limits, enter literal custom headers, and configure reasoning compatibility. API keys and header values are not returned to the browser when editing: a blank key preserves the saved key only for the same authenticated endpoint and API format. Switching from no-auth to API-key requires a new key. Blank headers preserve saved headers on the same endpoint; `{}` removes them.
+Connections receive a name from their server hostname. **Edit → Advanced** can rename one, override its context/reply limits, enter literal custom headers, and override thinking capabilities when automatic discovery is unavailable. API keys and header values are not returned to the browser when editing: a blank key preserves the saved key only for the same authenticated endpoint and API format. Switching from no-auth to API-key requires a new key. Blank headers preserve saved headers on the same endpoint; `{}` removes them.
 
 Custom entries, keys, and headers live in `.margin-data/pi/models.json`, written atomically with owner-only permissions. Keys/header values must be literals; web input cannot execute Pi shell commands or interpolate environment variables. Unrelated provider entries are retained. Existing Pi line comments/trailing commas are accepted and normalized to JSON when saving. No-auth connections use an internal placeholder for Pi availability; it is removed from outgoing authentication headers. Google uses its native SDK transport; other custom transports reject redirects.
 
 Margin uses a server-reported context limit where available. For llama.cpp it reads the active context from `/props`, never the larger training maximum. Unknown limits use an explicitly described **provisional 16K budget**, which is not a guarantee of capacity; Advanced provides an override. Detection is performed when testing/saving, so retest after changing a server's context configuration. Small custom contexts receive proportional reply headroom and session-local compaction thresholds, avoiding Pi 0.85.1's fixed 4K-reserve behavior without modifying the SDK or global settings.
 
-Connection edits and removals take effect in existing chats before their next user turn; an active response is not retargeted. Removed connections remain visibly unavailable until another model is chosen. Account changes save immediately; the Settings **Save** button separately applies conversation defaults.
+Connection edits and removals take effect in existing chats before their next user turn; an active response is not retargeted. Removed connections remain visibly unavailable until another model is chosen. Account setup saves when completed. Conversation-default changes autosave; **Close** waits for pending saves. Errors retain the latest choices and offer **Retry saving** or **Close without retrying**. Only acknowledged saves show **Saved**.
+
+## Thinking capabilities
+
+Custom models default to **Server default**, not Off. An unknown capability is different from unsupported thinking. Server default sends no optional thinking override, leaving the server in control.
+
+- **Unknown / server managed:** one Server default state.
+- **Unsupported:** one Not supported state.
+- **Toggle:** Server default, Off, and On.
+- **Effort levels:** Server default plus only the declared levels.
+- **Always enabled:** one fixed Always enabled state.
+
+Automatic discovery uses exact catalog models on recognized provider endpoints, explicit server capability declarations, and llama.cpp templates that expose the standard `enable_thinking` toggle. A familiar model name, an OpenAI-compatible protocol, a generic reasoning boolean, or a successful text reply does not establish control support. Catalog models retain the SDK's native API mappings, including budget-based Claude/Gemini models. Context and output limits use reported values where available.
+
+Under **Edit → Advanced → Thinking controls**, an administrator can choose a mode and its documented supported levels. OpenAI-compatible servers can additionally select their reasoning transport (standard API, OpenRouter, chat-template, or llama.cpp). These are explicit overrides, not automatic capability verification. Changing API format resets the thinking override to automatic detection. Legacy boolean-only custom configurations remain server-managed until retested or explicitly configured.
+
+Per-chat custom choices persist independently of conversation defaults. If a capability change makes a saved choice invalid, Margin resets it to Server default, records that reset, and notifies the current chat when refreshed. Stopping a server does not remove its saved connection or switch models; the next request reports the connection error through the existing retry/recovery flow.
+
+The connection test preserves server-default thinking and allows up to 2048 output tokens within the configured reply limit. If thinking consumes that budget without a visible answer, the form explains how to adjust the reply budget/server defaults and does not silently turn thinking off.
 
 ## Model pickers
 
@@ -60,7 +78,7 @@ Provider behavior is delegated to Pi. For example, its Copilot login can enable 
 ## Storage and account changes
 
 - Pi owns token exchange, credential-file locking, persistence and OAuth refresh. Credentials normally live in `.margin-data/pi/auth.json`, created by Pi with owner-only permissions. The launcher sets `PI_CODING_AGENT_DIR` to the configured Margin data directory’s `pi/` child.
-- Account actions save **immediately**, separately from Margin's conversation-default Save/Cancel. Reconnecting replaces that provider's one saved credential. Removing a login requires confirmation and removes it from this installation’s Pi CLI too; this is local credential removal, not provider-side token revocation.
+- Account actions save when completed. Conversation defaults also autosave when changed; no second Save is required. Reconnecting replaces that provider's one saved credential. Removing a login requires confirmation and removes it from this installation’s Pi CLI too; this is local credential removal, not provider-side token revocation.
 - Existing chats retain their selected model. Subsequent requests can use changed credentials or fail after removal. Environment variables and externally configured credentials may still provide access after removing the saved login.
 - Access/refresh tokens are never returned to the browser or copied into Margin's database. API keys and pasted codes travel from the browser to the authenticated local server for submission, but are not kept in localStorage, sessionStorage or chat history. Login links and device user codes are necessarily visible while signing in.
 - Settings accepts literal API keys. Pi's advanced shell-command/environment key expressions remain a Terminal/config-file setup, not an executable web input.

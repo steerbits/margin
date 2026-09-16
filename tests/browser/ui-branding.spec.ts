@@ -69,7 +69,7 @@ for (const width of [1440, 390]) {
       settings.getByLabel("Thinking effort").locator('option[value=""]'),
     ).toHaveText("Automatic");
     await expect(settings).not.toContainText(/\bpi\b/i);
-    await settings.getByRole("button", { name: "Cancel", exact: true }).click();
+    await settings.getByRole("button", { name: "Close", exact: true }).click();
 
     const showSidebar = page.getByRole("button", {
       name: "Show sidebar",

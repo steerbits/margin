@@ -16,6 +16,16 @@ import {
   type ConnectionDiscovery,
 } from "../shared/custom-connections.ts";
 import { installCustomModelSupport } from "./custom-model-runtime.ts";
+import {
+  thinkingOverrideSchema,
+  resolveThinking,
+  thinkingModelFields,
+} from "./model-capabilities.ts";
+import {
+  serverThinking,
+  type ThinkingCapability,
+  type ThinkingOverride,
+} from "../shared/model-capabilities.ts";
 
 class ConnectionError extends Error {}
 const literal = z
@@ -55,6 +65,7 @@ const inputSchema = z
     supportsDeveloperRole: z.boolean().optional(),
     supportsReasoningEffort: z.boolean().optional(),
     reasoning: z.boolean().optional(),
+    thinking: thinkingOverrideSchema.optional(),
   })
   .strict();
 type StoredProvider = {
@@ -70,11 +81,15 @@ type StoredProvider = {
     contextWindow: number;
     maxTokens: number;
     reasoning: boolean;
+    thinkingLevelMap?: Record<string, string | null>;
   }[];
   margin: {
     version: 1;
     authentication: "none" | "api_key";
     contextSource: CustomConnectionView["contextSource"];
+    thinking?: ThinkingOverride;
+    thinkingControl?: ThinkingCapability;
+    maxTokensSource?: "automatic" | "manual";
   };
 };
 type Config = {
@@ -112,11 +127,14 @@ function safeView(id: string, p: StoredProvider): CustomConnectionView {
     modelId: p.models[0].id,
     contextWindow: p.models[0].contextWindow,
     maxTokens: p.models[0].maxTokens,
+    maxTokensSource: p.margin.maxTokensSource ?? "manual",
     contextSource: p.margin.contextSource,
     hasHeaders: !!Object.keys(p.headers ?? {}).length,
     supportsDeveloperRole: p.compat?.supportsDeveloperRole ?? false,
     supportsReasoningEffort: p.compat?.supportsReasoningEffort ?? false,
     reasoning: p.models[0].reasoning,
+    thinking: p.margin.thinking ?? { mode: "auto" },
+    thinkingControl: p.margin.thinkingControl ?? serverThinking(),
   };
 }
 function headersFor(input: CustomConnectionInput): Record<string, string> {
@@ -332,43 +350,61 @@ export class CustomConnections {
       };
     }
   }
-  private async context(
-    input: CustomConnectionInput,
-    signal: AbortSignal,
-  ): Promise<{ size: number; source: CustomConnectionView["contextSource"] }> {
-    if (input.contextWindow)
-      return { size: input.contextWindow, source: "manual" };
+  private async context(input: CustomConnectionInput, signal: AbortSignal) {
+    let metadata: any;
+    let props: any;
+    let detected: number | undefined;
     try {
       const data = await this.json(`${input.baseUrl}/models`, input, signal);
       const models =
         input.api === "google-generative-ai" ? data.models : data.data;
-      const model = models?.find(
+      metadata = models?.find(
         (m: any) =>
           (m.id ?? m.name?.replace(/^models\//, "")) === input.modelId,
       );
-      // llama.cpp's training maximum isn't its active server limit.
-      if (model?.owned_by === "llamacpp") {
+      if (metadata?.owned_by === "llamacpp") {
         const endpoint = new URL(input.baseUrl);
         endpoint.pathname =
           endpoint.pathname.replace(/\/v1\/?$/, "") + "/props";
         endpoint.searchParams.set("model", input.modelId);
         endpoint.searchParams.set("autoload", "false");
-        const props = await this.json(endpoint.href, input, signal);
-        const size = props.default_generation_settings?.n_ctx;
-        if (Number.isInteger(size) && size >= 512 && size <= 10_000_000)
-          return { size, source: "server" };
-      } else {
-        const size =
-          model?.context_length ??
-          model?.contextWindow ??
-          model?.inputTokenLimit;
-        if (Number.isInteger(size) && size >= 512 && size <= 10_000_000)
-          return { size, source: "server" };
-      }
+        props = await this.json(endpoint.href, input, signal);
+        detected = props.default_generation_settings?.n_ctx;
+      } else
+        detected =
+          metadata?.context_length ??
+          metadata?.contextWindow ??
+          metadata?.inputTokenLimit;
     } catch {
-      /* Optional metadata; inference is still tested below. */
+      /* Metadata is optional; unknown never means unsupported. */
     }
-    return { size: 16384, source: "provisional" };
+    const validLimit = (value: unknown): value is number =>
+      Number.isInteger(value) &&
+      Number(value) >= 512 &&
+      Number(value) <= 10_000_000;
+    const output =
+      metadata?.outputTokenLimit ??
+      metadata?.max_output_tokens ??
+      metadata?.top_provider?.max_completion_tokens;
+    let thinkingControl: ThinkingCapability;
+    try {
+      thinkingControl = resolveThinking(input, metadata, props);
+    } catch (error) {
+      throw new ConnectionError((error as Error).message);
+    }
+    return {
+      size: input.contextWindow ?? (validLimit(detected) ? detected : 16384),
+      source: (input.contextWindow
+        ? "manual"
+        : validLimit(detected)
+          ? "server"
+          : "provisional") as CustomConnectionView["contextSource"],
+      thinkingControl,
+      outputLimit:
+        Number.isInteger(output) && output >= 32 && output <= 1_000_000
+          ? Number(output)
+          : undefined,
+    };
   }
   async save(value: unknown, signal = AbortSignal.timeout(60_000)) {
     this.writable();
@@ -386,9 +422,21 @@ export class CustomConnections {
       throw new ConnectionError(
         "Maximum reply tokens must be smaller than the server's context size.",
       );
+    if (
+      input.maxTokens &&
+      context.outputLimit &&
+      input.maxTokens > context.outputLimit
+    )
+      throw new ConnectionError(
+        "Maximum reply tokens exceeds the limit reported by this model.",
+      );
     const maxTokens =
       input.maxTokens ??
-      Math.min(2048, Math.max(32, Math.floor(context.size / 4)));
+      Math.min(
+        context.outputLimit ?? 2048,
+        2048,
+        Math.max(32, Math.floor(context.size / 4)),
+      );
     const provider: StoredProvider = {
       name,
       api: input.api,
@@ -406,13 +454,16 @@ export class CustomConnections {
           name: input.modelId,
           contextWindow: context.size,
           maxTokens,
-          reasoning: input.reasoning ?? false,
+          ...thinkingModelFields(context.thinkingControl),
         },
       ],
       margin: {
         version: 1,
         authentication: input.authentication,
         contextSource: context.source,
+        thinking: input.thinking ?? { mode: "auto" },
+        thinkingControl: context.thinkingControl,
+        maxTokensSource: input.maxTokens === undefined ? "automatic" : "manual",
       },
     };
     const dir = await mkdtemp(join(tmpdir(), "margin-connection-test-"));
@@ -430,6 +481,7 @@ export class CustomConnections {
           allowModelNetwork: false,
           signal,
         }),
+        { [id]: context.thinkingControl },
       );
       const model = runtime.getModel(id, input.modelId);
       if (!model || runtime.getError())
@@ -449,7 +501,7 @@ export class CustomConnections {
             ],
           },
           {
-            maxTokens: 64,
+            maxTokens: Math.min(2048, model.maxTokens),
             signal,
             fetch: this.fetcher,
             timeoutMs: 45_000,
@@ -467,6 +519,17 @@ export class CustomConnections {
         result.stopReason === "aborted" ||
         !text
       ) {
+        if (
+          !text &&
+          result.stopReason === "length" &&
+          (result.content.some((block) => block.type === "thinking") ||
+            (result.usage.reasoning ?? 0) > 0)
+        )
+          throw new ConnectionError(
+            model.maxTokens < 2048
+              ? "The server responded but used the test budget on thinking. Increase Maximum reply tokens in Advanced, then retry. Nothing was saved."
+              : "The server used the 2048-token test budget on thinking without finishing a reply. Adjust its thinking defaults and retry. Nothing was saved.",
+          );
         const message = result.errorMessage ?? "";
         if (/401|403|unauthoriz|authentication|api.?key/i.test(message))
           throw new ConnectionError(

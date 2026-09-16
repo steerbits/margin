@@ -37,6 +37,8 @@ export function ProviderAccountsPanel({
   const [confirmRemove, setConfirmRemove] = useState(false);
   const [customBusy, setCustomBusy] = useState(false);
   const [customEditing, setCustomEditing] = useState(false);
+  const [adding, setAdding] = useState(false);
+  const [customCount, setCustomCount] = useState<number | null>(null);
   const mounted = useRef(false);
   const currentLogin = useRef(login);
   currentLogin.current = login;
@@ -54,6 +56,10 @@ export function ProviderAccountsPanel({
   const accountBusy = acting || loginPending(login);
   const busy = accountBusy || customBusy;
   const provider = accounts?.providers.find((p) => p.id === selected);
+  const savedProviders =
+    accounts?.providers.filter((p) => p.stored || p.configured) ?? [];
+  const catalogVisible =
+    adding || (savedProviders.length === 0 && customCount === 0);
   const filtered =
     accounts?.providers.filter((p) =>
       `${p.name} ${p.id}`.toLowerCase().includes(query.toLowerCase()),
@@ -68,10 +74,7 @@ export function ProviderAccountsPanel({
     setAccounts(view);
     setSelected(
       (id) =>
-        id ||
-        view.login?.providerId ||
-        view.providers.find((p) => p.configured)?.id ||
-        "",
+        id || (loginPending(view.login) ? view.login?.providerId : "") || "",
     );
     if (adoptLogin && loginPending(view.login)) {
       currentLogin.current = view.login;
@@ -193,7 +196,11 @@ export function ProviderAccountsPanel({
     >
       <div className="settings-section-heading">
         <h3 id="provider-accounts-heading">
-          {customEditing ? "Connect your server" : "Choose your AI provider"}
+          {customEditing
+            ? "Connect your server"
+            : catalogVisible
+              ? "Choose your AI provider"
+              : "Saved connections"}
         </h3>
         <button
           type="button"
@@ -210,9 +217,9 @@ export function ProviderAccountsPanel({
         </button>
       </div>
       <p className="settings-description">
-        Connect an account you already use, bring an API key, or add your own
-        server. Connections are saved privately in Margin and work across your
-        workspaces.
+        Connections are saved privately in Margin and work across your
+        workspaces. Saved means configured; server availability is checked when
+        you send a message.
       </p>
       {loading && <p>Loading provider accounts…</p>}
       {accounts?.readOnly && (
@@ -223,24 +230,27 @@ export function ProviderAccountsPanel({
       )}
       {accounts && !customEditing && (
         <>
-          <div className="provider-grid">
-            {accounts.providers
-              .filter((p) =>
-                ["openai-codex", "openrouter", "anthropic", "google"].includes(
-                  p.id,
-                ),
-              )
-              .map((p) => (
+          <div
+            className="saved-provider-connections"
+            aria-label="Saved provider connections"
+          >
+            {savedProviders.map((p) => (
+              <div className="saved-provider-connection" key={p.id}>
+                <CheckCircle2 size={17} aria-hidden="true" />
+                <div>
+                  <strong>{p.name}</strong>
+                  <span>
+                    {p.statusError
+                      ? "Saved · status unavailable"
+                      : p.stored
+                        ? "Saved"
+                        : "Configured externally"}
+                  </span>
+                </div>
                 <button
                   type="button"
-                  key={p.id}
-                  className={
-                    selected === p.id
-                      ? "provider-tile selected"
-                      : "provider-tile"
-                  }
                   disabled={busy}
-                  aria-pressed={selected === p.id}
+                  aria-label={`Manage ${p.name}`}
                   onClick={() => {
                     setSelected(p.id);
                     setQuery("");
@@ -250,81 +260,122 @@ export function ProviderAccountsPanel({
                     setConfirmRemove(false);
                   }}
                 >
-                  <span className="provider-tile-top">
-                    <strong>{p.name}</strong>
-                    {p.configured ? (
-                      <CheckCircle2 size={16} />
-                    ) : (
-                      <ArrowUpRight size={16} />
-                    )}
-                  </span>
-                  <span>
-                    {p.configured
-                      ? "Connected"
-                      : p.id === "openai-codex"
-                        ? "Use your ChatGPT subscription"
-                        : p.id === "google"
-                          ? "Connect a Gemini API key"
-                          : "Sign in or use an API key"}
-                  </span>
+                  Manage
                 </button>
-              ))}
+              </div>
+            ))}
           </div>
-          <details className="provider-browse">
-            <summary>Browse all providers</summary>
-            <label className="account-label">
-              Find a provider
-              <input
-                type="search"
-                value={query}
-                placeholder="Search providers, e.g. Grok or Gemini"
-                disabled={busy}
-                onChange={(e) => {
-                  const value = e.target.value;
-                  setQuery(value);
-                  const match = accounts.providers.find((p) =>
-                    `${p.name} ${p.id}`
-                      .toLowerCase()
-                      .includes(value.toLowerCase()),
-                  );
-                  if (
-                    match &&
-                    !`${provider?.name} ${provider?.id}`
-                      .toLowerCase()
-                      .includes(value.toLowerCase())
+          {catalogVisible && (
+            <>
+              <div className="provider-grid">
+                {accounts.providers
+                  .filter((p) =>
+                    [
+                      "openai-codex",
+                      "openrouter",
+                      "anthropic",
+                      "google",
+                    ].includes(p.id),
                   )
-                    setSelected(match.id);
-                  setConfirmRemove(false);
-                }}
-              />
-            </label>
-            <label className="account-label">
-              Provider
-              <select
-                aria-label="Provider"
-                value={filtered.some((p) => p.id === selected) ? selected : ""}
-                disabled={busy || !filtered.length}
-                onChange={(e) => {
-                  setSelected(e.target.value);
-                  setConfirmRemove(false);
-                  setLogin(undefined);
-                  setError("");
-                  setNotice("");
-                }}
-              >
-                <option value="">Choose a provider</option>
-                {!filtered.length && (
-                  <option value="">No matching providers</option>
-                )}
-                {filtered.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.name}
-                    {p.configured ? " · configured" : ""}
-                  </option>
-                ))}
-              </select>
-            </label>
-          </details>
+                  .map((p) => (
+                    <button
+                      type="button"
+                      key={p.id}
+                      className={
+                        selected === p.id
+                          ? "provider-tile selected"
+                          : "provider-tile"
+                      }
+                      disabled={busy}
+                      aria-pressed={selected === p.id}
+                      onClick={() => {
+                        setSelected(p.id);
+                        setQuery("");
+                        setLogin(undefined);
+                        setError("");
+                        setNotice("");
+                        setConfirmRemove(false);
+                      }}
+                    >
+                      <span className="provider-tile-top">
+                        <strong>{p.name}</strong>
+                        {p.configured ? (
+                          <CheckCircle2 size={16} />
+                        ) : (
+                          <ArrowUpRight size={16} />
+                        )}
+                      </span>
+                      <span>
+                        {p.configured
+                          ? "Saved"
+                          : p.id === "openai-codex"
+                            ? "Use your ChatGPT subscription"
+                            : p.id === "google"
+                              ? "Connect a Gemini API key"
+                              : "Sign in or use an API key"}
+                      </span>
+                    </button>
+                  ))}
+              </div>
+              <details className="provider-browse">
+                <summary>Browse all providers</summary>
+                <label className="account-label">
+                  Find a provider
+                  <input
+                    type="search"
+                    value={query}
+                    placeholder="Search providers, e.g. Grok or Gemini"
+                    disabled={busy}
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      setQuery(value);
+                      const match = accounts.providers.find((p) =>
+                        `${p.name} ${p.id}`
+                          .toLowerCase()
+                          .includes(value.toLowerCase()),
+                      );
+                      if (
+                        match &&
+                        !`${provider?.name} ${provider?.id}`
+                          .toLowerCase()
+                          .includes(value.toLowerCase())
+                      )
+                        setSelected(match.id);
+                      setConfirmRemove(false);
+                    }}
+                  />
+                </label>
+                <label className="account-label">
+                  Provider
+                  <select
+                    aria-label="Provider"
+                    value={
+                      filtered.some((p) => p.id === selected) ? selected : ""
+                    }
+                    disabled={busy || !filtered.length}
+                    onChange={(e) => {
+                      setSelected(e.target.value);
+                      setConfirmRemove(false);
+                      setLogin(undefined);
+                      setError("");
+                      setNotice("");
+                    }}
+                  >
+                    <option value="">Choose a provider</option>
+                    {!filtered.length && (
+                      <option value="">No matching providers</option>
+                    )}
+                    {filtered.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.name}
+                        {p.configured ? " · configured" : ""}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </details>
+            </>
+          )}
           {provider && filtered.length > 0 && (
             <div className="account-card">
               <strong>{provider.name}</strong>
@@ -332,7 +383,7 @@ export function ProviderAccountsPanel({
                 {provider.statusError
                   ? "Could not check account status. Try refreshing."
                   : provider.configured
-                    ? `Connected · ${provider.authType === "oauth" ? "provider sign-in" : "API / external credentials"}${provider.stored ? " · saved in Margin" : " · configured externally"}`
+                    ? `Saved configuration · ${provider.authType === "oauth" ? "provider sign-in" : "API / external credentials"}${provider.stored ? " · saved in Margin" : " · configured externally"}`
                     : "Ready to connect"}
               </p>
               <p className="settings-help">
@@ -348,7 +399,8 @@ export function ProviderAccountsPanel({
               {!provider.methods.length && (
                 <p className="settings-help">
                   Interactive login is unavailable for this provider. Configure
-                  its environment or cloud credentials on the server, then refresh.
+                  its environment or cloud credentials on the server, then
+                  refresh.
                 </p>
               )}
               {provider.configured && (
@@ -432,15 +484,30 @@ export function ProviderAccountsPanel({
           disabled={accountBusy}
           onBusyChange={setCustomBusy}
           onEditingChange={setCustomEditing}
+          showAdd={catalogVisible}
+          onCountChange={setCustomCount}
           onChanged={async () => {
             await load();
             await callbacks.current.onChanged();
           }}
         />
       )}
+      {accounts && !customEditing && !catalogVisible && (
+        <button
+          type="button"
+          className="add-connection"
+          disabled={busy}
+          onClick={() => {
+            setAdding(true);
+            setSelected("");
+          }}
+        >
+          + Add connection
+        </button>
+      )}
       <p className="connection-footnote">
-        Connections save immediately. Save below applies to conversation
-        defaults.
+        Connections save when setup completes. Conversation defaults below save
+        automatically.
       </p>
       {login && (
         <div

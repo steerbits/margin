@@ -2,6 +2,11 @@ import { useEffect, useRef, useState } from "react";
 import { ArrowLeft, Plus, Server, CheckCircle2 } from "lucide-react";
 import { api } from "./api.ts";
 import {
+  thinkingHelp,
+  type ThinkingOverride,
+} from "../shared/model-capabilities.ts";
+import { thinkingLevels, thinkingLabel } from "../shared/settings.ts";
+import {
   customApiFormats,
   type CustomConnectionInput,
   type CustomConnectionView,
@@ -22,12 +27,16 @@ export function CustomConnectionsPanel({
   onEditingChange,
   disabled,
   readOnly,
+  showAdd = true,
+  onCountChange,
 }: {
   onChanged: () => Promise<void>;
   onBusyChange: (busy: boolean) => void;
   onEditingChange: (editing: boolean) => void;
   disabled: boolean;
   readOnly: boolean;
+  showAdd?: boolean;
+  onCountChange?: (count: number) => void;
 }) {
   const [connections, setConnections] = useState<CustomConnectionView[]>([]);
   const [draft, setDraft] = useState<CustomConnectionInput>();
@@ -46,7 +55,10 @@ export function CustomConnectionsPanel({
     const result = await api<{ connections: CustomConnectionView[] }>(
       "/custom-connections",
     );
-    if (mounted.current) setConnections(result.connections);
+    if (mounted.current) {
+      setConnections(result.connections);
+      onCountChange?.(result.connections.length);
+    }
   }
   useEffect(() => {
     mounted.current = true;
@@ -81,10 +93,13 @@ export function CustomConnectionsPanel({
             ...(connection.contextSource === "manual"
               ? { contextWindow: connection.contextWindow }
               : {}),
-            maxTokens: connection.maxTokens,
+            maxTokens:
+              connection.maxTokensSource === "automatic"
+                ? undefined
+                : connection.maxTokens,
             supportsDeveloperRole: connection.supportsDeveloperRole,
             supportsReasoningEffort: connection.supportsReasoningEffort,
-            reasoning: connection.reasoning,
+            thinking: connection.thinking ?? { mode: "auto" },
           }
         : blank(),
     );
@@ -107,6 +122,8 @@ export function CustomConnectionsPanel({
     setBusy(action);
     abort.current = new AbortController();
     try {
+      if (action === "save" && draft.thinking?.mode === "effort" && !draft.thinking.levels?.length)
+        throw new Error("Select at least one supported effort level in Advanced.");
       let customHeaders: Record<string, string> | undefined;
       if (headers.trim()) {
         try {
@@ -131,6 +148,9 @@ export function CustomConnectionsPanel({
         ...(customHeaders ? { headers: customHeaders } : {}),
       };
       if (action === "discover") {
+        delete input.thinking;
+        delete input.contextWindow;
+        delete input.maxTokens;
         const result = await api<ConnectionDiscovery>(
           "/custom-connections/discover",
           input,
@@ -187,7 +207,7 @@ export function CustomConnectionsPanel({
               <Server size={18} aria-hidden="true" />
               <div>
                 <strong>{connection.name}</strong>
-                <span>{connection.modelId}</span>
+                <span>Saved · {connection.modelId}</span>
               </div>
               <button
                 type="button"
@@ -239,15 +259,17 @@ export function CustomConnectionsPanel({
               )}
             </div>
           ))}
-          <button
-            className="add-custom-connection"
-            type="button"
-            disabled={disabled || readOnly}
-            onClick={() => edit()}
-          >
-            <Plus size={16} /> Add custom connection{" "}
-            <span>Local models or your own server</span>
-          </button>
+          {showAdd && (
+            <button
+              className="add-custom-connection"
+              type="button"
+              disabled={disabled || readOnly}
+              onClick={() => edit()}
+            >
+              <Plus size={16} /> Add custom connection{" "}
+              <span>Local models or your own server</span>
+            </button>
+          )}
         </>
       )}
       {draft && (
@@ -285,6 +307,7 @@ export function CustomConnectionsPanel({
                     update(
                       {
                         api: e.target.value as CustomConnectionInput["api"],
+                        thinking: { mode: "auto" },
                         ...(e.target.value === "google-generative-ai"
                           ? { authentication: "api_key" as const }
                           : {}),
@@ -472,38 +495,122 @@ export function CustomConnectionsPanel({
                     onChange={(e) => setHeaders(e.target.value)}
                   />
                 </label>
+                <label className="account-label">
+                  Thinking controls
+                  <select
+                    aria-label="Thinking controls"
+                    value={draft.thinking?.mode ?? "auto"}
+                    onChange={(e) =>
+                      update({
+                        thinking: {
+                          mode: e.target.value as ThinkingOverride["mode"],
+                          transport: "native",
+                          ...(e.target.value === "effort"
+                            ? { levels: [] }
+                            : {}),
+                        },
+                      })
+                    }
+                  >
+                    <option value="auto">Detect automatically</option>
+                    <option value="server">Managed by server / unknown</option>
+                    <option value="unsupported">Thinking not supported</option>
+                    <option value="toggle">On / off</option>
+                    <option value="effort">Specific effort levels</option>
+                    <option value="always">Always enabled</option>
+                  </select>
+                </label>
+                <p className="settings-help">
+                  Override only with settings documented by your model or
+                  server. Unknown controls use Server default; a text reply
+                  alone does not verify thinking support.
+                </p>
+                {draft.id && (
+                  <p className="settings-help">
+                    {thinkingHelp(
+                      connections.find((c) => c.id === draft.id)
+                        ?.thinkingControl,
+                    )}
+                  </p>
+                )}
+                {["toggle", "effort", "always"].includes(
+                  draft.thinking?.mode ?? "",
+                ) &&
+                  draft.api === "openai-completions" && (
+                    <label className="account-label">
+                      Thinking API
+                      <select
+                        aria-label="Thinking API"
+                        value={draft.thinking?.transport ?? "native"}
+                        onChange={(e) =>
+                          update({
+                            thinking: {
+                              ...draft.thinking!,
+                              transport: e.target
+                                .value as ThinkingOverride["transport"],
+                            },
+                          })
+                        }
+                      >
+                        <option value="native">
+                          Standard API reasoning control
+                        </option>
+                        <option value="openrouter">
+                          OpenRouter reasoning control
+                        </option>
+                        <option
+                          value="chat-template"
+                          disabled={draft.thinking?.mode === "effort"}
+                        >
+                          Chat-template on/off
+                        </option>
+                        <option
+                          value="llama-cpp"
+                          disabled={draft.thinking?.mode === "effort"}
+                        >
+                          llama.cpp chat-template on/off
+                        </option>
+                      </select>
+                    </label>
+                  )}
+                {draft.thinking?.mode === "effort" && (
+                  <fieldset className="thinking-level-overrides">
+                    <legend>Supported effort levels</legend>
+                    {thinkingLevels.map((level) => (
+                      <label className="connection-checkbox" key={level}>
+                        <input
+                          type="checkbox"
+                          checked={
+                            draft.thinking?.levels?.includes(level) ?? false
+                          }
+                          onChange={(e) =>
+                            update({
+                              thinking: {
+                                ...draft.thinking!,
+                                levels: e.target.checked
+                                  ? [...(draft.thinking!.levels ?? []), level]
+                                  : draft.thinking!.levels?.filter(
+                                      (item) => item !== level,
+                                    ),
+                              },
+                            })
+                          }
+                        />
+                        {thinkingLabel(level)}
+                      </label>
+                    ))}
+                  </fieldset>
+                )}
                 <label className="connection-checkbox">
                   <input
                     type="checkbox"
-                    checked={draft.reasoning ?? false}
-                    onChange={(e) => update({ reasoning: e.target.checked })}
-                  />{" "}
-                  Model supports thinking
+                    checked={draft.supportsDeveloperRole ?? false}
+                    onChange={(e) =>
+                      update({ supportsDeveloperRole: e.target.checked })
+                    }
+                  />
+                  Server supports the developer role
                 </label>
-                {draft.api === "openai-completions" && draft.reasoning && (
-                  <>
-                    <label className="connection-checkbox">
-                      <input
-                        type="checkbox"
-                        checked={draft.supportsDeveloperRole ?? false}
-                        onChange={(e) =>
-                          update({ supportsDeveloperRole: e.target.checked })
-                        }
-                      />{" "}
-                      Server supports the developer role
-                    </label>
-                    <label className="connection-checkbox">
-                      <input
-                        type="checkbox"
-                        checked={draft.supportsReasoningEffort ?? false}
-                        onChange={(e) =>
-                          update({ supportsReasoningEffort: e.target.checked })
-                        }
-                      />{" "}
-                      Server accepts reasoning effort
-                    </label>
-                  </>
-                )}
               </details>
               <button type="submit" className="primary connection-save">
                 {busy === "save" ? "Testing connection…" : "Test & save"}

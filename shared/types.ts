@@ -1,4 +1,5 @@
 import type { ThinkingLevel } from "./settings.ts";
+import type { ThinkingCapability } from "./model-capabilities.ts";
 
 export type Json =
   | null
@@ -18,6 +19,7 @@ export interface ModelInfo {
   connectionSource?: ModelConnectionSource;
   backend?: string;
   thinkingLevels?: ThinkingLevel[];
+  thinkingControl?: ThinkingCapability;
 }
 export interface SkillInfo {
   name: string;

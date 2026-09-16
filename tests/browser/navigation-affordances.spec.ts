@@ -137,16 +137,16 @@ for (const mobile of [false, true]) {
     }
   });
 
-  test(`settings dismisses only on outside clicks and discards unsaved defaults on ${device}`, async ({
+  test(`settings dismisses only on outside clicks and preserves autosaved defaults on ${device}`, async ({
     page,
   }) => {
     if (mobile) await page.setViewportSize({ width: 390, height: 844 });
     const { id } = await seed(page, "Settings backdrop", 0);
     await page.goto(`/chats/${id}`);
-    const settings = { defaultModel: null, defaultThinkingLevel: null };
+    let settings = { defaultModel: null, defaultThinkingLevel: null };
     let saves = 0;
     await page.route("**/api/settings", (route) => {
-      if (route.request().method() === "PUT") saves++;
+      if (route.request().method() === "PUT") { saves++; settings = route.request().postDataJSON(); }
       return route.fulfill({
         json: {
           settings,
@@ -184,11 +184,11 @@ for (const mobile of [false, true]) {
     await page.mouse.click(2, 2);
     await expect(dialog).toHaveCount(0);
     await expect(button).toBeFocused();
-    expect(saves).toBe(0);
+    expect(saves).toBe(1);
     await button.click();
     await expect(
       dialog.getByLabel("Default model", { exact: true }),
-    ).toHaveValue("");
+    ).toHaveValue(JSON.stringify(["pi", "test", "reasoner"]));
     await page.keyboard.press("Escape");
     await expect(dialog).toHaveCount(0);
   });

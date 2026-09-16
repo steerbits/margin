@@ -54,6 +54,18 @@ The finished implementation was subsequently tested against the installed Qwen3.
 
 Six live checks passed, with streaming observed. The runner then stopped both owned processes, verified their ports were closed, and removed temporary app data. A separate process/open-file check found no llama process or open model-file handle. Results are in `.margin-data/ai-connections-review/llama-live-results.json`. Earlier attempts uncovered probe setup errors (serving the hidden worktree directly and using Enter instead of Margin's send shortcut); these were corrected before the successful run. No application code changes were needed.
 
+## Follow-up: saved connections, autosave and capabilities
+
+AI connections now lists every configured provider and custom server before the Add connection flow. Codex is not selected automatically; selection no longer uses a green connection-like highlight. Saved configuration is deliberately separate from live server availability.
+
+Default model and thinking effort autosave. Writes are serialized and coalesced to the latest selection. Close waits for pending writes, and failed/unacknowledged saves retain the draft with retry controls. A failed initial Settings load can recover without disabling autosave. Existing conversations retain their own settings.
+
+Custom thinking has explicit states: server-managed/unknown, unsupported, on/off, exact effort levels, and always enabled. Metadata is read from recognized server profiles and exact catalog models on trusted provider endpoints, with explicit Advanced overrides for other servers. Catalog models keep the SDK's native wire dialect; model names and generic reasoning booleans are not treated as proof of supported controls. Unknown legacy custom configurations use Server default until retested or configured. Reported output limits constrain automatic reply budgets without turning those budgets into manual overrides.
+
+Custom per-chat choices persist across restarts. Capability changes that invalidate a choice reset and persist Server default; a running chat receives a notice. The connection test preserves server-default thinking and has an explicit bounded-output failure message instead of silently disabling thinking.
+
+Follow-up validation: **281 unit tests passed**, production build passed, **19 connection/defaults browser scenarios passed**, and **11 gateway scenarios passed**. The full browser run passed 131 of 133 cases; the two remaining cases asserted the old discard-on-close behavior and passed after being updated and rerun for autosave. Additional checks exercise real SDK request serialization, local HTTP fixtures, failed-load recovery, queued saves and real session restarts. No live llama process was started during this follow-up, as requested. The earlier live Qwen evidence above remains a record of the original connection/chat path, not a live validation of the new thinking controls.
+
 ## Limits
 
 - The native OS sandbox probe is unverified because macOS denied `sandbox_apply`; the gateway tests use the documented process/HTTP shim and do not establish OS sandbox enforcement.

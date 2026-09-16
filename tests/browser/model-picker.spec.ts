@@ -132,7 +132,7 @@ test("welcome and Settings share ordered groups, provider-first labels, exact id
   await expect(defaults.locator("optgroup[label='Keys']")).toHaveCount(0);
   await expect(defaults.locator(":scope > hr")).toHaveCount(1);
   await expect(defaults).toHaveValue(modelKey(models[1]));
-  await dialog.getByRole("button", { name: "Save", exact: true }).click();
+  await dialog.getByRole("button", { name: "Close", exact: true }).click();
   expect(state.settings.defaultModel).toEqual({
     id: "same-model",
     provider: "openrouter",
@@ -144,7 +144,7 @@ test("welcome and Settings share ordered groups, provider-first labels, exact id
   await expect(defaults.locator("option:checked")).toHaveText(
     /\(unavailable\)$/,
   );
-  await dialog.getByRole("button", { name: "Cancel", exact: true }).click();
+  await dialog.getByRole("button", { name: "Close", exact: true }).click();
   await expect(welcome.locator("option:checked")).toHaveText(
     "Selected model unavailable — choose another",
   );
@@ -154,7 +154,7 @@ test("welcome and Settings share ordered groups, provider-first labels, exact id
   models.splice(0);
   await page.getByRole("button", { name: "Settings", exact: true }).click();
   await expect(dialog.locator("details.settings-accounts")).toHaveAttribute("open", "");
-  await dialog.getByRole("button", { name: "Cancel", exact: true }).click();
+  await dialog.getByRole("button", { name: "Close", exact: true }).click();
   await expect(welcome).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Connect an AI provider", exact: true })).toBeVisible();
   expect(requests).toHaveLength(1);

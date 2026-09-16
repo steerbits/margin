@@ -1,9 +1,11 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { SessionManager } from "@earendil-works/pi-coding-agent";
+import { SessionManager, ModelRuntime } from "@earendil-works/pi-coding-agent";
+import { InMemoryCredentialStore } from "@earendil-works/pi-ai";
+import { loadCustomModelSupport, setCustomThinkingSelection, getCustomThinkingSelection } from "../server/custom-model-runtime.ts";
 import { LiveSession } from "../server/sessions.ts";
 import { Store } from "../server/store.ts";
 import { RuntimeOwner } from "../server/runtime-owner.ts";
@@ -105,6 +107,35 @@ const usage = {
   totalTokens: 0,
   cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
 };
+
+test("capability changes reset an invalid chat choice to Server default and persist the recovery", async () => {
+  const f = fixture();
+  try {
+    const path = join(f.l.dataDir, "models.json");
+    const provider = "margin-custom-recovery";
+    const config: any = {
+      providers: {
+        [provider]: {
+          api: "openai-completions", baseUrl: "http://localhost:1/v1", apiKey: "fixture",
+          models: [{ id: "local", reasoning: true }],
+          margin: { thinkingControl: { mode: "effort", source: "manual", levels: ["low", "high"] } },
+        },
+      },
+    };
+    writeFileSync(path, JSON.stringify(config));
+    const models = await loadCustomModelSupport(await ModelRuntime.create({ credentials: new InMemoryCredentialStore(), modelsPath: path, modelsStorePath: join(f.l.dataDir, "catalog.json") }), path);
+    setCustomThinkingSelection(models, "low");
+    f.l.models = models;
+    f.l.agent.model = models.getModel(provider, "local");
+    f.l.agent.setModel = async (model: unknown) => { f.l.agent.model = model; };
+    config.providers[provider].margin.thinkingControl = { mode: "server", source: "unknown" };
+    config.providers[provider].models[0].reasoning = false;
+    writeFileSync(path, JSON.stringify(config));
+    await f.l.runPrompt(async () => { assert.equal(getCustomThinkingSelection(models), null); });
+    assert.equal(f.store.get<any>("custom-thinking", "session")?.level, null);
+    assert.ok(f.l.ui.notices.some((notice: any) => notice.text.includes("Server default")));
+  } finally { f.close(); }
+});
 
 test("Stop during custom-connection refresh cannot start a model request after refresh resolves", async () => {
   const f = fixture();

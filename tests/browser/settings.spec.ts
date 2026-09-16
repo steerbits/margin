@@ -5,7 +5,7 @@ import {
   type SettingsView,
 } from "../../shared/settings.ts";
 
-test("settings save new-chat defaults, preserve existing chats, cancel edits, and work on mobile", async ({
+test("settings save new-chat defaults, preserve existing chats, autosave edits, and work on mobile", async ({
   page,
 }) => {
   await page.goto("/");
@@ -66,7 +66,7 @@ test("settings save new-chat defaults, preserve existing chats, cancel edits, an
     await expect(
       dialog.getByLabel("Thinking effort").locator("option"),
     ).toHaveCount(model.thinkingLevels!.length + 1);
-    await dialog.getByRole("button", { name: "Save", exact: true }).click();
+    await dialog.getByRole("button", { name: "Close", exact: true }).click();
     await expect(dialog).toHaveCount(0);
     const saved = { defaultModel: reference, defaultThinkingLevel: "high" };
     expect(
@@ -85,10 +85,11 @@ test("settings save new-chat defaults, preserve existing chats, cancel edits, an
     await expect(dialog.getByLabel("Thinking effort")).toHaveValue("high");
     await page.screenshot({ path: ".margin-data/settings-desktop.png" });
     await dialog.getByLabel("Thinking effort").selectOption("");
-    await dialog.getByRole("button", { name: "Cancel", exact: true }).click();
+    await dialog.getByRole("button", { name: "Close", exact: true }).click();
     expect(
       (await (await page.request.get("/api/settings")).json()).settings,
-    ).toEqual(saved);
+    ).toEqual({ ...saved, defaultThinkingLevel: null });
+    await page.request.put("/api/settings", { data: saved });
     await page.getByRole("button", { name: /New conversation.*⌘/ }).click();
     await expect(page).not.toHaveURL(`/chats/${first}`);
     await expect(
@@ -115,6 +116,93 @@ test("settings save new-chat defaults, preserve existing chats, cancel edits, an
   } finally {
     await page.request.put("/api/settings", { data: before.settings });
   }
+});
+
+test("rapid default changes autosave in order and Close waits for the latest save", async ({
+  page,
+}) => {
+  const models: SettingsView["models"] = [
+    {
+      id: "reasoner",
+      provider: "test",
+      name: "Reasoner",
+      subscription: false,
+      thinkingLevels: ["low", "high"],
+    },
+  ];
+  let settings = { ...defaultSettings };
+  const writes: unknown[] = [];
+  let release!: () => void;
+  await page.route("**/api/settings", async (route) => {
+    if (route.request().method() === "PUT") {
+      const next = route.request().postDataJSON();
+      writes.push(next);
+      if (writes.length === 1)
+        await new Promise<void>((resolve) => {
+          release = resolve;
+        });
+      settings = next;
+    }
+    await route.fulfill({ json: { settings, models } });
+  });
+  await page.goto("/");
+  await page.getByRole("button", { name: "Settings", exact: true }).click();
+  const dialog = page.getByRole("dialog", { name: "Settings", exact: true });
+  await dialog.getByLabel("Default model").selectOption(modelKey(models[0]));
+  await expect.poll(() => writes.length).toBe(1);
+  await dialog.getByLabel("Thinking effort").selectOption("high");
+  await expect(dialog.locator(".settings-save-state")).toHaveText("Saving…");
+  await dialog.getByRole("button", { name: "Close", exact: true }).click();
+  await expect(dialog).toBeVisible();
+  release();
+  await expect(dialog).toHaveCount(0);
+  expect(writes).toHaveLength(2);
+  expect(settings.defaultThinkingLevel).toBe("high");
+});
+
+test("settings load failure can recover and subsequent changes really autosave", async ({
+  page,
+}) => {
+  let failLoad = true;
+  let writes = 0;
+  let settings = { ...defaultSettings };
+  const models: SettingsView["models"] = [
+    {
+      id: "plain",
+      provider: "test",
+      name: "Plain",
+      subscription: false,
+      thinkingLevels: ["off"],
+    },
+  ];
+  await page.route("**/api/settings", async (route) => {
+    if (failLoad) {
+      failLoad = false;
+      return route.fulfill({
+        status: 500,
+        json: { error: "Temporary load failure" },
+      });
+    }
+    if (route.request().method() === "PUT") {
+      settings = route.request().postDataJSON();
+      writes++;
+    }
+    return route.fulfill({ json: { settings, models } });
+  });
+  await page.goto("/");
+  await page.getByRole("button", { name: "Settings", exact: true }).click();
+  const dialog = page.getByRole("dialog", { name: "Settings", exact: true });
+  await expect(dialog.getByRole("alert")).toContainText(
+    "Temporary load failure",
+  );
+  await dialog
+    .getByRole("button", { name: "Refresh available models" })
+    .click();
+  await dialog.getByLabel("Default model").selectOption(modelKey(models[0]));
+  await dialog.getByRole("button", { name: "Close", exact: true }).click();
+  await expect(dialog).toHaveCount(0);
+  expect(writes).toBe(1);
+  expect(settings.defaultModel?.id).toBe("plain");
 });
 
 test("failed saves retain edits; unavailable models and unsupported thinking have recovery paths", async ({
@@ -160,7 +248,7 @@ test("failed saves retain edits; unavailable models and unsupported thinking hav
     .getByLabel("Default model", { exact: true })
     .selectOption(modelKey(models[0]));
   await dialog.getByLabel("Thinking effort").selectOption("high");
-  await dialog.getByRole("button", { name: "Save", exact: true }).click();
+  await dialog.getByRole("button", { name: "Close", exact: true }).click();
   await expect(dialog.getByRole("alert")).toContainText(
     "Storage is temporarily unavailable.",
   );
@@ -169,12 +257,16 @@ test("failed saves retain edits; unavailable models and unsupported thinking hav
     .getByLabel("Default model", { exact: true })
     .selectOption(modelKey(models[1]));
   await expect(dialog.getByLabel("Thinking effort")).toHaveValue("");
-  await expect(dialog.getByRole("status")).toContainText("reset");
+  await expect(dialog.getByText(/Thinking effort reset/)).toBeVisible();
   await expect(
     dialog.getByLabel("Thinking effort").locator("option"),
   ).toHaveCount(2);
   failSave = false;
-  await dialog.getByRole("button", { name: "Save", exact: true }).click();
+  await dialog
+    .getByRole("button", { name: "Retry saving", exact: true })
+    .click();
+  await expect(dialog.locator(".settings-save-state")).toHaveText("Saved");
+  await dialog.getByRole("button", { name: "Close", exact: true }).click();
   await expect(dialog).toHaveCount(0);
   settings = {
     defaultModel: { id: "removed", provider: "test" },
@@ -185,8 +277,8 @@ test("failed saves retain edits; unavailable models and unsupported thinking hav
     modelKey(settings.defaultModel),
   );
   await expect(
-    dialog.getByRole("button", { name: "Save", exact: true }),
-  ).toBeDisabled();
+    dialog.getByRole("button", { name: "Close", exact: true }),
+  ).toBeEnabled();
   await expect(
     dialog.getByText(/The saved model is unavailable/),
   ).toBeVisible();
@@ -194,7 +286,7 @@ test("failed saves retain edits; unavailable models and unsupported thinking hav
     .getByLabel("Default model", { exact: true })
     .selectOption(modelKey(models[0]));
   await expect(
-    dialog.getByRole("button", { name: "Save", exact: true }),
+    dialog.getByRole("button", { name: "Close", exact: true }),
   ).toBeEnabled();
-  await dialog.getByRole("button", { name: "Cancel", exact: true }).click();
+  await dialog.getByRole("button", { name: "Close", exact: true }).click();
 });

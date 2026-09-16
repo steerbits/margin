@@ -80,7 +80,7 @@ test("gateway owns shared defaults and supplies fresh creation-time values to ev
     ).toHaveValue(modelKey(model));
     await expect(dialog.getByLabel("Thinking effort")).toHaveValue("high");
     await dialog.getByLabel("Thinking effort").selectOption("low");
-    await dialog.getByRole("button", { name: "Save", exact: true }).click();
+    await dialog.getByRole("button", { name: "Close", exact: true }).click();
     await expect(dialog).toHaveCount(0);
     for (const id of ids)
       expect(

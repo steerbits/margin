@@ -15,6 +15,12 @@ import { AppDialog } from "./WorkspacePicker.tsx";
 import { ProviderAccountsPanel } from "./ProviderAccounts.tsx";
 import { ModelOptions } from "./ModelOptions.tsx";
 import { modelLabel, modelProviderLabel } from "../shared/model-picker.ts";
+import { SettingsAutosave } from "./settings-autosave.ts";
+import {
+  thinkingChoiceLabel,
+  thinkingDefaultLabel,
+  thinkingHelp,
+} from "../shared/model-capabilities.ts";
 import "./SettingsDialog.css";
 
 export function SettingsDialog({
@@ -29,6 +35,9 @@ export function SettingsDialog({
   const [loaded, setLoaded] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState("");
+  const autosave = useRef<SettingsAutosave | undefined>(undefined);
+  const mounted = useRef(false);
   const [accountBusy, setAccountBusy] = useState(false);
   const [accountsOpen, setAccountsOpen] = useState(false);
   const accountsRef = useRef<HTMLDetailsElement>(null);
@@ -36,12 +45,29 @@ export function SettingsDialog({
   modelsChanged.current = onModelsChanged;
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  function initializeAutosave(value: MarginSettings) {
+    if (autosave.current) return;
+    setDraft(value);
+    autosave.current = new SettingsAutosave(
+      value,
+      async (next) => {
+        await api<SettingsView>("/settings", next, "PUT");
+      },
+      () => {
+        if (!mounted.current || !autosave.current) return;
+        setDraft({ ...autosave.current.draft });
+        setSaving(autosave.current.saving);
+        setSaveError(autosave.current.error);
+      },
+    );
+  }
   useEffect(() => {
+    mounted.current = true;
     let active = true;
     void api<SettingsView>("/settings")
       .then((view) => {
         if (!active) return;
-        setDraft(view.settings);
+        initializeAutosave(view.settings);
         setModels(view.models);
         modelsChanged.current?.(view.models);
         setAccountsOpen(view.models.length === 0);
@@ -55,6 +81,7 @@ export function SettingsDialog({
       });
     return () => {
       active = false;
+      mounted.current = false;
     };
   }, []);
   const model = settingsModel(draft, models);
@@ -63,8 +90,15 @@ export function SettingsDialog({
   const invalidThinking =
     !!draft.defaultThinkingLevel &&
     !levels.includes(draft.defaultThinkingLevel);
-  const pending = loading || saving || accountBusy;
-  const runtimeDefault = "Automatic";
+  const pending = loading || accountBusy;
+  const runtimeDefault = thinkingDefaultLabel(model?.thinkingControl);
+  function change(next: MarginSettings) {
+    autosave.current?.update(next);
+    setError("");
+  }
+  async function close() {
+    if (!autosave.current || (await autosave.current.flush())) onClose();
+  }
   async function refresh() {
     setLoading(true);
     setError("");
@@ -72,7 +106,7 @@ export function SettingsDialog({
       const view = await api<SettingsView>("/settings");
       setModels(view.models);
       modelsChanged.current?.(view.models);
-      if (!loaded) setDraft(view.settings);
+      initializeAutosave(view.settings);
       setLoaded(true);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -81,13 +115,7 @@ export function SettingsDialog({
     }
   }
   return (
-    <AppDialog
-      title="Settings"
-      closeOnBackdrop
-      onClose={() => {
-        if (!saving) onClose();
-      }}
-    >
+    <AppDialog title="Settings" closeOnBackdrop onClose={() => void close()}>
       <details
         ref={accountsRef}
         className="settings-accounts"
@@ -109,16 +137,7 @@ export function SettingsDialog({
       </details>
       <form
         className="settings-form"
-        onSubmit={(event) => {
-          event.preventDefault();
-          if (!loaded || pending || invalidModel || invalidThinking) return;
-          setSaving(true);
-          setError("");
-          void api<SettingsView>("/settings", draft, "PUT")
-            .then(onClose)
-            .catch((e) => setError(String(e.message ?? e)))
-            .finally(() => setSaving(false));
-        }}
+        onSubmit={(event) => event.preventDefault()}
       >
         <section aria-labelledby="conversation-defaults-heading">
           <div className="settings-section-heading">
@@ -152,7 +171,7 @@ export function SettingsDialog({
                     (m) => modelKey(m) === event.target.value,
                   );
                   const next: MarginSettings = {
-                    ...draft,
+                    ...(autosave.current?.draft ?? draft),
                     defaultModel: selected
                       ? {
                           id: selected.id,
@@ -173,8 +192,7 @@ export function SettingsDialog({
                     );
                     next.defaultThinkingLevel = null;
                   } else setNotice("");
-                  setDraft(next);
-                  setError("");
+                  change(next);
                 }}
               >
                 <option value="">
@@ -224,8 +242,8 @@ export function SettingsDialog({
                 value={draft.defaultThinkingLevel ?? ""}
                 aria-describedby="settings-thinking-help"
                 onChange={(event) => {
-                  setDraft({
-                    ...draft,
+                  change({
+                    ...(autosave.current?.draft ?? draft),
                     defaultThinkingLevel: (event.target.value ||
                       null) as ThinkingLevel | null,
                   });
@@ -241,7 +259,7 @@ export function SettingsDialog({
                 )}
                 {levels.map((level) => (
                   <option key={level} value={level}>
-                    {thinkingLabel(level)}
+                    {thinkingChoiceLabel(level, model?.thinkingControl)}
                   </option>
                 ))}
               </select>
@@ -249,11 +267,13 @@ export function SettingsDialog({
             <p id="settings-thinking-help" className="settings-help">
               {invalidThinking
                 ? "The saved effort is unsupported. Choose a supported level or change the model."
-                : levels.length === 1 && levels[0] === "off"
-                  ? "This model does not support thinking."
-                  : !levels.length && model
-                    ? "This runtime does not expose thinking effort."
-                    : "Only supported levels are shown. Automatic uses the model's default thinking effort."}
+                : model?.thinkingControl
+                  ? thinkingHelp(model.thinkingControl)
+                  : levels.length === 1 && levels[0] === "off"
+                    ? "This model does not support thinking."
+                    : !levels.length && model
+                      ? "This runtime does not expose thinking effort."
+                      : "Only supported levels are shown. Automatic uses the model's default thinking effort."}
             </p>
           </div>
         </section>
@@ -265,20 +285,36 @@ export function SettingsDialog({
           </p>
         )}
         <p className="settings-footnote">
-          Conversation defaults are saved in Margin, not in your global runtime
-          settings. Cancel discards only these default edits; completed account
-          changes above are already saved.
+          Defaults save automatically when changed and apply to new
+          conversations.
         </p>
+        {loaded && (
+          <p className="settings-save-state" role="status">
+            {saving
+              ? "Saving…"
+              : saveError
+                ? "Changes are not saved."
+                : "Saved"}
+          </p>
+        )}
+        {saveError && (
+          <div className="settings-error" role="alert">
+            <p>Couldn't save: {saveError}</p>
+            <button type="button" onClick={() => autosave.current?.retry()}>
+              Retry saving
+            </button>
+            <button type="button" onClick={onClose}>
+              Close without retrying
+            </button>
+          </div>
+        )}
         <div className="management-actions">
-          <button type="button" disabled={saving} onClick={onClose}>
-            Cancel
-          </button>
           <button
             className="primary"
-            type="submit"
-            disabled={!loaded || pending || invalidModel || invalidThinking}
+            type="button"
+            onClick={() => void close()}
           >
-            {saving ? "Saving…" : "Save"}
+            Close
           </button>
         </div>
       </form>
