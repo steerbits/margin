@@ -1,0 +1,641 @@
+import { test, expect, type Page, type Locator } from "@playwright/test";
+import { mkdir, mkdtemp, writeFile, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join, resolve } from "node:path";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
+import { defaultSettings } from "../../shared/settings.ts";
+
+// These are real UI recordings with example conversations. The disposable test
+// host never uses the developer's credentials or changes the running app.
+const run = promisify(execFile);
+const framesRoot = resolve(".margin-data/readme-demo-frames");
+const output = resolve("docs/demos");
+const fps = 12;
+const frameCount = 60;
+const pause = (ms: number) => new Promise((r) => setTimeout(r, ms));
+type Clip = { x: number; y: number; width: number; height: number };
+const main: Clip = { x: 270, y: 110, width: 900, height: 562.5 };
+
+test.beforeAll(async () => {
+  await mkdir(framesRoot, { recursive: true });
+  await mkdir(output, { recursive: true });
+});
+
+test.beforeEach(async ({ page }) => {
+  // Screenshot APIs omit the OS cursor. This overlay records actual pointer
+  // movement and clicks, including inside artifact iframes.
+  await page.addInitScript(() => {
+    let cursor: HTMLDivElement | undefined;
+    const show = (event: PointerEvent) => {
+      if (!cursor) {
+        cursor = document.createElement("div");
+        cursor.style.cssText =
+          "position:fixed;left:0;top:0;width:20px;height:25px;pointer-events:none;z-index:2147483647;filter:drop-shadow(0 1px 1px #0005)";
+        cursor.innerHTML =
+          '<svg width="20" height="25" viewBox="0 0 20 25"><path d="M2 2v19l5-5 4 8 4-2-4-8 7-1Z" fill="#232323" stroke="white" stroke-width="1.4"/></svg>';
+      }
+      const surface =
+        document.querySelector("dialog[open]") ?? document.documentElement;
+      if (cursor.parentElement !== surface) surface.append(cursor);
+      cursor.style.display = "block";
+      cursor.style.transform = `translate(${event.clientX}px, ${event.clientY}px)`;
+    };
+    document.addEventListener("pointermove", show, true);
+    document.addEventListener(
+      "pointerout",
+      (event) => {
+        if (
+          cursor &&
+          (!event.relatedTarget ||
+            event.relatedTarget instanceof HTMLIFrameElement)
+        )
+          cursor.style.display = "none";
+      },
+      true,
+    );
+    document.addEventListener(
+      "pointerdown",
+      (event) => {
+        show(event);
+        const ring = document.createElement("div");
+        ring.style.cssText = `position:fixed;left:${event.clientX - 13}px;top:${event.clientY - 13}px;width:26px;height:26px;border:2px solid #648873;border-radius:50%;pointer-events:none;z-index:2147483646;background:#80ad8b33`;
+        (
+          document.querySelector("dialog[open]") ?? document.documentElement
+        ).append(ring);
+        ring.animate(
+          [
+            { transform: "scale(.6)", opacity: 1 },
+            { transform: "scale(1.5)", opacity: 0 },
+          ],
+          { duration: 450 },
+        );
+        setTimeout(() => ring.remove(), 450);
+      },
+      true,
+    );
+  });
+});
+
+async function click(page: Page, target: Locator) {
+  await target.scrollIntoViewIfNeeded();
+  const box = await target.boundingBox();
+  if (!box) throw new Error("Missing demo target");
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2, {
+    steps: 8,
+  });
+  await pause(90);
+  await target.click();
+}
+
+async function record(
+  page: Page,
+  name: string,
+  clip: Clip,
+  actions: () => Promise<void>,
+) {
+  const folder = join(framesRoot, name);
+  await mkdir(folder, { recursive: true });
+  const start = performance.now();
+  const capture = async () => {
+    for (let i = 0; i < frameCount; i++) {
+      await pause(Math.max(0, start + (i * 1000) / fps - performance.now()));
+      await page.screenshot({
+        path: join(folder, `${String(i).padStart(3, "0")}.png`),
+        clip,
+      });
+    }
+  };
+  const [, actionDuration] = await Promise.all([
+    capture(),
+    actions().then(() => performance.now() - start),
+  ]);
+  expect(
+    actionDuration,
+    `${name}: finish the interaction before the final hold`,
+  ).toBeLessThan(4600);
+  await run("ffmpeg", [
+    "-hide_banner",
+    "-loglevel",
+    "error",
+    "-y",
+    "-framerate",
+    String(fps),
+    "-i",
+    join(folder, "%03d.png"),
+    "-filter_complex",
+    "[0:v]scale=480:300:flags=lanczos,split[a][b];[a]palettegen=stats_mode=diff:max_colors=128[p];[b][p]paletteuse=dither=bayer:bayer_scale=3:diff_mode=rectangle",
+    "-loop",
+    "0",
+    join(output, `${name}.gif`),
+  ]);
+  await writeFile(
+    join(folder, "capture.json"),
+    JSON.stringify(
+      { clip, frames: frameCount, fps, duration: frameCount / fps },
+      null,
+      2,
+    ),
+  );
+}
+
+async function scrollDialogTo(target: Locator, top = 90) {
+  await target.evaluate((element, top) => {
+    const dialog = element.closest("dialog")!;
+    dialog.scrollBy({
+      top:
+        element.getBoundingClientRect().top -
+        dialog.getBoundingClientRect().top -
+        top,
+      behavior: "smooth",
+    });
+  }, top);
+  await pause(350);
+}
+
+async function seed(page: Page, data: Record<string, unknown>) {
+  await page.goto("/");
+  const response = await page.request.post("/api/test/seed", { data });
+  expect(response.ok(), await response.text()).toBe(true);
+  const { id } = await response.json();
+  await page.goto(`/chats/${id}`);
+  await expect(page.getByLabel("Starting skill")).toBeEnabled();
+  return id as string;
+}
+
+async function selectQuote(page: Page, quote: string) {
+  const root = page.locator("[data-annotation-root]").first();
+  await root.scrollIntoViewIfNeeded();
+  // Use real mouse selection so the clip shows the highlighted passage.
+  const bounds = await root.evaluate((root, quote) => {
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+    let node: Node | null;
+    while ((node = walker.nextNode())) {
+      const i = node.textContent!.indexOf(quote);
+      if (i < 0) continue;
+      const range = document.createRange();
+      range.setStart(node, i);
+      range.setEnd(node, i + quote.length);
+      const rects = [...range.getClientRects()];
+      const first = rects[0],
+        last = rects.at(-1)!;
+      return {
+        x1: first.left + 1,
+        y1: first.top + first.height / 2,
+        x2: last.right - 1,
+        y2: last.top + last.height / 2,
+      };
+    }
+    throw new Error(`Missing passage: ${quote}`);
+  }, quote);
+  await page.mouse.move(bounds.x1, bounds.y1, { steps: 8 });
+  await page.mouse.down();
+  await page.mouse.move(bounds.x2, bounds.y2, { steps: 14 });
+  await page.mouse.up();
+}
+
+test("01 inline feedback", async ({ page }) => {
+  await seed(page, {
+    title: "Shape a notes app",
+    markdown:
+      "## A simpler first version\n\nStart with email sign-in.\n\nKeep notes in a local SQLite file.\n\nWhat would you change before we build?",
+  });
+  await page.locator(".scroll-area").evaluate((el) => (el.scrollTop = 0));
+  await record(page, "inline-feedback", main, async () => {
+    await pause(450);
+    await selectQuote(page, "email sign-in");
+    await click(
+      page,
+      page.getByRole("button", { name: "Comment", exact: true }),
+    );
+    await page
+      .getByLabel("Inline comment", { exact: true })
+      .pressSequentially("Skip accounts in v1.", { delay: 35 });
+    await click(
+      page,
+      page.getByRole("button", { name: "Add comment", exact: true }),
+    );
+    await expect(page.locator(".comment-text")).toHaveText(
+      "Skip accounts in v1.",
+    );
+  });
+});
+
+test("02 shape before executing", async ({ page }) => {
+  const id = await seed(page, {
+    title: "Choose the direction together",
+    markdown:
+      "## Let’s shape it together\n\n**Local-first:** fast, private notes on your computer.\n\n**Cloud-first:** sync and collaboration from day one.\n\nI’d start local. Which matters more for your first version?",
+  });
+  await page.request.post(`/api/test/${id}/dialog`, {
+    data: { kind: "select", title: "Where should your notes live?" },
+  });
+  await expect(
+    page.getByRole("button", { name: "SQLite", exact: true }),
+  ).toBeVisible();
+  await record(page, "shape-together", main, async () => {
+    await pause(1100);
+    await click(
+      page,
+      page.getByRole("button", { name: "SQLite", exact: true }),
+    );
+    const composer = page.getByLabel("Message", { exact: true });
+    await click(page, composer);
+    await composer.pressSequentially("Local-first. Skip accounts for now.", {
+      delay: 30,
+    });
+    await pause(200);
+    await click(
+      page,
+      page.getByRole("button", { name: "Send message", exact: true }),
+    );
+    await expect(
+      page.getByRole("heading", { name: "Revised direction", exact: true }),
+    ).toBeVisible();
+  });
+});
+
+async function artifact(page: Page) {
+  await page.setViewportSize({ width: 1000, height: 760 });
+  const id = await seed(page, {
+    title: "Review the generated dashboard",
+    markdown:
+      "## Ready for your review\n\nOpen the generated dashboard and point to anything you’d like to change.",
+  });
+  const response = await page.request.post(
+    `/api/test/${id}/artifact-fixtures`,
+    { data: {} },
+  );
+  expect(response.ok(), await response.text()).toBe(true);
+  return { id, ...(await response.json()) };
+}
+
+test("03 review generated Markdown", async ({ page }) => {
+  const data = await artifact(page);
+  await page.getByRole("button", { name: "Artifacts", exact: true }).click();
+  await page.getByLabel("Review artifact").selectOption(data.markdown.id);
+  const frame = page.frameLocator('iframe[title="Review artifact content"]');
+  await expect(
+    frame.getByRole("heading", { name: "Quarterly review" }),
+  ).toBeVisible();
+  await record(
+    page,
+    "review-markdown",
+    { x: 24, y: 120, width: 952, height: 595 },
+    async () => {
+      await pause(600);
+      const paragraph = frame.locator("p").first();
+      await paragraph.evaluate((el) => {
+        const range = document.createRange();
+        range.selectNodeContents(el);
+        const selection = getSelection()!;
+        selection.removeAllRanges();
+        selection.addRange(range);
+        window.dispatchEvent(new MouseEvent("mouseup", { bubbles: true }));
+      });
+      await page
+        .getByLabel("Feedback 1", { exact: true })
+        .pressSequentially("Explore retention first.", { delay: 40 });
+      await click(
+        page,
+        page
+          .locator(".artifact-comment")
+          .getByRole("button", { name: "Save", exact: true }),
+      );
+      await expect(page.locator(".artifact-comment-text")).toHaveText(
+        "Explore retention first.",
+      );
+    },
+  );
+});
+
+test("04 point to a generated web app", async ({ page }) => {
+  const data = await artifact(page);
+  // Replace only the demo fixture's content; the review UI is unmodified.
+  await writeFile(
+    join(data.root, "main.js"),
+    `document.querySelector('#app').innerHTML = '<p class="eyebrow">WEEKLY PULSE</p><h1>Your team, at a glance.</h1><p>A calmer place to follow your projects.</p><div class="stats"><section><small>Active projects</small><strong>12</strong></section><section><small>Tasks complete</small><strong>84%</strong></section></div><button id="export">Export</button>'; document.querySelector('#export').onclick = () => document.querySelector('#export').textContent = 'Exported';`,
+  );
+  await writeFile(
+    join(data.root, "style.css"),
+    "body{font:18px/1.6 system-ui;color:#25332f;margin:0;padding:38px;background:#fafcf9}h1{font-size:30px;letter-spacing:-1px;line-height:1.2}.eyebrow{font-size:11px;letter-spacing:2px;color:#50745e}.stats{display:flex;gap:16px;margin:28px 0}section{padding:18px;background:white;border:1px solid #dfe7df;border-radius:12px;min-width:125px}small{display:block;color:#6a786e;font-size:12px}strong{display:block;font-size:32px}button{font:inherit;border:0;border-radius:8px;padding:10px 22px;color:white;background:#2b4c3b}",
+  );
+  await page.getByRole("button", { name: "Artifacts", exact: true }).click();
+  await page.getByLabel("Review artifact").selectOption(data.app.id);
+  const frame = page.frameLocator('iframe[title="Review artifact content"]');
+  await expect(
+    frame.getByRole("button", { name: "Export", exact: true }),
+  ).toBeVisible();
+  await record(
+    page,
+    "review-web-app",
+    { x: 24, y: 120, width: 952, height: 595 },
+    async () => {
+      await pause(650);
+      await click(
+        page,
+        page.getByRole("button", { name: "Point to comment", exact: true }),
+      );
+      await click(
+        page,
+        frame.getByRole("button", { name: "Export", exact: true }),
+      );
+      await page
+        .getByLabel("Feedback 1", { exact: true })
+        .pressSequentially("Label this “Export CSV”.", { delay: 40 });
+      await click(
+        page,
+        page
+          .locator(".artifact-comment")
+          .getByRole("button", { name: "Save", exact: true }),
+      );
+      await expect(
+        frame.getByRole("button", { name: "Export", exact: true }),
+      ).toBeVisible();
+      await expect(page.locator(".artifact-comment-text")).toHaveText(
+        "Label this “Export CSV”.",
+      );
+    },
+  );
+});
+
+test("05 separate project contexts", async ({ page }) => {
+  await page.goto("/");
+  const folders: string[] = [];
+  const projects: { id: string; name: string }[] = [];
+  try {
+    for (const name of ["Website", "Research"]) {
+      const folder = await mkdtemp(join(tmpdir(), "margin-demo-"));
+      folders.push(folder);
+      const response = await page.request.post("/api/projects", {
+        data: { path: folder },
+      });
+      expect(response.ok()).toBe(true);
+      const project = await response.json();
+      await page.request.patch(`/api/projects/${project.id}`, {
+        data: { name },
+      });
+      projects.push({ id: project.id, name });
+      const note =
+        name === "Website"
+          ? "# Website launch\n\n- Make the homepage simpler.\n- Add a clear call to action."
+          : "# Research notebook\n\n- Interview five new users.\n- Compare onboarding friction.";
+      await page.request.post(
+        `/api/projects/${project.id}/plugins/project-notes/save`,
+        { data: { text: note, revision: 0 } },
+      );
+      await page.request.post("/api/test/seed", {
+        data: {
+          projectId: project.id,
+          title:
+            name === "Website"
+              ? "Improve the homepage"
+              : "Plan user interviews",
+          empty: true,
+        },
+      });
+    }
+    await page.goto(
+      `/workspaces/${projects[0].id}?panel=project-notes%3Anotes`,
+    );
+    await expect(page.getByLabel("Project notes", { exact: true })).toHaveValue(
+      /Website launch/,
+    );
+    await record(
+      page,
+      "project-workspaces",
+      { x: 0, y: 60, width: 1100, height: 687.5 },
+      async () => {
+        await pause(1000);
+        const select = page.getByRole("combobox", {
+          name: "Project",
+          exact: true,
+        });
+        const box = (await select.boundingBox())!;
+        await page.mouse.move(box.x + 90, box.y + 20, { steps: 10 });
+        await select.selectOption(projects[1].id);
+        await expect(
+          page.getByLabel("Project notes", { exact: true }),
+        ).toHaveValue(/Research notebook/);
+        await pause(1400);
+        await select.selectOption(projects[0].id);
+        await expect(
+          page.getByLabel("Project notes", { exact: true }),
+        ).toHaveValue(/Website launch/);
+      },
+    );
+  } finally {
+    for (const folder of folders)
+      await rm(folder, { recursive: true, force: true });
+  }
+});
+
+async function customization(page: Page) {
+  await page.route("**/api/customize", async (route) => {
+    const response = await route.fetch();
+    const data = await response.json();
+    await route.fulfill({
+      json: { ...data, project: { ...data.project, path: "/projects/margin" } },
+    });
+  });
+  await page.goto("/");
+  await page.getByRole("button", { name: "Show sidebar", exact: true }).click();
+  await page
+    .getByRole("button", { name: "Customize Margin", exact: true })
+    .click();
+  await expect(
+    page.getByRole("heading", { name: "Customize Margin", exact: true }),
+  ).toBeVisible();
+}
+
+test("06 ask AI to customize Margin", async ({ page }) => {
+  await customization(page);
+  const example = page
+    .locator(".example-card")
+    .filter({ hasText: "Let your assistant work with notes" });
+  await example.scrollIntoViewIfNeeded();
+  await record(page, "customize-margin", main, async () => {
+    await pause(950);
+    await click(
+      page,
+      example.getByRole("button", { name: "Use this prompt", exact: true }),
+    );
+    await expect(page.getByLabel("Message", { exact: true })).toHaveValue(
+      /Extend the project-notes plugin/,
+    );
+    const composer = page.getByLabel("Message", { exact: true });
+    await click(page, composer);
+    await composer.press("Meta+A");
+    await composer.pressSequentially("Add a decision-log plugin to Margin.", {
+      delay: 40,
+    });
+    await expect(composer).toHaveValue("Add a decision-log plugin to Margin.");
+  });
+});
+
+test("07 choose a workflow skill", async ({ page }) => {
+  await seed(page, { title: "Start with the right workflow", empty: true });
+  const skill = page.getByLabel("Starting skill", { exact: true });
+  const options = await skill.locator("option").evaluateAll((items) =>
+    items.map((item) => ({
+      label: item.textContent,
+      value: (item as HTMLOptionElement).value,
+    })),
+  );
+  const selected = options.find((item) => item.label === "Shape with me");
+  expect(selected).toBeTruthy();
+  await skill.selectOption("");
+  await record(
+    page,
+    "workflow-skills",
+    { x: 270, y: 160, width: 900, height: 562.5 },
+    async () => {
+      await pause(750);
+      await skill.selectOption(selected!.value);
+      const composer = page.getByLabel("Message", { exact: true });
+      await click(page, composer);
+      await composer.pressSequentially("Help me shape a personal notes app.", {
+        delay: 55,
+      });
+      await expect(skill).toHaveValue(selected!.value);
+    },
+  );
+});
+
+async function connections(page: Page) {
+  await page.route("**/api/bootstrap*", async (route) => {
+    const response = await route.fetch();
+    await route.fulfill({
+      json: { ...(await response.json()), models: [], sessions: [] },
+    });
+  });
+  await page.route("**/api/settings", (route) =>
+    route.fulfill({ json: { settings: defaultSettings, models: [] } }),
+  );
+  await page.route("**/api/provider-accounts", (route) =>
+    route.fulfill({
+      json: {
+        readOnly: false,
+        providers: [
+          {
+            id: "openai-codex",
+            name: "ChatGPT / Codex",
+            configured: false,
+            stored: false,
+            methods: [{ type: "oauth", label: "Sign in with OpenAI" }],
+          },
+          {
+            id: "openrouter",
+            name: "OpenRouter",
+            configured: false,
+            stored: false,
+            methods: [
+              { type: "oauth", label: "Sign in with OpenRouter" },
+              { type: "api_key", label: "Use API key" },
+            ],
+          },
+          {
+            id: "anthropic",
+            name: "Anthropic (Claude)",
+            configured: false,
+            stored: false,
+            methods: [
+              { type: "oauth", label: "Sign in with Claude" },
+              { type: "api_key", label: "Use API key" },
+            ],
+          },
+          {
+            id: "google",
+            name: "Google (Gemini)",
+            configured: false,
+            stored: false,
+            methods: [{ type: "api_key", label: "Use API key" }],
+          },
+        ],
+      },
+    }),
+  );
+  await page.route("**/api/custom-connections", (route) =>
+    route.fulfill({ json: { connections: [], readOnly: false } }),
+  );
+  await page.goto("/");
+  await page.getByRole("button", { name: "Settings", exact: true }).click();
+  await expect(
+    page.getByRole("button", { name: /ChatGPT \/ Codex Use your/ }),
+  ).toBeVisible();
+}
+
+test("08 connect subscriptions and API keys", async ({ page }) => {
+  await connections(page);
+  const dialog = page.getByRole("dialog", { name: "Settings", exact: true });
+  const bounds = (await dialog.boundingBox())!;
+  await record(
+    page,
+    "ai-connections",
+    { x: bounds.x - 10, y: bounds.y + 30, width: 640, height: 400 },
+    async () => {
+      await pause(450);
+      await click(
+        page,
+        dialog.getByRole("button", { name: /ChatGPT \/ Codex Use your/ }),
+      );
+      await scrollDialogTo(dialog.locator(".account-card"));
+      await pause(550);
+      await click(
+        page,
+        dialog.getByRole("button", { name: /OpenRouter Sign in or/ }),
+      );
+      await scrollDialogTo(dialog.locator(".account-card"));
+      await expect(
+        dialog.getByRole("button", { name: "Use API key", exact: true }),
+      ).toBeVisible();
+    },
+  );
+});
+
+test("09 configure a local or custom model", async ({ page }) => {
+  await connections(page);
+  const dialog = page.getByRole("dialog", { name: "Settings", exact: true });
+  await dialog.getByRole("button", { name: /Add custom connection/ }).click();
+  await dialog
+    .getByLabel("Authentication", { exact: true })
+    .selectOption("none");
+  await dialog.locator(".custom-connection-form").scrollIntoViewIfNeeded();
+  const bounds = (await dialog.boundingBox())!;
+  await record(
+    page,
+    "custom-models",
+    { x: bounds.x - 10, y: bounds.y + 30, width: 640, height: 400 },
+    async () => {
+      await pause(550);
+      const url = dialog.getByLabel("Base URL", { exact: true });
+      await click(page, url);
+      await url.pressSequentially("http://localhost:8080/v1", { delay: 35 });
+      const model = dialog.getByLabel("Model ID", { exact: true });
+      await scrollDialogTo(model, 250);
+      await click(page, model);
+      await model.pressSequentially("Qwen3-4B", { delay: 70 });
+      await expect(model).toHaveValue("Qwen3-4B");
+    },
+  );
+});
+
+test("10 extend Margin with plugins", async ({ page }) => {
+  await customization(page);
+  await page.getByRole("button", { name: "Plugins", exact: false }).click();
+  const notes = page.getByRole("checkbox", { name: "Enable Project Notes" });
+  await expect(notes).toBeChecked();
+  await record(page, "plugins", main, async () => {
+    await pause(900);
+    await click(page, notes);
+    await expect(
+      page.getByText("Restart needed", { exact: true }),
+    ).toBeVisible();
+    await pause(300);
+    await click(page, notes);
+    await expect(notes).toBeChecked();
+    await expect(page.getByRole("status")).toContainText(
+      "No restart is needed",
+    );
+  });
+});
