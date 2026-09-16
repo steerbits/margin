@@ -8,6 +8,8 @@ import {
   rmSync,
   existsSync,
   symlinkSync,
+  chmodSync,
+  readdirSync,
 } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { tmpdir } from "node:os";
@@ -50,6 +52,117 @@ function fixture() {
     close: () => rmSync(root, { recursive: true, force: true }),
   };
 }
+
+function gitShim(f: ReturnType<typeof fixture>, code: string) {
+  const realGit = execFileSync("/bin/sh", ["-c", "command -v git"], {
+    encoding: "utf8",
+  }).trim();
+  const bin = join(f.data, "git-shim");
+  mkdirSync(bin);
+  const shim = join(bin, "git");
+  writeFileSync(
+    shim,
+    `#!${process.execPath}
+const fs = require('node:fs');
+const { spawnSync } = require('node:child_process');
+const args = process.argv.slice(2);
+${code}
+{
+const child = spawnSync(${JSON.stringify(realGit)}, args, { stdio: 'inherit' });
+process.exit(child.status ?? 1);
+}
+`,
+  );
+  chmodSync(shim, 0o755);
+  const previous = process.env.PATH;
+  process.env.PATH = `${bin}:${previous}`;
+  return () => {
+    process.env.PATH = previous;
+  };
+}
+
+test("checkpoints use finite file input and round-trip large binary and empty files", () => {
+  const f = fixture();
+  const restorePath = gitShim(
+    f,
+    `
+if (args.includes('--stdin') || args.includes('--index-info') || args.includes('commit-tree')) {
+  if (!fs.fstatSync(0).isFile()) {
+    console.error('Checkpoint input must be a regular file, not a pipe');
+    process.exit(98);
+  }
+}
+`,
+  );
+  try {
+    const bytes = Buffer.alloc(256 * 1024 + 17);
+    for (let i = 0; i < bytes.length; i++) bytes[i] = i % 256;
+    writeFileSync(join(f.root, "large.bin"), bytes);
+    writeFileSync(join(f.root, "empty.txt"), "");
+    const saved = f.history.save("Large captured input");
+    writeFileSync(join(f.root, "large.bin"), "changed");
+    writeFileSync(join(f.root, "empty.txt"), "changed");
+    const preview = f.history.preview(saved.id);
+    f.history.restore(saved.id, preview.token);
+    assert.deepEqual(readFileSync(join(f.root, "large.bin")), bytes);
+    assert.equal(readFileSync(join(f.root, "empty.txt")).length, 0);
+    assert.equal(
+      readdirSync(f.history.directory).some((name) =>
+        name.startsWith("git-input-"),
+      ),
+      false,
+    );
+  } finally {
+    restorePath();
+    f.close();
+  }
+});
+
+test(
+  "a hung Git command is killed, releases the history lock, and permits retry",
+  { timeout: 15000 },
+  () => {
+    const f = fixture();
+    const initial = f.history.save("Initial");
+    const pidFile = join(f.data, "hung-git.pid");
+    const restorePath = gitShim(
+      f,
+      `
+if (args.includes('hash-object')) {
+  fs.writeFileSync(${JSON.stringify(pidFile)}, String(process.pid));
+  process.on('SIGTERM', () => {});
+  setInterval(() => {}, 1000);
+} else
+`,
+    );
+    try {
+      assert.throws(
+        () => f.history.save("Stuck checkpoint"),
+        /Code history timed out.*hash-object/,
+      );
+      const pid = Number(readFileSync(pidFile, "utf8"));
+      assert.throws(() => process.kill(pid, 0), { code: "ESRCH" });
+      assert.equal(
+        existsSync(join(f.history.directory, "operation.lock")),
+        false,
+      );
+      assert.equal(
+        readdirSync(f.history.directory).some((name) =>
+          name.startsWith("git-input-"),
+        ),
+        false,
+      );
+      restorePath();
+      assert.equal(f.history.state().checkpoints.length, 1);
+      assert.equal(f.history.state().checkpoints[0].id, initial.id);
+      assert.equal(f.history.save("Retry").name, "Retry");
+    } finally {
+      restorePath();
+      f.close();
+    }
+  },
+);
+
 test("checkpoints preview, restore, and roll forward without changing Git branch/index or private data", () => {
   const f = fixture();
   try {

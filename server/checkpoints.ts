@@ -55,34 +55,62 @@ export class CheckpointHistory {
     this.journalPath = join(this.directory, "checkpoints.json");
   }
   private git(args: string[], input?: string | Buffer, index?: string): Buffer {
-    return execFileSync(
-      "git",
-      [
-        "-c",
-        "core.hooksPath=/dev/null",
-        "-c",
-        "core.fsmonitor=false",
-        "-c",
-        "commit.gpgSign=false",
-        "-C",
-        this.root,
-        ...args,
-      ],
-      {
-        input,
-        maxBuffer: 64 * 1024 * 1024,
-        stdio: ["pipe", "pipe", "pipe"],
-        env: {
-          ...process.env,
-          GIT_OPTIONAL_LOCKS: "0",
-          ...(index ? { GIT_INDEX_FILE: index } : {}),
-          GIT_AUTHOR_NAME: "Margin checkpoint",
-          GIT_AUTHOR_EMAIL: "checkpoint@margin.local",
-          GIT_COMMITTER_NAME: "Margin checkpoint",
-          GIT_COMMITTER_EMAIL: "checkpoint@margin.local",
+    let inputDirectory: string | undefined;
+    let inputFd: number | undefined;
+    try {
+      if (input !== undefined) {
+        // Piping a captured file through spawnSync can stall waiting for EOF
+        // on macOS. A regular file gives Git a finite input without that pipe.
+        // Use the captured bytes, not the source path, to retain snapshot checks.
+        mkdirSync(this.directory, { recursive: true });
+        inputDirectory = mkdtempSync(join(this.directory, "git-input-"));
+        const file = join(inputDirectory, "stdin");
+        writeFileSync(file, input, { mode: 0o600 });
+        inputFd = openSync(file, "r");
+      }
+      return execFileSync(
+        "git",
+        [
+          "-c",
+          "core.hooksPath=/dev/null",
+          "-c",
+          "core.fsmonitor=false",
+          "-c",
+          "commit.gpgSign=false",
+          "-C",
+          this.root,
+          ...args,
+        ],
+        {
+          maxBuffer: 64 * 1024 * 1024,
+          stdio: [inputFd ?? "ignore", "pipe", "pipe"],
+          timeout: 5000,
+          // A synchronous timeout still waits for exit. Do not let a child that
+          // ignores SIGTERM hold the workspace and history lock indefinitely.
+          killSignal: "SIGKILL",
+          env: {
+            ...process.env,
+            GIT_OPTIONAL_LOCKS: "0",
+            ...(index ? { GIT_INDEX_FILE: index } : {}),
+            GIT_AUTHOR_NAME: "Margin checkpoint",
+            GIT_AUTHOR_EMAIL: "checkpoint@margin.local",
+            GIT_COMMITTER_NAME: "Margin checkpoint",
+            GIT_COMMITTER_EMAIL: "checkpoint@margin.local",
+          },
         },
-      },
-    );
+      );
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ETIMEDOUT")
+        throw new Error(
+          `Code history timed out while running Git (${args[0]}). The command was stopped; try again.`,
+          { cause: error },
+        );
+      throw error;
+    } finally {
+      if (inputFd !== undefined) closeSync(inputFd);
+      if (inputDirectory)
+        rmSync(inputDirectory, { recursive: true, force: true });
+    }
   }
   private requireRepository() {
     if (
