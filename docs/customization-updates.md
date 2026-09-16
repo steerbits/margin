@@ -2,6 +2,8 @@
 
 Research/design note, 14 September 2026. Applies to localhost and one-owner server installations. The mechanisms below are proposals, not an implemented updater. This extends the [self-hosting recommendations](self-hosting.md).
 
+**Later product direction, 16 September 2026:** [Automatic update discovery and customization chat](automatic-updates.md) proposes a smaller first version: a header release notification opens a prefilled customization conversation, reusing and improving shared checkpoints and recovery. That note supersedes the dedicated Prepare/preview/Install interface as the initial direction; the integration and recovery analysis below remains relevant.
+
 **Recommendation: preserve customizations as versioned source, use ordinary merging first, and offer AI-assisted adaptation when needed.** A person should be able to customize Margin's core as well as develop plugins. Prefer a plugin or setting when it expresses the change cleanly, while supporting a personal source branch for changes that need core edits. Build and test a candidate release separately, then activate it deliberately. Keep the previous working release and a data-aware recovery path.
 
 AI should make difficult updates more approachable. A successful model response should not be the sole reason an update replaces someone's working installation. Equally, normal updates should not require a working model subscription when no adaptation is needed.
