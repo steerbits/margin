@@ -20,7 +20,9 @@ test("home preserves sidebar context, drafts, history, and explicit collapse acr
   await expect(
     page.getByRole("heading", { name: "Welcome to Margin" }),
   ).toBeVisible();
-  await expect(page.locator(".sidebar")).not.toBeVisible();
+  await expect(home(page)).toBeEnabled();
+  // Startup visibility now follows whether saved chats exist. Fresh/returning
+  // browser defaults are covered deterministically in startup-loading.spec.ts.
   const id = await seed(page);
   await page.goto(`/chats/${id}`);
   const composer = page.getByLabel("Message", { exact: true });
@@ -179,6 +181,7 @@ for (const width of [1440, 390, 320]) {
     page,
   }) => {
     await page.setViewportSize({ width, height: 900 });
+    await page.addInitScript(() => localStorage.setItem("margin.sidebar", "closed"));
     await page.goto("/");
     await expect(page.locator(".home-page")).toBeVisible();
     const toggle = page.locator(".app-header .sidebar-toggle");

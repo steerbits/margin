@@ -11,6 +11,7 @@ import {
   Check,
   ChevronDown,
   Circle,
+  LoaderCircle,
   Folder,
   FolderPlus,
   MessageSquare,
@@ -117,6 +118,9 @@ export function App() {
   const [projectId, setProjectId] = useState(""),
     [sessionId, setSessionId] = useState<string | null>(null);
   const [loaded, setLoaded] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
+  const refreshing = useRef(false);
   const [viewportWidth, setViewportWidth] = useState(window.innerWidth);
   useEffect(() => {
     const resized = () => setViewportWidth(window.innerWidth);
@@ -181,7 +185,8 @@ export function App() {
     if (!workspaceOpened.current) {
       workspaceOpened.current = true;
       localStorage.setItem("margin.workspace-opened", "true");
-      setSidebar(window.innerWidth > 650);
+      if (localStorage.getItem("margin.sidebar") === null)
+        setSidebar(window.innerWidth > 650);
     }
   }
   function toggleSidebar() {
@@ -449,23 +454,49 @@ export function App() {
     applyRoute(next, data, previousRoute);
   }
   const refresh = useCallback(async () => {
-    const route = parseRoute(location.pathname, location.search);
-    const query =
-      route.kind === "chat"
-        ? `sessionId=${encodeURIComponent(route.sessionId)}`
-        : `projectId=${encodeURIComponent(route.kind === "workspace" ? route.projectId : (localStorage.getItem("margin.project") ?? ""))}`;
-    const b = await api<Bootstrap>(`/bootstrap?${query}`);
-    const pluginErrors = await loadBrowserPlugins(b.activePluginFolders);
-    if (pluginErrors.length)
-      setError(
-        `Some browser plugins could not load: ${pluginErrors.join("; ")}`,
+    // Keep retries (and StrictMode's initial effect) single-flight.
+    if (refreshing.current) return;
+    refreshing.current = true;
+    setLoading(true);
+    setLoadError("");
+    try {
+      const route = parseRoute(location.pathname, location.search);
+      const query =
+        route.kind === "chat"
+          ? `sessionId=${encodeURIComponent(route.sessionId)}`
+          : `projectId=${encodeURIComponent(route.kind === "workspace" ? route.projectId : (localStorage.getItem("margin.project") ?? ""))}`;
+      // Allow the gateway's 35s worker-start budget, but not an endless spinner.
+      const b = await api<Bootstrap>(
+        `/bootstrap?${query}`, undefined, "GET", AbortSignal.timeout(45000),
       );
-    setBoot(b);
-    setLoaded(true);
-    const next = parseRoute(location.pathname, location.search);
-    if (next.kind !== "not-found")
-      writeRoute(next, true);
-    applyRoute(next, b);
+      const pluginErrors = await loadBrowserPlugins(b.activePluginFolders);
+      if (pluginErrors.length)
+        setError(
+          `Some browser plugins could not load: ${pluginErrors.join("; ")}`,
+        );
+      setBoot(b);
+      const next = parseRoute(location.pathname, location.search);
+      if (next.kind !== "not-found")
+        writeRoute(next, true);
+      applyRoute(next, b);
+      setLoaded(true);
+      // A new port has no browser preferences, not necessarily no history.
+      // Never override an explicit collapse, or cover the screen on mobile.
+      if (
+        b.sessions.length && window.innerWidth > 650 &&
+        localStorage.getItem("margin.sidebar") === null
+      )
+        setSidebar(true);
+    } catch (error) {
+      setLoadError(
+        error instanceof Error && error.name === "TimeoutError"
+          ? "Loading took too long. Check that Margin is running, then retry."
+          : (error instanceof Error ? error.message : String(error)) || "Please retry.",
+      );
+    } finally {
+      refreshing.current = false;
+      setLoading(false);
+    }
   }, []);
   useEffect(() => {
     void refresh().catch(fail);
@@ -1307,6 +1338,9 @@ export function App() {
     (snapshot?.session.id === sessionId ? snapshot.session.title : undefined) ??
     boot.sessions.find((s) => s.id === sessionId)?.title ??
     "New conversation";
+  const connectionLabel = !loaded
+    ? loadError ? "Loading failed" : "Loading Margin…"
+    : sessionId ? connected ? "Connected" : "Reconnecting…" : "Ready";
   const pageTitle = hubOpen
     ? "Margin · Customize Margin"
     : workspaceHomeOpen && currentProject && !routeMissing
@@ -1509,11 +1543,14 @@ export function App() {
         <div className="header-right">
           <span
             className={`connection ${connected ? "connected" : ""}`}
-            title={sessionId ? (connected ? "Connected" : "Reconnecting…") : "Ready"}
+            role={!loaded ? "status" : undefined}
+            title={connectionLabel}
           >
-            <Circle size={7} fill="currentColor" />
+            {!loaded && !loadError
+              ? <LoaderCircle size={14} className="spin" aria-hidden="true" />
+              : <Circle size={7} fill="currentColor" aria-hidden="true" />}
             <span className="connection-label">
-              {sessionId ? (connected ? "Connected" : "Reconnecting…") : "Ready"}
+              {connectionLabel}
             </span>
           </span>
           <button
@@ -1563,8 +1600,8 @@ export function App() {
             <button
               aria-label="New workspace"
               title="Open or create a workspace"
-              disabled={choosingWorkspace}
-              aria-busy={choosingWorkspace}
+              disabled={!loaded || choosingWorkspace}
+              aria-busy={(!loaded && !loadError) || choosingWorkspace}
               onClick={() => void chooseWorkspace()}
             >
               <FolderPlus size={16} />
@@ -1590,7 +1627,9 @@ export function App() {
               if (project) void openProject(project).catch(fail);
             }}
           >
-            {!projectId && <option value="" disabled>Choose a workspace</option>}
+            {!projectId && <option value="" disabled>
+              {!loaded ? (loadError ? "Workspaces unavailable" : "Loading workspaces…") : "Choose a workspace"}
+            </option>}
             {recentProjects.map((p) => (
               <option value={p.id} key={p.id}>
                 {p.name}
@@ -1609,21 +1648,38 @@ export function App() {
             <Plus size={16} />
             New conversation<span>⌘</span>
           </button>
-          <SidebarConversations
-            sessions={boot.sessions}
-            projects={boot.projects}
-            projectId={projectId}
-            sessionId={sessionId}
-            isUnread={isUnread}
-            onSelect={switchSession}
-            onPrefetch={(id) => {
-              if (!histories.get(id)) void prefetchSession(id);
-            }}
-            onContextMenu={(session, x, y) => setContextMenu({ session, x, y })}
-          />
+          {!loaded ? (
+            <div className="sidebar-conversations" role="status" aria-busy={!loadError}>
+              <p className="sidebar-empty startup-status">
+                {!loadError && <LoaderCircle size={16} className="spin" aria-hidden="true" />}
+                {loadError ? "Conversations could not be loaded. Retry loading to see your chats." : "Loading conversations…"}
+              </p>
+            </div>
+          ) : (
+            <SidebarConversations
+              sessions={boot.sessions}
+              projects={boot.projects}
+              projectId={projectId}
+              sessionId={sessionId}
+              isUnread={isUnread}
+              onSelect={switchSession}
+              onPrefetch={(id) => {
+                if (!histories.get(id)) void prefetchSession(id);
+              }}
+              onContextMenu={(session, x, y) => setContextMenu({ session, x, y })}
+            />
+          )}
         </aside>
         <main className="main" {...attachments.dropProps}>
           {attachments.overlay}
+          {loadError && (
+            <div className="notice error startup-error" role="alert">
+              <span>{loaded ? "Could not refresh Margin." : "Could not load Margin."} {loadError}</span>
+              <button onClick={() => void refresh()} disabled={loading}>
+                Retry loading
+              </button>
+            </div>
+          )}
           {statusError && (
             <div className="notice" role="status">
               {statusError}
@@ -1645,6 +1701,7 @@ export function App() {
           {homeOpen ? (
             <Home
               loaded={loaded}
+              loadError={loadError}
               models={boot.models}
               modelError={boot.modelError}
               projects={orderedProjects.filter((project) => project.id !== boot.marginProjectId && project.kind !== "margin")}

@@ -62,6 +62,11 @@
   font-size: 14px;
   min-height: 42px;
 }
+.home-card button[aria-busy="true"]:disabled {
+  opacity: 1;
+  color: var(--muted);
+  cursor: progress;
+}
 .home-secondary {
   border: 1px solid #d8d8d8;
   background: white;

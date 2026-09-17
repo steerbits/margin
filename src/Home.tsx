@@ -1,4 +1,10 @@
-import { Check, FolderOpen, Plug, SlidersHorizontal } from "lucide-react";
+import {
+  Check,
+  FolderOpen,
+  LoaderCircle,
+  Plug,
+  SlidersHorizontal,
+} from "lucide-react";
 import type { ModelInfo, Project } from "../shared/types.ts";
 import { modelProviderLabel } from "../shared/model-picker.ts";
 import { WorkspaceList } from "./WorkspacePicker.tsx";
@@ -8,6 +14,7 @@ export function Home({
   models,
   projects,
   loaded,
+  loadError,
   choosingWorkspace,
   modelError,
   onSettings,
@@ -18,6 +25,7 @@ export function Home({
   models: ModelInfo[];
   projects: Project[];
   loaded: boolean;
+  loadError?: string;
   choosingWorkspace: boolean;
   modelError?: string;
   onSettings: () => void;
@@ -31,6 +39,7 @@ export function Home({
     ).values(),
   ];
   const configured = models.length > 0;
+  const loading = !loaded && !loadError;
   return (
     <div className="home-page">
       <div className="home-content">
@@ -41,7 +50,7 @@ export function Home({
         </p>
         <div className="home-cards">
           <section
-            className={`home-card${!configured ? " home-card-next" : ""}`}
+            className={`home-card${loaded && !configured ? " home-card-next" : ""}`}
             aria-labelledby="home-ai-heading"
           >
             <div className="home-card-title">
@@ -56,9 +65,14 @@ export function Home({
               className={`home-connection-state${configured ? " configured" : ""}`}
               role="status"
             >
-              {configured && <Check size={15} />}
+              {loading && (
+                <LoaderCircle size={15} className="spin" aria-hidden="true" />
+              )}
+              {loaded && configured && <Check size={15} aria-hidden="true" />}
               {!loaded
-                ? "Loading connections…"
+                ? loadError
+                  ? "Connections could not be loaded"
+                  : "Loading connections…"
                 : configured
                   ? `${providers.length} connection${providers.length === 1 ? "" : "s"} configured`
                   : "Connect a provider to get started"}
@@ -75,11 +89,17 @@ export function Home({
               aria-haspopup="dialog"
               disabled={!loaded}
             >
-              {configured ? "Open settings" : "Connect an AI provider"}
+              {!loaded
+                ? loadError
+                  ? "Settings unavailable"
+                  : "Loading…"
+                : configured
+                  ? "Open settings"
+                  : "Connect an AI provider"}
             </button>
           </section>
           <section
-            className={`home-card${configured ? " home-card-next" : ""}`}
+            className={`home-card${loaded && configured ? " home-card-next" : ""}`}
             aria-labelledby="home-workspace-heading"
           >
             <div className="home-card-title">
@@ -94,9 +114,21 @@ export function Home({
               className={configured ? "primary" : "home-secondary"}
               onClick={onOpenWorkspace}
               disabled={!loaded || choosingWorkspace}
+              aria-busy={loading || choosingWorkspace}
+              aria-live="polite"
             >
-              <FolderOpen size={17} />{" "}
-              {choosingWorkspace ? "Choosing a folder…" : "Open workspace"}
+              {loading || choosingWorkspace ? (
+                <LoaderCircle size={17} className="spin" aria-hidden="true" />
+              ) : (
+                <FolderOpen size={17} aria-hidden="true" />
+              )}{" "}
+              {!loaded
+                ? loadError
+                  ? "Workspaces unavailable"
+                  : "Loading workspaces…"
+                : choosingWorkspace
+                  ? "Choosing a folder…"
+                  : "Open workspace"}
             </button>
           </section>
         </div>

@@ -420,6 +420,14 @@ p {
   line-height: 1.7;
   padding: 6px 10px;
 }
+.startup-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.startup-status svg {
+  flex-shrink: 0;
+}
 .main {
   min-width: 0;
   display: flex;
@@ -1322,6 +1330,13 @@ a.project-breadcrumb > span {
   color: #5b5b5b;
   gap: 12px;
 }
+.startup-error {
+  flex-wrap: wrap;
+}
+.startup-error span {
+  flex: 1 1 200px;
+  overflow-wrap: anywhere;
+}
 .notice.error {
   background: #fff0ee;
   border-color: #f1bfbb;
@@ -1888,6 +1903,11 @@ a.project-breadcrumb > span {
   }
 }
 @media (prefers-reduced-motion: reduce) {
+  .home-page .spin,
+  .startup-status .spin,
+  .connection .spin {
+    animation: none;
+  }
   .conversation-spinner {
     animation-duration: 2s;
   }
