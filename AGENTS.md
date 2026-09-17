@@ -1,0 +1,1 @@
+If you want to create temporary files or folders isolated from git, you should use .margin-data/temporary/ folder to put files as it is in .gitigore. Create new subfolders within temporary so that it is properly organized.
