@@ -1,27 +1,41 @@
-# Margin
+# Margin: a human-first AI workspace
 
-A human-first harness that uses your existing agents.
+Margin is a local AI workspace for macOS, **built for humans who want to actively shape what AI produces**. While fully-autonomous agents focus on independent execution, Margin makes it easy to guide the approach, give precise feedback, and customize the workspace around your workflow.
 
-## What makes it human-first and special
+**Margin works with your existing AI subscriptions**: Codex/ChatGPT, OpenRouter, Claude (extra-billing), Gemini, Deepseek and 100s of others. It also works with local models or models hosted on your server
 
-- **Designed to elicit volumes of feedback from humans**
-    - Inline comments for AI replies (Google-docs style) implicitly pushes you to give more feedback
-    - Generated artifacts (markdown or html files or web app) have a point-and-click detailed annotation
-- **AI shapes the task with you before executing**
-    - Invites feedback, presents options, brainstorms with you
-    - The output becomes distinctly yours (instead of AI default)
-- **Sandboxed execution that isolates every workspace/project**
-    - Your AI cannot write or execute files outside of current workspace
-    - But it can ready anywhere on the system, allowing for fast, permissionless but safe execution of agreed upon plan
-- **Extend Margin by asking AI to build what you want**
-    - Margin supports plugins and customization of itself
-    - Simply ask the agent what you want to get built and it'll customize a version for you
+## How Margin lets you shape the work AI produces
 
-## Supported models
+### Contextual feedback to AI = better outputs
 
-Margin is built on [Pi](https://github.com/earendil-works/pi), and hence supports alll models and subscriptions, including Codex/ChatGPT, Claude, Openrouter and even local models like Qwen.
+![Select a passage and leave feedback in the margin.](docs/images/inline-feedback.gif)
 
-A personal, local browser interface for Pi. Read Markdown, select a passage, collect comments in the margin, and send them with an overall reply. A chosen Pi skill drives the workflow.
+_Inline comments (Google-Docs style) make it easy to give lots of feedback to the agent._
+
+### AI seeks your inputs before execution
+
+![Choose a direction, add your constraints, and refine the plan.](docs/images/shape-together.gif)
+
+_Every task starts with a round of discussion between you and agent on what would be a meaningful outcome._
+
+### Point your AI to what you want changed
+
+![Point to an element and say what should change.](docs/images/review-web-app.gif)
+
+_Reports, plans and prototypes (in markdown and html) open within Margin to let you provide feedback to AI by pointing to precisely what you want changed._
+
+### AI customizes Margin around your workflow
+
+![Pick a starting idea, then describe the change you want.](docs/images/customize-margin.gif)
+
+_Ask AI to add features, change the interface, or build plugins for your workflow. Want to change something in Margin? Simply describe it._
+
+### Isolated workspace for safe AI changes
+
+![Switch projects with their own conversations and shared notes.](docs/demos/project-workspaces.gif)
+
+_Margin isolates each workspace via an [embedded sandbox](https://github.com/nikvdp/cco) so that your AI working in one folder cannot change or delete anything outside that folder._
+
 
 ## Install and run
 
@@ -33,24 +47,6 @@ bash install.sh --start
 
 The installer installs locked dependencies, builds Margin, verifies the real filesystem sandbox, and starts the app. Pi **0.85.1** and a pinned cco copy are included; no separate global Pi or cco installation is required. It leaves global Node/Git/Pi installations alone and refuses to replace existing dependency/build directories. Later starts use `bash start.sh`.
 
-## Screenshots
-
-**Comment directly on AI replies**
-
-![Select a passage and leave feedback in the margin.](docs/images/inline-feedback.gif)
-
-**Shape the task with AI**
-
-![Choose a direction, add your constraints, and refine the plan.](docs/images/shape-together.gif)
-
-**Point and comment on generated docs and apps** 
-
-![Point to an element and say what should change.](docs/images/review-web-app.gif)
-
-**Customize anything in Margin**
-
-![Pick a starting idea, then describe the change you want.](docs/images/customize-margin.gif)
-
 ## About
 
 Margin is built by [@paraschopra](x.com/paraschopra) and thanks the following projects
@@ -60,7 +56,9 @@ Margin is built by [@paraschopra](x.com/paraschopra) and thanks the following pr
 
 ## Margin is WIP, and currently meant for technical audience
 
-Please expect things to break. It is a very early release. Feedback welcome via Github issues.
+Margin is an experiment exploring how humans can help better shape the AI work.
+
+This is an early release for technical users. Please expect things to break, and share feedback through GitHub issues.
 
 ## License
 
