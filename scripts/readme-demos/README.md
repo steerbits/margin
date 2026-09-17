@@ -8,19 +8,27 @@ Prerequisites: the repository's npm dependencies, Playwright Chromium (`npx play
 
 ```sh
 MARGIN_DEMO_OUTPUT=.margin-data/temporary/readme-speed-options/gifs/1x \
-  npx playwright test --config scripts/readme-demos/playwright.config.ts --grep '0[1246] '
+  npx playwright test --config scripts/readme-demos/playwright.config.ts --grep '0[1246] |11 '
 npx tsx scripts/readme-demos/compare-speeds.ts
+# Selected set: 1x throughout, except review-web-app at 0.75x.
+npx tsx scripts/readme-demos/compare-speeds.ts --selected
 ```
 
-This creates **four** revised workflows at 1× (5 seconds) and 0.75× (6.67 seconds), plus a comparison at `.margin-data/temporary/readme-speed-options/preview/index.html`. Both speeds contain identical decoded frames, not independent recordings. The comparison verifies those pixel hashes, playback timing, loops, dimensions, accent/chart colors, size budgets, and responsive 480px display width. It never edits `README.md` or its GIFs. Wait for the speed choice before copying any candidate files.
+With the verified sandbox evidence below, this creates **five** revised workflows at 1× (5 seconds) and 0.75× (6.67 seconds). The full comparison is at `.margin-data/temporary/readme-speed-options/preview/index.html`; `--selected` writes the chosen five-demo preview to `.margin-data/temporary/readme-final-selection/preview/index.html`, putting the new sandbox clip first. It uses 1× for inline feedback, planning, customization, and sandboxing, and 0.75× for the dashboard.
 
-The sandbox replacement for `project-workspaces.gif` is **pending real execution evidence**. Native sandbox startup was refused in the agent environment; `sandbox_apply: Operation not permitted` does not prove an outside write was blocked. From a normal macOS terminal at the repository root, run:
+Both speeds contain identical decoded frames, not independent recordings. The comparison verifies those pixel hashes, playback timing, loops, dimensions, accent/chart/error colors, size budgets, and responsive 480px display width. Neither mode edits `README.md` or its GIFs. The selected set is still a preview, pending approval to replace the README assets.
+
+### Sandbox evidence and replay
+
+The new candidate is `sandbox-boundary.gif`; the existing project-switching clip is untouched. The host-terminal probe succeeded: an inside write was allowed, the outside write returned `/bin/sh: ../outside/hello.txt: Operation not permitted`, and the outside file remained absent. This is different from `sandbox_apply: Operation not permitted`, which only means sandbox startup failed.
+
+To reproduce the proof on another checkout, run from a normal macOS terminal at the repository root:
 
 ```sh
 npx tsx scripts/readme-demos/sandbox-proof.ts
 ```
 
-The probe uses the bundled native cco, writes an allowed control file inside a disposable workspace, attempts `../outside/hello.txt`, and verifies the outside file is absent and its sentinel is unchanged. All targets are under `.margin-data/temporary/` (not `/tmp`, which cco allows); no real home files are targeted. It saves raw diagnostics to `sandbox/attempt.json`, emits `sandbox/proof.json` only on success, removes stale success evidence before each run, and cleans up the probe directories. A successful proof is the prerequisite for building the sandbox GIF; the comparison currently shows a pending notice rather than an invented denial.
+The probe uses the bundled native cco, writes an allowed control file inside a disposable workspace, attempts `../outside/hello.txt`, and verifies the outside file is absent and its sentinel is unchanged. All targets are under `.margin-data/temporary/` (not `/tmp`, which cco allows); no real home files are targeted. It saves raw diagnostics to `sandbox/attempt.json`, emits `sandbox/proof.json` only on success, removes stale success evidence before each run, and cleans up the probe directories. Capture test 11 reads the saved proof without rerunning the probe, validates all checks and its bundled-cco hash, and then replays the exact command/output/exit code in the disposable app. These are persisted fixture transcript entries, not live inference or live tool execution during the recording. The test skips if proof is absent; `--selected` refuses an incomplete set. The comparison checks the error state remains red, not Cobalt.
 
 ## Refresh the five GIFs currently embedded in README.md
 
@@ -43,7 +51,7 @@ The verifier reads those actual embeds, checks each GIF's five-second duration, 
 ## Regenerate the extended ten-demo gallery
 
 ```sh
-npx playwright test --config scripts/readme-demos/playwright.config.ts
+npx playwright test --config scripts/readme-demos/playwright.config.ts --grep '^(0[1-9]|10) '
 npx tsx scripts/readme-demos/gallery.ts
 ```
 
@@ -53,7 +61,7 @@ npx tsx scripts/readme-demos/gallery.ts
 - `.margin-data/temporary/readme-demos/frames/`: raw camera crops (2× for the README clips), normalized frames, and per-demo `capture.json` camera/timing metadata.
 - `.margin-data/temporary/readme-demos/results/`: capture test results and failure traces.
 
-The capture suite builds an isolated app in a temporary folder on port 4356. It never reuses or restarts the normal Margin server. Conversations and generated artifacts use sample content from the existing test fixture API. The provider catalog is a fixture; sign-in and inference are not performed. The custom connection demo stops after entering example settings. The workspace clip demonstrates switching contexts, not OS sandbox enforcement. The installer is intentionally left as text rather than showing a sped-up or invented installation.
+The capture suite builds an isolated app in a temporary folder on port 4356. It never reuses or restarts the normal Margin server. Conversations and generated artifacts use sample content from the existing test fixture API. The provider catalog is a fixture; sign-in and inference are not performed. The custom connection demo stops after entering example settings. The legacy workspace-switching clip demonstrates contexts, not OS sandbox enforcement. The separate sandbox clip is an explicitly disclosed replay of a verified native-cco denial. The installer is intentionally left as text rather than showing a sped-up or invented installation.
 
 A smooth camera follows each interaction into its relevant controls, comment card, or composer instead of shrinking the entire app into the frame. The planning clip uses a narrower real viewport so its final reply fits. Camera crops, a pointer overlay, white padding at window edges, and GIF encoding apply only to the recordings; production fonts, sizes, layout, and styling are unchanged.
 

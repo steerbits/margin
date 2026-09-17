@@ -163,6 +163,17 @@ export function installFixtures(
   });
   app.post("/api/test/seed", async (req, res, next) => {
     try {
+      // Replay presentation data only, never execute a supplied command.
+      const replay = req.body.toolReplay;
+      if (
+        replay &&
+        (process.env.MARGIN_DISPOSABLE_TEST_APP !== "1" ||
+          typeof replay.command !== "string" ||
+          typeof replay.output !== "string" ||
+          typeof replay.reply !== "string" ||
+          !Number.isInteger(replay.exitCode) || replay.exitCode < 1)
+      )
+        throw new Error("Tool replay requires a disposable app and an error result.");
       const info: SessionInfo = {
         id: randomUUID(),
         projectId: store
@@ -232,9 +243,36 @@ export function installFixtures(
             Math.min(3000, Math.max(0, Number(req.body.responseDelay) || 80)),
           ),
         );
+        if (replay) {
+          const toolCallId = randomUUID();
+          l.agent.sessionManager.appendMessage({
+            role: "assistant",
+            content: [{
+              type: "toolCall", id: toolCallId, name: "bash",
+              arguments: { command: replay.command },
+            }],
+            api: "openai-codex-responses",
+            provider: "openai-codex",
+            model: "fixture",
+            usage,
+            stopReason: "toolUse",
+            timestamp: Date.now(),
+          });
+          l.agent.sessionManager.appendMessage({
+            role: "toolResult",
+            toolCallId,
+            toolName: "bash",
+            isError: true,
+            content: [{
+              type: "text",
+              text: `${replay.output}\n\nCommand exited with code ${replay.exitCode}`,
+            }],
+            timestamp: Date.now(),
+          });
+        }
         append(
           "assistant",
-          "## Revised direction\n\nI received your inline comments and overall reply. I will use **local SQLite**, keep accounts out of the first version, and wait for your remaining decisions.\n\nWhat would you like to adjust next?",
+          replay?.reply ?? "## Revised direction\n\nI received your inline comments and overall reply. I will use **local SQLite**, keep accounts out of the first version, and wait for your remaining decisions.\n\nWhat would you like to adjust next?",
         );
         l.messages = transcript(l.agent.sessionManager.getBranch());
         l.busy = false;

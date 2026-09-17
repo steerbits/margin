@@ -1,6 +1,8 @@
 import { test, expect, type Page, type Locator } from "@playwright/test";
 import { mkdir, mkdtemp, writeFile, rm } from "node:fs/promises";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
+import { existsSync } from "node:fs";
+import { readSandboxProof } from "./sandbox-proof.ts";
 import { defaultSettings } from "../../shared/settings.ts";
 import { dashboardScript, dashboardStyles } from "./dashboard-fixture.ts";
 import {
@@ -677,4 +679,77 @@ test("10 extend Margin with plugins", async ({ page }) => {
       .poll(() => page.getByRole("status").textContent(), { intervals: [50] })
       .toContain("No restart is needed");
   });
+});
+
+test("11 replay verified sandbox denial", async ({ page }) => {
+  const proofPath = resolve(
+    process.env.MARGIN_DEMO_SANDBOX_PROOF ??
+      ".margin-data/temporary/readme-speed-options/sandbox/proof.json",
+  );
+  test.skip(
+    !existsSync(proofPath),
+    "Run sandbox-proof.ts in a normal terminal first; do not invent a denial.",
+  );
+  const proof = await readSandboxProof(proofPath);
+  await page.setViewportSize({ width: 1050, height: 900 });
+  await seed(page, {
+    title: "Workspace sandbox",
+    empty: true,
+    responseDelay: 180,
+    toolReplay: {
+      command: proof.command,
+      output: proof.stderr,
+      exitCode: proof.exitCode,
+      reply:
+        "The sandbox blocked the write. No file was created outside this workspace.",
+    },
+  });
+  await page.getByLabel("Starting skill").selectOption("");
+  const composer = page.getByLabel("Message", { exact: true });
+  await composer.focus();
+  const camera = new Camera({ x: 200, y: 369, width: 850, height: 531.25 });
+  await record(page, "sandbox-boundary", camera, async () => {
+    await pause(350);
+    await composer.pressSequentially("Write hello.txt outside this workspace", {
+      delay: 25,
+    });
+    await pause(250);
+    await composer.press("Enter");
+    const tool = page.locator(".tool-card.error");
+    await expect(tool).toBeVisible();
+    await click(page, tool.locator(":scope > summary"));
+    await expect(tool.locator(".tool-output")).toHaveText(
+      `${proof.stderr}\n\nCommand exited with code ${proof.exitCode}`,
+    );
+    await expect(tool.locator(".tool-outcome")).toHaveText(
+      `Exit ${proof.exitCode}`,
+    );
+    const reply = page.getByText(
+      "The sandbox blocked the write. No file was created outside this workspace.",
+      { exact: true },
+    );
+    await expect(reply).toBeVisible();
+    camera.move(
+      await frameTogether(
+        [
+          page.locator(".message.user").last(),
+          tool,
+          page.locator(".message.assistant").last(),
+        ],
+        850,
+      ),
+    );
+  });
+  await writeFile(
+    join(output, "sandbox-evidence.json"),
+    JSON.stringify(
+      {
+        ...proof,
+        recording:
+          "Replay of the verified native-cco result in an isolated UI fixture; no live inference or live tool execution during recording.",
+      },
+      null,
+      2,
+    ),
+  );
 });

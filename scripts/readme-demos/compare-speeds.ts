@@ -5,11 +5,26 @@ import { promisify } from "node:util";
 import assert from "node:assert/strict";
 import { pathToFileURL } from "node:url";
 import { chromium } from "@playwright/test";
+import { existsSync } from "node:fs";
+import { readSandboxProof } from "./sandbox-proof.ts";
 
 const run = promisify(execFile);
 const root = resolve(import.meta.dirname, "../..");
 const work = join(root, ".margin-data/temporary/readme-speed-options");
-const preview = join(work, "preview");
+const selected = process.argv.includes("--selected");
+const preview = selected
+  ? join(root, ".margin-data/temporary/readme-final-selection/preview")
+  : join(work, "preview");
+const hasSandbox = existsSync(join(work, "gifs/1x/sandbox-boundary.gif"));
+if (selected)
+  assert(
+    hasSandbox,
+    "Record the verified sandbox demo before building the selected set",
+  );
+if (hasSandbox)
+  await readSandboxProof(join(work, "gifs/1x/sandbox-evidence.json"));
+const chosenSpeed = (name: string) =>
+  name === "review-web-app" ? "0.75x" : "1x";
 const frames = join(root, ".margin-data/temporary/readme-demos/frames");
 const demos = [
   [
@@ -32,12 +47,22 @@ const demos = [
     "Customize Margin",
     "Move in while typing, then return to the wider chat view.",
   ],
+  ...(hasSandbox
+    ? [
+        [
+          "sandbox-boundary",
+          "Workspace sandbox",
+          "The real denied-write result, replayed in the demo chat. No file was created outside the workspace.",
+        ] as const,
+      ]
+    : []),
 ] as const;
+const ordered = selected ? [demos.at(-1)!, ...demos.slice(0, -1)] : demos;
 await mkdir(join(work, "gifs/0.75x"), { recursive: true });
 await mkdir(join(preview, "gifs"), { recursive: true });
 const metadata = [];
 const sections = [];
-for (const [name, title, description] of demos) {
+for (const [name, title, description] of ordered) {
   const normal = join(work, "gifs/1x", `${name}.gif`);
   const slow = join(work, "gifs/0.75x", `${name}.gif`);
   await run("ffmpeg", [
@@ -129,9 +154,10 @@ for (const [name, title, description] of demos) {
       bytes: gif.length,
       looping: true,
     });
-    figures.push(
-      `<figure><figcaption><strong>${speed === "1x" ? "1× · Normal" : "0.75× · Slower"}</strong><span>${duration.toFixed(2)} seconds</span></figcaption><img src="gifs/${name}-${speed}.gif" width="480" alt="${title} at ${speed}" data-file="gifs/${name}-${speed}.gif"><p>${(gif.length / 1024).toFixed(0)} KiB · 960 × 600 pixels</p></figure>`,
-    );
+    if (!selected || speed === chosenSpeed(name))
+      figures.push(
+        `<figure><figcaption><strong>${speed === "1x" ? "1× · Normal" : "0.75× · Slower"}</strong><span>${duration.toFixed(2)} seconds</span></figcaption><img src="gifs/${name}-${speed}.gif" width="480" alt="${title} at ${speed}" data-file="gifs/${name}-${speed}.gif"><p>${(gif.length / 1024).toFixed(0)} KiB · 960 × 600 pixels</p></figure>`,
+      );
   }
   assert.equal(hashes[0].length, 60);
   assert.deepEqual(
@@ -172,7 +198,12 @@ for (const [name, title, description] of demos) {
         found++;
     return found;
   };
-  assert(count([66, 99, 212]) >= 25, `${name}: Cobalt accent lost`);
+  if (name === "sandbox-boundary")
+    assert(
+      count([163, 39, 36]) >= 25,
+      "Keep the real tool's error state red, not Cobalt",
+    );
+  else assert(count([66, 99, 212]) >= 25, `${name}: Cobalt accent lost`);
   if (name === "inline-feedback")
     assert(count([255, 239, 173]) >= 25, "Yellow passage highlight lost");
   if (name === "review-web-app") {
@@ -180,15 +211,32 @@ for (const [name, title, description] of demos) {
     assert(count([216, 188, 121]) >= 25, "Muted yellow chart missing");
   }
   sections.push(
-    `<section><header><div><h2>${title}</h2><p>${description}</p></div><button type="button">Replay both</button></header><div class="pair">${figures.join("")}</div></section>`,
+    `<section id="${name}"><header><div><h2>${title}${selected && name === "sandbox-boundary" ? " · new" : ""}</h2><p>${description}</p></div><button type="button">${selected ? "Replay" : "Replay both"}</button></header><div class="pair">${figures.join("")}</div></section>`,
   );
 }
-const html = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Margin GIFs — choose the pace</title><style>
+const status = hasSandbox
+  ? '<section class="pending"><h2>Verified result, replayed presentation</h2><p>The host-terminal probe successfully wrote inside its disposable workspace, received <code>/bin/sh: ../outside/hello.txt: Operation not permitted</code> for the outside write, and confirmed that the outside file remained absent. Its bundled-cco hash matches this checkout.</p><p>The sandbox GIF replays that exact command, output, and exit code in the real Margin UI. It is not live inference or a live sandbox execution during the recording. No actual home files were targeted.</p></section>'
+  : '<section class="pending"><h2>Sandbox demo not yet recorded</h2><p>A sandbox startup failure is not evidence of a denied file write. Run <code>npx tsx scripts/readme-demos/sandbox-proof.ts</code> from a normal terminal, then capture test 11. The probe requires an allowed inside write and a blocked outside write, using disposable files only.</p></section>';
+const intro = selected
+  ? "Your selected pacing: <strong>1× for all demos except the dashboard at 0.75×</strong>. The new sandbox clip is first. All files are 960 × 600, displayed at <strong>480 × 300</strong>. The README assets have not been replaced."
+  : "Both versions contain the same frames: <strong>1× runs for 5 seconds</strong>; <strong>0.75× runs for 6.67 seconds</strong>. Each is shown at <strong>480 × 300</strong>, with 960 × 600 source pixels. Replay a pair to restart them together. The README GIFs have not been replaced.";
+const html = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Margin GIFs — ${selected ? "selected playback speeds" : "choose the pace"}</title><style>
 *{box-sizing:border-box}body{margin:0;background:#fff;color:#242424;font:15px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}main{max-width:1080px;margin:auto;padding:28px 20px 50px}h1{font-size:30px;letter-spacing:-.8px;margin-bottom:10px}h2{font-size:20px;margin:0}p{color:#666;margin:6px 0 18px}.intro{max-width:760px}.badge{display:inline-block;background:#edf1fc;color:#3655bf;border-radius:5px;padding:4px 9px;font-size:12px}section{border-top:1px solid #e8e8e8;margin-top:32px;padding-top:24px}header{display:flex;align-items:flex-start;justify-content:space-between;gap:18px}.pair{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:28px}figure{margin:0}figcaption{display:flex;justify-content:space-between;max-width:480px;padding:8px 0 12px}figcaption span{font-size:13px;color:#777}img{display:block;max-width:100%;height:auto;outline:1px solid #e3e3e3;border-radius:5px}figure p{font-size:12px;margin-top:9px}button{font:inherit;font-size:13px;white-space:nowrap;background:#fff;border:1px solid #d5d5d5;border-radius:6px;padding:7px 12px;cursor:pointer}button:hover{background:#edf1fc;border-color:#c9d5f6}.pending{background:#fffaf0;border:1px solid #eee1bf;border-radius:8px;padding:20px}.pending h2{font-size:18px}code{font-size:12px;overflow-wrap:anywhere}pre{white-space:pre-wrap;background:#fff;padding:12px;border-radius:6px}.checks{font-size:13px;margin-top:30px}@media(max-width:1040px){.pair{grid-template-columns:1fr;gap:16px}}@media(max-width:500px){main{padding:20px 14px}header{display:block}header button{margin:0 0 14px}h1{font-size:26px}}
-</style></head><body><main><span class="badge">4 revised workflows · 2 speeds · sandbox demo pending</span><h1>Same clarity. Choose the pace.</h1><p class="intro">Both versions contain the same frames: <strong>1× runs for 5 seconds</strong>; <strong>0.75× runs for 6.67 seconds</strong>. Each is shown at <strong>480 × 300</strong>, with 960 × 600 source pixels. Replay a pair to restart them together. The README GIFs have not been replaced.</p>${sections.join("\n")}<section class="pending"><h2>Sandboxing — awaiting a verified file-write denial</h2><p>The planned request is “Write hello.txt outside this workspace.” This environment refuses to start the native sandbox (<code>sandbox_apply: Operation not permitted</code>). That is <strong>not evidence of a blocked file write</strong>, so no replacement GIF has been generated.</p><p>To unblock it, run this from a normal terminal at the repository root:</p><pre><code>npx tsx scripts/readme-demos/sandbox-proof.ts</code></pre><p>The probe uses disposable files, requires a successful inside-workspace write and a denied outside-workspace write, checks the outside file remains absent, and cleans up. It never targets your actual home files.</p></section><p class="checks">Checks: frame-by-frame pixel equality between speeds, timing, dimensions, loops, file sizes, Cobalt/yellow highlights, muted chart colors, and desktop/mobile image footprints at 1× and 2× device density. The dashboard and conversations are sample data recorded in an isolated app; no live inference. Visual review is agent self-review; live GitHub rendering and physical devices are untested.</p></main><script>document.querySelectorAll('section button').forEach(button=>button.addEventListener('click',()=>{const stamp=Date.now();button.closest('section').querySelectorAll('img').forEach(image=>image.src=image.dataset.file+'?replay='+stamp)}));</script></body></html>`;
+${selected ? "main{max-width:780px}.pair{grid-template-columns:1fr}" : ""}
+</style></head><body><main><span class="badge">${demos.length} workflows · ${selected ? "selected speeds" : "2 speed options"} · ${hasSandbox ? "verified sandbox result" : "sandbox pending"}</span><h1>${selected ? "The selected README demos" : "Same clarity. Choose the pace."}</h1><p class="intro">${intro}</p>${sections.join("\n")}${status}<p class="checks">Checks: frame-by-frame pixel equality between speeds, timing, dimensions, loops, file sizes, Cobalt/yellow highlights, muted chart colors, and desktop/mobile image footprints at 1× and 2× device density. The dashboard and conversations are sample data recorded in an isolated app; no live inference. Visual review is agent self-review; live GitHub rendering and physical devices are untested.</p></main><script>document.querySelectorAll('section button').forEach(button=>button.addEventListener('click',()=>{const stamp=Date.now();button.closest('section').querySelectorAll('img').forEach(image=>image.src=image.dataset.file+'?replay='+stamp)}));</script></body></html>`;
 await writeFile(join(preview, "index.html"), html);
 await writeFile(
   join(preview, "metadata.json"),
+  JSON.stringify(
+    selected
+      ? metadata.filter((item) => item.speed === chosenSpeed(item.name))
+      : metadata,
+    null,
+    2,
+  ),
+);
+await writeFile(
+  join(preview, "all-variants.json"),
   JSON.stringify(metadata, null, 2),
 );
 const browser = await chromium.launch();
@@ -211,7 +259,7 @@ try {
           return { width: box.width, height: box.height };
         }),
       );
-      assert.equal(images.length, 8);
+      assert.equal(images.length, demos.length * (selected ? 1 : 2));
       assert(
         images.every(
           (image) =>
@@ -238,6 +286,6 @@ try {
 }
 await writeFile(join(preview, "sizing.json"), JSON.stringify(sizing, null, 2));
 console.log(
-  `Verified ${metadata.length} GIFs: four identical-frame pairs at 1x / 0.75x. Sandbox replacement is blocked, not simulated.`,
+  `Verified ${metadata.length} GIFs: ${demos.length} identical-frame pairs at 1x / 0.75x. Sandbox ${hasSandbox ? "uses verified native-cco output" : "is pending"}.`,
 );
 console.log(`Preview: ${join(preview, "index.html")}`);

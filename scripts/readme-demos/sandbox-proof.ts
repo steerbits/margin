@@ -29,7 +29,12 @@ export function validateSandboxEvidence(evidence: {
     true,
     "Sandbox must actually launch and permit an inside write; sandbox_apply failure is not proof",
   );
-  assert.notEqual(evidence.exitCode, 0, "Outside write unexpectedly succeeded");
+  assert(
+    Number.isInteger(evidence.exitCode) &&
+      evidence.exitCode > 0 &&
+      evidence.exitCode <= 255,
+    "Outside write must report a nonzero process exit code",
+  );
   assert.match(
     evidence.stderr,
     /outside\/hello\.txt.*(?:Operation not permitted|Permission denied|Read-only file system)/i,
@@ -130,6 +135,26 @@ export async function verifySandbox(parent: string) {
   } finally {
     await rm(root, { recursive: true, force: true });
   }
+}
+
+/** Load a previously completed host-terminal probe; never rerun or erase it. */
+export async function readSandboxProof(path: string) {
+  const proof: Awaited<ReturnType<typeof verifySandbox>> = JSON.parse(
+    await readFile(path, "utf8"),
+  );
+  assert.equal(proof.verified, true);
+  assert.equal(proof.backend, "native");
+  assert.equal(proof.command, sandboxCommand);
+  validateSandboxEvidence(proof);
+  const cco = bundledCco(resolve(import.meta.dirname, "../.."));
+  assert.equal(
+    proof.ccoSha256,
+    createHash("sha256")
+      .update(await readFile(cco))
+      .digest("hex"),
+    "Sandbox proof must match the current bundled cco",
+  );
+  return proof;
 }
 
 if (
