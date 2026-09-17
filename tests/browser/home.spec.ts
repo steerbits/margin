@@ -103,6 +103,8 @@ test("recent workspaces search names and paths and open independently of AI setu
     await search.fill("Design");
     await recent.locator(`[data-project-id="${projects[0].id}"]`).click();
     await expect(page).toHaveURL(new RegExp(`/workspaces/${projects[0].id}$`));
+    await expect(page.locator(".workspace-home")).toBeVisible();
+    await page.locator(".workspace-home").getByRole("button", { name: "New conversation", exact: true }).click();
     await expect(
       page.getByRole("button", { name: "Connect an AI provider", exact: true }),
     ).toBeVisible();

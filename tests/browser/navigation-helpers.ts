@@ -8,8 +8,10 @@ export async function selectWorkspace(page: Page, id: string) {
   await page.getByRole("dialog", { name: "All workspaces", exact: true }).locator(`[data-project-id="${id}"]`).click();
 }
 
-export async function openDefaultWorkspace(page: Page) {
+export async function openDefaultWorkspace(page: Page, newConversation = false) {
   await page.goto("/");
   const boot = await (await page.request.get("/api/bootstrap")).json();
   await page.goto(`/workspaces/${boot.marginProjectId ?? boot.projects[0].id}`);
+  if (newConversation)
+    await page.locator(".workspace-home").getByRole("button", { name: "New conversation", exact: true }).click();
 }

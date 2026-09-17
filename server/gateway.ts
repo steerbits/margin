@@ -23,6 +23,8 @@ import { createModels } from "./models.ts";
 import { ProviderAccounts, installProviderAccountRoutes } from "./provider-accounts.ts";
 import { installCustomConnectionRoutes } from "./custom-connections.ts";
 import { withinPath } from "./execution.ts";
+import { getAgentDir } from "@earendil-works/pi-coding-agent";
+import { installInstructionsRoute } from "./instructions.ts";
 
 // This process handles browser requests and worker lifecycle. It deliberately
 // imports neither Pi sessions nor executable server plugins.
@@ -471,6 +473,12 @@ app.post("/api/projects/:id/plugins/:pluginId/:action", async (req, res) => {
 });
 app.post("/api/models/refresh", async (req, res) => {
   await proxy(projectById(initial.id), req, res);
+});
+// Global instructions belong to the gateway, not the source worker's idle
+// gate. Saves never interrupt running work; workers read them before new input.
+installInstructionsRoute(app, "/api/instructions/global", () => getAgentDir(), true);
+app.use("/api/projects/:id/instructions", async (req, res) => {
+  await proxy(projectById(String(req.params.id)), req, res);
 });
 app.use("/api/customize", async (req, res) => {
   if (!["GET", "HEAD"].includes(req.method)) await workers.requireIdle();

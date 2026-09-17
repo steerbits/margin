@@ -11,6 +11,7 @@ import {
   Check,
   Clock3,
   Code2,
+  FileText,
   Copy,
   Layers,
   Plug,
@@ -19,6 +20,8 @@ import {
   X,
 } from "lucide-react";
 import { api } from "./api.ts";
+import { InstructionsEditor } from "./InstructionsEditor.tsx";
+import type { LeaveGuard } from "./leave-guard.ts";
 import {
   customizationExamples,
   type CheckpointPreview,
@@ -35,11 +38,13 @@ export function CustomizeMargin({
   onPrompt,
   tab,
   onTabChange,
+  instructionsGuard,
 }: {
   onClose: () => void;
   onPrompt: (project: Project, prompt: string) => Promise<void>;
   tab: CustomizeTab;
   onTabChange: (tab: CustomizeTab) => void;
+  instructionsGuard: LeaveGuard;
 }) {
   const [data, setData] = useState<Hub | null>(null),
     [error, setError] = useState(""),
@@ -167,13 +172,15 @@ export function CustomizeMargin({
         </div>
       )}
       <nav className="customize-tabs" aria-label="Customization sections">
-        {(["examples", "plugins", "history"] as const).map((t) => (
+        {(["instructions", "examples", "plugins", "history"] as const).map((t) => (
           <button
             key={t}
             aria-current={tab === t ? "page" : undefined}
             onClick={() => onTabChange(t)}
           >
-            {t === "examples" ? (
+            {t === "instructions" ? (
+              <FileText size={17} />
+            ) : t === "examples" ? (
               <Layers size={17} />
             ) : t === "plugins" ? (
               <Plug size={17} />
@@ -187,7 +194,9 @@ export function CustomizeMargin({
           </button>
         ))}
       </nav>
-      {!data ? (
+      {tab === "instructions" ? (
+        <InstructionsEditor endpoint="/instructions/global" scope="global" guard={instructionsGuard} />
+      ) : !data ? (
         error ? (
           <button
             onClick={() =>

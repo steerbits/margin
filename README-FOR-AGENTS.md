@@ -1,6 +1,6 @@
 ## How to customize Margin
 
-Use the pinned **Customize Margin** area for example prompts, installed plugin controls, and named code checkpoints with preview, restore, and a return path. See [the customization workspace guide](docs/customization-workspace.md). The **New workspace** folder button opens the macOS system folder dialog.
+Use the pinned **Customize Margin** area for global instructions, example prompts, installed plugin controls, and named code checkpoints with preview, restore, and a return path. See [the customization workspace guide](docs/customization-workspace.md). The **New workspace** folder button opens the macOS system folder dialog.
 
 [Checkpoint behavior and recommendations](docs/checkpoints.md) explains what happens before each source-workspace message, what is saved, how restore works, and the checkpoint hang fix and remaining improvements.
 
@@ -23,7 +23,7 @@ The selected cco-default policy and launch commands are described in [cco integr
 
 ## Navigation and chat management
 
-Selecting or creating a conversation updates the address to `/chats/<session UUID>`. Workspaces use `/workspaces/<workspace UUID>` and Customize uses `/customize/examples`, `/customize/plugins`, or `/customize/history`. Panels are encoded as `?panel=project-notes%3Anotes` (or `?panel=comments`). Refresh, bookmarks, and Back/Forward preserve the destination. Explicit URLs take precedence over the last selection in browser storage. These local links use the same browser connection as the rest of Margin.
+Selecting or creating a conversation updates the address to `/chats/<session UUID>`. Workspace homes use `/workspaces/<workspace UUID>`; their **New conversation** action opens the model-choice screen at `?view=new`. Customize uses `/customize/instructions`, `/customize/examples`, `/customize/plugins`, or `/customize/history`. Panels are encoded as `?panel=project-notes%3Anotes` (or `?panel=comments`). Refresh, bookmarks, and Back/Forward preserve the destination. Explicit URLs take precedence over the last selection in browser storage. These local links use the same browser connection as the rest of Margin.
 
 **Rename workspace**, beside the New workspace icon, changes its saved display name; the folder path and UUID stay the same. The dropdown shows five recent workspaces and **All workspaces…** as its final item, after a separator. All workspaces searches by name or path. Recents are stored in this browser.
 
@@ -32,6 +32,14 @@ Right-click a conversation in the sidebar and choose **Delete conversation** to 
 Chat rows stay on one line without a chat icon or status text. A small spinner appears while the main agent is running, and a blue dot marks unread replies. The current chat’s header provides its detailed agent state. Summaries update approximately every 1.5 seconds across workspaces. Finished replies remain unread until the end of the latest reply is visible in the focused browser tab. Read markers persist in this browser across reloads; other browsers maintain their own read state. Restarted or exited workers report interrupted activity as stopped. Individual plugin background agents are not listed.
 
 Recently opened chats render immediately from an in-memory cache while their live connection refreshes. The app prefetches saved history for the five newest chats in the current workspace without starting agents; a first uncached visit can briefly show a history placeholder. Switching preserves the reading position and keeps draft saves independent for each chat. Failed saves retain their text in the current browser tab and warn before leaving it.
+
+## Global and workspace instructions
+
+**Customize Margin → Instructions** edits the embedded Pi agent directory’s global `AGENTS.md` (normally `.margin-data/pi/AGENTS.md`). Click the **workspace-name breadcrumb** to open that workspace’s home and edit its root `AGENTS.md`. The breadcrumb no longer opens the folder chooser; use the folder action or Margin homepage for that. The Margin source workspace’s instructions are distinct from installation-wide global instructions. Customize Margin’s existing phrasing is unchanged.
+
+Editors use explicit **Save and close**, outside the textarea. Closing or navigating away with changes asks in place; browser-tab closure/reload uses the native warning. Failed/conflicting saves retain the draft. Files are saved directly, not duplicated in settings storage. Read-only/link/oversized files and alternate-context conflicts are not silently overwritten.
+
+Pi conversations load saved changes before their next submitted message, including existing sessions across workspace workers, without reloading extensions or interrupting an active run. Invalid/unreadable context blocks the affected new submission rather than sending with stale instructions. See [instruction behavior, file limits, and activation](docs/agents-instructions.md).
 
 ## Run
 

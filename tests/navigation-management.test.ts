@@ -53,6 +53,8 @@ test("destinations round-trip stable IDs and qualified panel IDs without encodin
     { kind: "workspace", projectId: "id with/slashes", panel: "notes:editor" },
     { kind: "chat", sessionId: "id", panel: "comments" },
     { kind: "customize", tab: "history" },
+    { kind: "customize", tab: "instructions" },
+    { kind: "workspace", projectId: "workspace", view: "new", panel: "notes:editor" },
   ];
   for (const target of destinations) {
     const url = new URL(destinationUrl(target), "http://localhost");

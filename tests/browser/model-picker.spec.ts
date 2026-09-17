@@ -85,7 +85,7 @@ test("welcome and Settings share ordered groups, provider-first labels, exact id
   page.on("console", (message) => {
     if (message.type() === "error") consoleErrors.push(message.text());
   });
-  await openDefaultWorkspace(page);
+  await openDefaultWorkspace(page, true);
   const welcome = page.getByLabel("Start with a model");
   await expectGroups(welcome);
   await expect(
@@ -248,7 +248,7 @@ test("native group headers and keyboard selection work in an expanded listbox pr
   page,
 }) => {
   await mockModels(page, fixtures());
-  await openDefaultWorkspace(page);
+  await openDefaultWorkspace(page, true);
   const select = page.getByLabel("Start with a model");
   await expectGroups(select);
   // OS popups are outside page screenshots. Expand the same options into a

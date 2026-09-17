@@ -5,6 +5,8 @@ import { dirname, join, basename, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { z } from "zod";
 import { Store } from "./store.ts";
+import { getAgentDir } from "@earendil-works/pi-coding-agent";
+import { installInstructionsRoute } from "./instructions.ts";
 import { ArtifactPreviews } from "./artifact-preview.ts";
 import { ArtifactStore } from "./artifacts.ts";
 import { installArtifactRoutes } from "./artifact-routes.ts";
@@ -460,6 +462,21 @@ app.patch(
     res.json(projectView(project));
   }),
 );
+if (!workerToken)
+  installInstructionsRoute(app, "/api/instructions/global", () => {
+    assertOwnership();
+    return getAgentDir();
+  }, true);
+installInstructionsRoute(app, "/api/projects/:id/instructions", (req) => {
+  assertOwnership();
+  const id = String(req.params.id);
+  requireWorkspace(id);
+  const project = store.get<Project>("project", id);
+  if (!project) throw new Error("Workspace not found.");
+  const directory = workspaceAccess.requireDirectory(project.path);
+  if (directory !== project.path) throw new Error("This workspace moved. Reopen its folder before editing instructions.");
+  return directory;
+});
 app.get(
   "/api/customize",
   asyncRoute((_req, res) =>

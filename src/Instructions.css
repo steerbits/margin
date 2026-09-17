@@ -1,0 +1,214 @@
+.workspace-home {
+  width: 100%;
+  max-width: 1000px;
+  margin: 0 auto;
+  padding: 36px clamp(16px, 4vw, 48px) 48px;
+  box-sizing: border-box;
+}
+.workspace-home-heading,
+.instructions-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 20px;
+}
+.workspace-home-heading {
+  margin-bottom: 28px;
+}
+.workspace-home-heading > div {
+  min-width: 0;
+}
+.workspace-home h1 {
+  margin: 8px 0;
+  font-size: 30px;
+  letter-spacing: -0.6px;
+  overflow-wrap: anywhere;
+}
+.workspace-home-heading code,
+.instructions-path {
+  color: var(--muted);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+.workspace-home-heading > button {
+  flex-shrink: 0;
+  font-size: 13px;
+}
+.workspace-inheritance {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 8px 18px;
+  margin: 0 0 16px;
+  font-size: 13px;
+}
+.workspace-inheritance p {
+  margin: 0;
+  color: var(--muted);
+}
+.workspace-inheritance a {
+  color: var(--ink);
+  text-underline-offset: 3px;
+}
+.instructions-card {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 22px;
+  background: #fff;
+  min-width: 0;
+}
+.customize-page > .instructions-card {
+  max-width: 1100px;
+  margin: 0 auto;
+  box-sizing: border-box;
+}
+.instructions-heading {
+  align-items: center;
+  gap: 12px;
+}
+.instructions-card .sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+.instructions-heading h2 {
+  font-size: 17px;
+  font-weight: 600;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.instructions-heading button {
+  border: 1px solid var(--line);
+  flex-shrink: 0;
+  font-size: 13px;
+}
+.instructions-help,
+.instructions-empty {
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.6;
+  margin: 10px 0;
+}
+.instructions-path {
+  display: block;
+  margin: 10px 0 16px;
+}
+.instructions-preview {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 13px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  max-height: 160px;
+  overflow: hidden;
+  background: #f8f8f8;
+  padding: 14px;
+  border-radius: 6px;
+  margin: 16px 0 0;
+}
+.instructions-edit-body textarea {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  min-height: 160px;
+  height: clamp(160px, 34dvh, 380px);
+  resize: vertical;
+  max-height: 55dvh;
+  padding: 14px;
+  border: 1px solid #ccc;
+  border-radius: 7px;
+  background: #fcfcfc;
+  color: var(--ink);
+  font:
+    13px/1.65 ui-monospace,
+    SFMono-Regular,
+    Menlo,
+    monospace;
+}
+.instructions-edit-body textarea:focus-visible {
+  outline: 2px solid #777;
+  outline-offset: 2px;
+}
+.instructions-footer {
+  background: #fff;
+  padding: 14px 0 0;
+  margin-top: 4px;
+  border-top: 1px solid var(--line);
+  font-size: 13px;
+  z-index: 1;
+}
+.instructions-footer p {
+  margin: 0 0 10px;
+}
+.instructions-actions {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.instructions-actions > span {
+  margin-right: auto;
+  color: var(--muted);
+}
+.instructions-actions button,
+.instructions-error button {
+  font-size: 13px;
+  padding: 8px 12px;
+  border: 1px solid var(--line);
+}
+.instructions-error {
+  color: #af3f39;
+  overflow-wrap: anywhere;
+  margin: 10px 0;
+}
+.instructions-warning {
+  padding: 12px;
+  background: #fff9e9;
+  border-radius: 6px;
+  font-size: 13px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+.instructions-card button:focus-visible,
+.workspace-home a:focus-visible,
+.workspace-home button:focus-visible {
+  outline: 2px solid #777;
+  outline-offset: 3px;
+}
+.instructions-card button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+@media (max-width: 650px) {
+  .workspace-home {
+    padding-top: 24px;
+  }
+  .workspace-home-heading {
+    flex-direction: column;
+    gap: 16px;
+  }
+  .instructions-card {
+    padding: 16px;
+  }
+  .instructions-heading {
+    align-items: flex-start;
+  }
+  .instructions-actions > span {
+    flex-basis: 100%;
+  }
+  .customize-tabs {
+    overflow-x: auto;
+    gap: 0;
+  }
+  .customize-tabs button {
+    padding: 12px 10px;
+    flex-shrink: 0;
+  }
+}

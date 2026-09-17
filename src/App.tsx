@@ -55,6 +55,8 @@ import { ConversationMenu } from "./ConversationMenu.tsx";
 import { SidebarConversations } from "./SidebarConversations.tsx";
 import { SettingsDialog } from "./SettingsDialog.tsx";
 import { Home } from "./Home.tsx";
+import { WorkspaceHome } from "./WorkspaceHome.tsx";
+import { LeaveGuard, sameInstructionsSurface } from "./leave-guard.ts";
 import { ModelOptions } from "./ModelOptions.tsx";
 import { configureModelLabel, modelLabel } from "../shared/model-picker.ts";
 import { thinkingChoiceLabel, thinkingDefaultLabel } from "../shared/model-capabilities.ts";
@@ -131,6 +133,10 @@ export function App() {
   const customizePreviousProject = useRef<string | null>(null);
   const historyIndex = useRef(Number(history.state?.marginIndex ?? 0));
   const restoringHistory = useRef(false);
+  const historyRestored = useRef<(() => void) | null>(null);
+  const approvedHistory = useRef<number | null>(null);
+  const instructionsGuard = useRef(new LeaveGuard()).current;
+  const [workspaceHomeOpen, setWorkspaceHomeOpen] = useState(false);
   const [recents, setRecents] = useState(readRecentWorkspaces);
   const [allWorkspaces, setAllWorkspaces] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -276,14 +282,18 @@ export function App() {
   );
   function writeRoute(next: Destination, replace = false) {
     const url = destinationUrl(next);
-    if (location.pathname + location.search !== url) {
-      if (!replace) historyIndex.current++;
-      history[replace ? "replaceState" : "pushState"](
-        { marginIndex: historyIndex.current },
-        "",
-        url,
-      );
-    } else history.replaceState({ marginIndex: historyIndex.current }, "", url);
+    const moving = location.pathname + location.search !== url;
+    if (moving && !replace) historyIndex.current++;
+    const savedReturn = returnRoute.current
+      ? destinationUrl(returnRoute.current)
+      : !moving && typeof history.state?.marginReturn === "string"
+        ? history.state.marginReturn
+        : undefined;
+    const state = {
+      marginIndex: historyIndex.current,
+      ...(next.kind === "customize" && savedReturn ? { marginReturn: savedReturn } : {}),
+    };
+    history[moving && !replace ? "pushState" : "replaceState"](state, "", url);
     routeRef.current = next;
   }
   function applyRoute(
@@ -300,6 +310,7 @@ export function App() {
     routeRef.current = next;
     setRouteMissing(false);
     setHomeOpen(next.kind === "home");
+    setWorkspaceHomeOpen(next.kind === "workspace" && next.view !== "new");
     if (next.kind === "home") {
       setHubOpen(false);
       const beforeCustomize = previousRoute.kind === "customize"
@@ -320,6 +331,16 @@ export function App() {
       return;
     }
     if (next.kind === "customize") {
+      // Keep the invoking workspace/chat with this history entry, including a
+      // reload or a later Back traversal to an earlier Customize visit.
+      if (typeof history.state?.marginReturn === "string") {
+        try {
+          const saved = new URL(history.state.marginReturn, location.origin);
+          const destination = parseRoute(saved.pathname, saved.search);
+          if (destination.kind !== "not-found" && destination.kind !== "customize")
+            returnRoute.current = destination;
+        } catch { /* Ignore malformed browser history metadata. */ }
+      }
       if (previousRoute.kind !== "customize" || customizePreviousProject.current === null)
         customizePreviousProject.current =
           projectId || localStorage.getItem("margin.project") || "";
@@ -397,6 +418,11 @@ export function App() {
       );
   }
   async function go(next: Destination, data = boot, replace = false) {
+    if (instructionsGuard.blocking && !sameInstructionsSurface(routeRef.current, next)) {
+      setAllWorkspaces(false);
+      setContextMenu(null);
+      if (!(await instructionsGuard.confirmLeave())) return;
+    }
     if (managing)
       throw new Error(
         "Wait for the current change to finish before navigating.",
@@ -627,6 +653,29 @@ export function App() {
         throw new Error("Unknown destination.");
       return go(next);
     }
+    if (instructionsGuard.blocking && !sameInstructionsSurface(routeRef.current, next) && approvedHistory.current !== index) {
+      const from = historyIndex.current;
+      const targetUrl = location.pathname + location.search;
+      // Popstate arrives after the URL moved. Restore the current entry before
+      // asking in place, then replay the original traversal only on approval.
+      if (from !== index) {
+        await new Promise<void>((resolve) => {
+          historyRestored.current = resolve;
+          restoringHistory.current = true;
+          history.go(from - index);
+        });
+      } else if (routeRef.current.kind !== "not-found") {
+        history.replaceState({ marginIndex: from }, "", destinationUrl(routeRef.current));
+      }
+      if (!(await instructionsGuard.confirmLeave())) return;
+      if (from !== index) {
+        approvedHistory.current = index;
+        history.go(index - from);
+        return;
+      }
+      history.replaceState({ marginIndex: index }, "", targetUrl);
+    }
+    approvedHistory.current = null;
     try {
       if (editing || sending || managing)
         throw new Error(
@@ -646,6 +695,8 @@ export function App() {
     const pop = (event: PopStateEvent) => {
       if (restoringHistory.current) {
         restoringHistory.current = false;
+        historyRestored.current?.();
+        historyRestored.current = null;
         return;
       }
       void navigationHandler.current(
@@ -766,6 +817,7 @@ export function App() {
     }
   }
   async function createSession() {
+    if (!(await instructionsGuard.confirmLeave())) return;
     if (editing) {
       setError(
         "Finish or cancel your draft comment before starting a conversation.",
@@ -806,6 +858,7 @@ export function App() {
     if (window.innerWidth <= 650) setSidebar(false);
   }
   async function customizationPrompt(project: Project, prompt: string) {
+    if (!(await instructionsGuard.confirmLeave())) return;
     await flushDraft();
     const s = await api<Snapshot>("/sessions", {
       projectId: project.id,
@@ -819,6 +872,7 @@ export function App() {
   }
   async function chooseWorkspace() {
     if (choosingWorkspaceRef.current) return;
+    if (!(await instructionsGuard.confirmLeave())) return;
     if (editing) {
       setError("Finish or cancel your comment before changing workspaces.");
       return;
@@ -1255,6 +1309,8 @@ export function App() {
     "New conversation";
   const pageTitle = hubOpen
     ? "Margin · Customize Margin"
+    : workspaceHomeOpen && currentProject && !routeMissing
+      ? `Margin · ${currentProject.name}`
     : sessionId && !routeMissing
       ? `Margin · ${conversationTitle}`
       : "Margin";
@@ -1545,7 +1601,9 @@ export function App() {
           </select>
           <button
             className="new-chat"
-            onClick={() => void createSession()}
+            onClick={() => workspaceHomeOpen
+              ? void go({ kind: "workspace", projectId, view: "new", panel: workspacePanel() }).catch(fail)
+              : void createSession()}
             disabled={sending || !projectId}
           >
             <Plus size={16} />
@@ -1609,6 +1667,7 @@ export function App() {
             </div>
           ) : hubOpen ? (
             <CustomizeMargin
+              instructionsGuard={instructionsGuard}
               tab={hubTab}
               onTabChange={(tab) =>
                 void go({ kind: "customize", tab }).catch(fail)
@@ -1625,21 +1684,23 @@ export function App() {
               <div className="toolbar">
                 <div className="toolbar-left">
                   <Folder size={15} />
-                  <button
+                  <a
                     className="project-breadcrumb"
-                    type="button"
-                    title={`Open workspace${currentProject?.path ? ` · ${currentProject.path}` : ""}`}
-                    aria-label={`Open workspace: ${currentProject?.name ?? "Margin"}`}
-                    disabled={!loaded || choosingWorkspace}
-                    onClick={() => void chooseWorkspace()}
+                    href={destinationUrl({ kind: "workspace", projectId, panel: workspacePanel() })}
+                    title={`Workspace home${currentProject?.path ? ` · ${currentProject.path}` : ""}`}
+                    aria-label={`Workspace home: ${currentProject?.name ?? "Margin"}`}
+                    onClick={(event) => {
+                      if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+                      event.preventDefault();
+                      if (loaded) void go({ kind: "workspace", projectId, panel: workspacePanel() }).catch(fail);
+                    }}
                   >
                     <span>{currentProject?.name ?? "Workspace"}</span>
-                    <ChevronDown size={12} aria-hidden="true" />
-                  </button>
-                  <span className="crumb-separator">/</span>
-                  <span className="conversation-title">
-                    {conversationTitle}
-                  </span>
+                  </a>
+                  {!workspaceHomeOpen && <>
+                    <span className="crumb-separator">/</span>
+                    <span className="conversation-title">{conversationTitle}</span>
+                  </>}
                 </div>
                 <div className="toolbar-actions">
                   {sessionId && (
@@ -2033,7 +2094,11 @@ export function App() {
                   else captureSelection();
                 }}
               >
-                {!snapshot && sessionId ? (
+                {workspaceHomeOpen && currentProject ? (
+                  <WorkspaceHome project={currentProject} guard={instructionsGuard}
+                    onNewConversation={() => void go({ kind: "workspace", projectId, view: "new", panel: workspacePanel() }).catch(fail)}
+                    onGlobal={() => void go({ kind: "customize", tab: "instructions" }).catch(fail)} />
+                ) : !snapshot && sessionId ? (
                   <div
                     className="conversation-loading"
                     role="status"

@@ -524,6 +524,9 @@ test("workspace Notes works before any chat and stays shared across chat and wor
     "Workspace decisions before the first chat",
   );
   await page.locator("button.new-chat").click();
+  await expect(page.getByLabel("Start with a model")).toBeVisible();
+  await expect(editor(page)).toHaveValue("Workspace decisions before the first chat");
+  await page.getByRole("button", { name: "Start a conversation", exact: true }).click();
   await expect(page.getByLabel("Starting skill")).toBeEnabled();
   await expect(editor(page)).toBeVisible();
   await expect(editor(page)).toHaveValue(

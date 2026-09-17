@@ -206,6 +206,9 @@ test("native picker registers existing and newly created folders, deduplicates, 
     mkdirSync(child);
     respond(child);
     await page.locator(".project-breadcrumb").click();
+    await expect(page.locator(".workspace-home")).toBeVisible();
+    await expect(selector).toHaveValue(id);
+    await choose.click();
     await expect(selector.locator("option:checked")).toHaveText(
       "Created in New Folder 日本語",
     );

@@ -117,6 +117,9 @@ test("browser title follows conversation navigation, live naming, reload and non
   await page.goBack();
   await expect(page).toHaveTitle("Margin · Name this conversation");
   await page.goto(`/workspaces/${first.snapshot.session.projectId}`);
+  await expect(page.locator(".workspace-home")).toBeVisible();
+  await expect(page).toHaveTitle(/Margin · /);
+  await page.locator(".workspace-home").getByRole("button", { name: "New conversation", exact: true }).click();
   await expect(
     page.getByRole("button", { name: "Start a conversation", exact: true }),
   ).toBeVisible();

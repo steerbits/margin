@@ -453,16 +453,18 @@ p {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-button.project-breadcrumb {
+a.project-breadcrumb {
+  color: #5b5b5b;
+  text-decoration: none;
   display: inline-flex;
   align-items: center;
   gap: 5px;
   padding: 3px 0;
 }
-button.project-breadcrumb:hover:not(:disabled) {
+a.project-breadcrumb:hover {
   text-decoration: underline;
 }
-button.project-breadcrumb > span {
+a.project-breadcrumb > span {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1515,7 +1517,6 @@ button.project-breadcrumb > span {
   .review {
     padding: 22px 25px 45px;
   }
-  .toolbar-left .project-breadcrumb,
   .crumb-separator {
     display: none;
   }

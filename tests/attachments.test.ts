@@ -430,7 +430,11 @@ function liveFixture() {
     changed() {},
     agent: {
       sessionManager: manager,
-      resourceLoader: { getSkills: () => ({ skills: [{ name: "review" }] }) },
+      resourceLoader: {
+        getSkills: () => ({ skills: [{ name: "review" }] }),
+        // The real refresh boundary is covered in instruction-context.test.ts.
+        refreshInstructions() {},
+      },
       getAvailableThinkingLevels: () => [],
       async prompt(
         text: string,

@@ -285,7 +285,7 @@ test("finished stays unread in Customize, across reload, and while the latest re
 test("Shape with me is the first-message default; choosing another skill and deleting it have predictable fallbacks", async ({
   page,
 }) => {
-  await openDefaultWorkspace(page);
+  await openDefaultWorkspace(page, true);
   const hub = await (await page.request.get("/api/customize")).json();
   const skills = join(hub.project.path, "skills");
   const original = join(skills, "shape-with-me", "SKILL.md");

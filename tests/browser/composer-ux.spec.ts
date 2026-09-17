@@ -193,6 +193,7 @@ test("welcome's Start a conversation focuses the message box", async ({
   const id = await seed(page);
   const snapshot = await (await page.request.get(`/api/sessions/${id}`)).json();
   await page.goto(`/workspaces/${snapshot.session.projectId}`);
+  await page.locator(".workspace-home").getByRole("button", { name: "New conversation", exact: true }).click();
   await page
     .getByRole("button", { name: "Start a conversation", exact: true })
     .click();

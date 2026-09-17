@@ -1,4 +1,5 @@
 import { pluginStorage } from "./plugin-storage.ts";
+import { InstructionResourceLoader } from "./instruction-context.ts";
 import { presentArtifactTool } from "./artifact-tool.ts";
 import { randomUUID } from "node:crypto";
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
@@ -8,7 +9,6 @@ import {
   createAgentSession,
   createBashToolDefinition,
   defineTool,
-  DefaultResourceLoader,
   getAgentDir,
   SessionManager,
   SettingsManager,
@@ -126,7 +126,7 @@ export class LiveSession implements AgentBackend {
     configureCustomCompaction(settings, () => this.agent?.model ?? model);
     // Adding a project explicitly selects the local workspace whose Pi resources are loaded.
     settings.setProjectTrusted(true);
-    const loader = new DefaultResourceLoader({
+    const loader = new InstructionResourceLoader({
       cwd: this.project.path,
       agentDir: getAgentDir(),
       settingsManager: settings,
@@ -713,6 +713,9 @@ export class LiveSession implements AgentBackend {
       this.dataDir,
       this.info.id,
     );
+    // Synchronous preflight is before accepting input or marking comments sent.
+    // Re-read shared files here so existing sessions in every worker see saves.
+    (this.agent.resourceLoader as InstructionResourceLoader).refreshInstructions(this.agent);
     const attachments = attachmentStore.select(batch);
     let prompt =
       attachments.length && !batch.note.trim() && !batch.commentIds.length
@@ -965,7 +968,7 @@ export class LiveSession implements AgentBackend {
       createAgent: async (options) => {
         const model = this.models.getModel(options.provider, options.model);
         if (!model) throw new Error("Unknown background model.");
-        const loader = new DefaultResourceLoader({
+        const loader = new InstructionResourceLoader({
           cwd: this.project.path,
           agentDir: getAgentDir(),
           noExtensions: true,
@@ -989,14 +992,19 @@ export class LiveSession implements AgentBackend {
             join(this.dataDir, "background", id),
           ),
         });
+        let childBusy = false;
         const child: BackgroundAgent = {
           prompt: async (text) => {
             this.assertOwnership();
+            if (childBusy) throw new Error("Wait for the background agent's current response to finish.");
+            childBusy = true;
             this.childOperations++;
             this.trackWaiting();
             try {
+              loader.refreshInstructions(session);
               await session.prompt(text);
             } finally {
+              childBusy = false;
               this.childOperations--;
               this.trackWaiting();
             }
