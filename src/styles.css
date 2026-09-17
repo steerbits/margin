@@ -1207,11 +1207,11 @@ a.project-breadcrumb > span {
 }
 /* Keep passage highlights yellow; Cobalt is reserved for UI accents. */
 ::highlight(margin-comments) {
-  background: #fff2a8;
+  background: #fff8d6;
   color: #212121;
 }
 ::highlight(margin-active) {
-  background: #ffe078;
+  background: #ffefad;
   color: #212121;
 }
 .tool-card {

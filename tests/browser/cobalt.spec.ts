@@ -4,8 +4,8 @@ const colors = {
   primary: "rgb(66, 99, 212)",
   strong: "rgb(54, 85, 191)",
   soft: "rgb(237, 241, 252)",
-  highlight: "rgb(255, 242, 168)",
-  highlightActive: "rgb(255, 224, 120)",
+  highlight: "rgb(255, 248, 214)",
+  highlightActive: "rgb(255, 239, 173)",
   badgeHover: "rgb(220, 229, 250)",
 };
 const screenshots = ".margin-data/temporary/cobalt/screenshots";
