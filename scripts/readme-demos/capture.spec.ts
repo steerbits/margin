@@ -1,6 +1,5 @@
 import { test, expect, type Page, type Locator } from "@playwright/test";
 import { mkdir, mkdtemp, writeFile, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
@@ -9,13 +8,14 @@ import { defaultSettings } from "../../shared/settings.ts";
 // These are real UI recordings with example conversations. The disposable test
 // host never uses the developer's credentials or changes the running app.
 const run = promisify(execFile);
-const framesRoot = resolve(".margin-data/readme-demo-frames");
-const output = resolve("docs/demos");
+const framesRoot = resolve(".margin-data/temporary/readme-demos/frames");
+const output = resolve(process.env.MARGIN_DEMO_OUTPUT ?? "docs/demos");
 const fps = 12;
 const frameCount = 60;
 const pause = (ms: number) => new Promise((r) => setTimeout(r, ms));
 type Clip = { x: number; y: number; width: number; height: number };
-const main: Clip = { x: 270, y: 110, width: 900, height: 562.5 };
+// Include the current bottom-docked composer, including its Send button.
+const main: Clip = { x: 270, y: 160, width: 928, height: 580 };
 
 test.beforeAll(async () => {
   await mkdir(framesRoot, { recursive: true });
@@ -59,7 +59,7 @@ test.beforeEach(async ({ page }) => {
       (event) => {
         show(event);
         const ring = document.createElement("div");
-        ring.style.cssText = `position:fixed;left:${event.clientX - 13}px;top:${event.clientY - 13}px;width:26px;height:26px;border:2px solid #648873;border-radius:50%;pointer-events:none;z-index:2147483646;background:#80ad8b33`;
+        ring.style.cssText = `position:fixed;left:${event.clientX - 13}px;top:${event.clientY - 13}px;width:26px;height:26px;border:2px solid #4263d4;border-radius:50%;pointer-events:none;z-index:2147483646;background:#4263d433`;
         (
           document.querySelector("dialog[open]") ?? document.documentElement
         ).append(ring);
@@ -124,7 +124,9 @@ async function record(
     "-i",
     join(folder, "%03d.png"),
     "-filter_complex",
-    "[0:v]scale=480:300:flags=lanczos,split[a][b];[a]palettegen=stats_mode=diff:max_colors=128[p];[b][p]paletteuse=dither=bayer:bayer_scale=3:diff_mode=rectangle",
+    // A full 256-color palette preserves small, pale yellow highlights that
+    // a diff-only 128-color palette can incorrectly quantize to gray.
+    "[0:v]scale=480:300:flags=lanczos,split[a][b];[a]palettegen=stats_mode=full:max_colors=256[p];[b][p]paletteuse=dither=bayer:bayer_scale=3:diff_mode=rectangle",
     "-loop",
     "0",
     join(output, `${name}.gif`),
@@ -222,10 +224,11 @@ test("01 inline feedback", async ({ page }) => {
 });
 
 test("02 shape before executing", async ({ page }) => {
+  await page.setViewportSize({ width: 1300, height: 760 });
   const id = await seed(page, {
     title: "Choose the direction together",
     markdown:
-      "## Let’s shape it together\n\n**Local-first:** fast, private notes on your computer.\n\n**Cloud-first:** sync and collaboration from day one.\n\nI’d start local. Which matters more for your first version?",
+      "## Let’s shape it together\n\n- **Local-first:** private notes on your computer.\n- **Cloud-first:** sync and collaboration from day one.",
   });
   await page.request.post(`/api/test/${id}/dialog`, {
     data: { kind: "select", title: "Where should your notes live?" },
@@ -233,26 +236,31 @@ test("02 shape before executing", async ({ page }) => {
   await expect(
     page.getByRole("button", { name: "SQLite", exact: true }),
   ).toBeVisible();
-  await record(page, "shape-together", main, async () => {
-    await pause(1100);
-    await click(
-      page,
-      page.getByRole("button", { name: "SQLite", exact: true }),
-    );
-    const composer = page.getByLabel("Message", { exact: true });
-    await click(page, composer);
-    await composer.pressSequentially("Local-first. Skip accounts for now.", {
-      delay: 30,
-    });
-    await pause(200);
-    await click(
-      page,
-      page.getByRole("button", { name: "Send message", exact: true }),
-    );
-    await expect(
-      page.getByRole("heading", { name: "Revised direction", exact: true }),
-    ).toBeVisible();
-  });
+  await record(
+    page,
+    "shape-together",
+    { x: 270, y: 118, width: 1024, height: 640 },
+    async () => {
+      await pause(1100);
+      await click(
+        page,
+        page.getByRole("button", { name: "SQLite", exact: true }),
+      );
+      const composer = page.getByLabel("Message", { exact: true });
+      await click(page, composer);
+      await composer.pressSequentially("Local-first. Skip accounts for now.", {
+        delay: 30,
+      });
+      await pause(200);
+      await click(
+        page,
+        page.getByRole("button", { name: "Send message", exact: true }),
+      );
+      await expect(
+        page.getByRole("heading", { name: "Revised direction", exact: true }),
+      ).toBeVisible();
+    },
+  );
 });
 
 async function artifact(page: Page) {
@@ -365,7 +373,7 @@ test("05 separate project contexts", async ({ page }) => {
   const projects: { id: string; name: string }[] = [];
   try {
     for (const name of ["Website", "Research"]) {
-      const folder = await mkdtemp(join(tmpdir(), "margin-demo-"));
+      const folder = await mkdtemp(join(framesRoot, "workspace-"));
       folders.push(folder);
       const response = await page.request.post("/api/projects", {
         data: { path: folder },
@@ -395,11 +403,49 @@ test("05 separate project contexts", async ({ page }) => {
         },
       });
     }
+    // Keep the sample workspace data recognizable without publishing the
+    // recording machine's paths or unrelated fixture conversations.
+    await page.route(/\/api\/(bootstrap(?:\?.*)?|sessions)$/, async (route) => {
+      if (route.request().method() !== "GET") return route.continue();
+      const response = await route.fetch();
+      const data = await response.json();
+      const ids = new Set(projects.map((project) => project.id));
+      await route.fulfill({
+        json: {
+          ...data,
+          projects: data.projects
+            .filter((project: { id: string }) => ids.has(project.id))
+            .map((project: { name: string }) => ({
+              ...project,
+              path: `/projects/${project.name.toLowerCase()}`,
+            })),
+          sessions: data.sessions.filter((session: { projectId: string }) =>
+            ids.has(session.projectId),
+          ),
+        },
+      });
+    });
+    await page.route("**/api/projects/*/instructions", async (route) => {
+      const response = await route.fetch();
+      const data = await response.json();
+      const project = projects.find((project) =>
+        route.request().url().includes(`/${project.id}/`),
+      )!;
+      await route.fulfill({
+        json: {
+          ...data,
+          path: `/projects/${project.name.toLowerCase()}/AGENTS.md`,
+        },
+      });
+    });
     await page.goto(
       `/workspaces/${projects[0].id}?panel=project-notes%3Anotes`,
     );
     await expect(page.getByLabel("Project notes", { exact: true })).toHaveValue(
       /Website launch/,
+    );
+    await expect(page.locator(".workspace-home-heading code")).toHaveText(
+      "/projects/website",
     );
     await record(
       page,
@@ -439,10 +485,14 @@ async function customization(page: Page) {
     });
   });
   await page.goto("/");
-  await page.getByRole("button", { name: "Show sidebar", exact: true }).click();
   await page
-    .getByRole("button", { name: "Customize Margin", exact: true })
+    .getByRole("link", { name: "Customize Margin", exact: true })
     .click();
+  await expect(page.locator(".example-card").first()).toBeVisible();
+  if (!(await page.locator(".sidebar").isVisible()))
+    await page
+      .getByRole("button", { name: "Show sidebar", exact: true })
+      .click();
   await expect(
     page.getByRole("heading", { name: "Customize Margin", exact: true }),
   ).toBeVisible();
@@ -454,7 +504,7 @@ test("06 ask AI to customize Margin", async ({ page }) => {
     .locator(".example-card")
     .filter({ hasText: "Let your assistant work with notes" });
   await example.scrollIntoViewIfNeeded();
-  await record(page, "customize-margin", main, async () => {
+  await record(page, "customize-margin", { ...main, y: 110 }, async () => {
     await pause(950);
     await click(
       page,
