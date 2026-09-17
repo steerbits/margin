@@ -62,6 +62,35 @@ export async function frame(
   };
 }
 
+export async function frameTogether(
+  locators: Locator[],
+  minWidth = 800,
+): Promise<Clip> {
+  const boxes = await Promise.all(
+    locators.map((locator) => locator.boundingBox()),
+  );
+  if (boxes.some((box) => !box)) throw new Error("Missing camera target");
+  const left = Math.min(...boxes.map((box) => box!.x)) - 24;
+  const top = Math.min(...boxes.map((box) => box!.y)) - 24;
+  const right = Math.max(...boxes.map((box) => box!.x + box!.width)) + 24;
+  const bottom = Math.max(...boxes.map((box) => box!.y + box!.height)) + 24;
+  const width = Math.max(minWidth, right - left, ((bottom - top) * 8) / 5);
+  const height = (width * 5) / 8;
+  const clip = {
+    x: Math.max(0, (left + right - width) / 2),
+    y: Math.max(0, (top + bottom - height) / 2),
+    width,
+    height,
+  };
+  for (const box of boxes) {
+    expect(box!.x).toBeGreaterThanOrEqual(clip.x);
+    expect(box!.y).toBeGreaterThanOrEqual(clip.y);
+    expect(box!.x + box!.width).toBeLessThanOrEqual(clip.x + width);
+    expect(box!.y + box!.height).toBeLessThanOrEqual(clip.y + height);
+  }
+  return clip;
+}
+
 export async function record(
   page: Page,
   name: string,
@@ -94,10 +123,13 @@ export async function record(
       ? view.bounds
       : { x: 0, y: 0, ...viewport };
   const start = performance.now();
-  const timeline: { frame: number; elapsedMs: number; clip: Clip }[] = [];
+  const samples: { frame: number; elapsedMs: number; clip: Clip }[] = [];
   const capture = async () => {
-    for (let i = 0; i < frameCount; i++) {
-      await pause(Math.max(0, start + (i * 1000) / fps - performance.now()));
+    for (let i = 0; performance.now() - start < 5000; i++) {
+      const due =
+        i === 0 ? 0 : Math.max((i * 1000) / fps, performance.now() - start);
+      await pause(Math.max(0, start + due - performance.now()));
+      if (performance.now() - start >= 5000) break;
       const requested = view instanceof Camera ? view.at() : view;
       const clip = Object.fromEntries(
         Object.entries(requested).map(([key, value]) => [
@@ -127,21 +159,38 @@ export async function record(
       expect(png.readUInt32BE(16)).toBe(width * density);
       expect(png.readUInt32BE(20)).toBe(height * density);
       await writeFile(join(raw, `${String(i).padStart(3, "0")}.png`), png);
-      timeline.push({ frame: i, elapsedMs, clip });
+      samples.push({ frame: i, elapsedMs, clip });
     }
   };
   const [, actionDurationMs] = await Promise.all([
     capture(),
     actions().then(() => performance.now() - start),
-  ]).finally(() => captureSession.detach());
+  ]).finally(() => captureSession.detach().catch(() => {}));
   expect(
     actionDurationMs,
     `${name}: finish before the final hold`,
   ).toBeLessThan(4400);
   expect(
-    timeline.at(-1)!.elapsedMs,
-    `${name}: do not silently speed up a slow capture`,
-  ).toBeLessThan(5600);
+    samples.length,
+    `${name}: at least 6 actual captures per second`,
+  ).toBeGreaterThanOrEqual(30);
+  expect(
+    samples.at(-1)!.elapsedMs,
+    `${name}: capture the final hold`,
+  ).toBeGreaterThan(4700);
+  for (let i = 1; i < samples.length; i++)
+    expect(
+      samples[i].elapsedMs - samples[i - 1].elapsedMs,
+      `${name}: no long recording gaps`,
+    ).toBeLessThan(350);
+  // Keep wall-clock pacing even when a wide 2x iframe takes longer than 1/12s
+  // to capture. Repeat the latest available image; never accelerate a backlog.
+  const timeline = Array.from({ length: frameCount }, (_, frame) => ({
+    frame,
+    sample:
+      samples.findLast((sample) => sample.elapsedMs <= (frame * 1000) / fps) ??
+      samples[0],
+  }));
 
   // Normalize each moving crop before palette generation. White padding allows
   // a close-up near the viewport edge without pulling unrelated controls in.
@@ -149,7 +198,10 @@ export async function record(
   await Promise.all(
     Array.from({ length: 4 }, async () => {
       while (next < timeline.length) {
-        const { frame: i, clip } = timeline[next++];
+        const {
+          frame: i,
+          sample: { frame: rawFrame, clip },
+        } = timeline[next++];
         const [width, height] = [clip.width, clip.height].map(
           (value) => value * density,
         );
@@ -164,7 +216,7 @@ export async function record(
           "-filter_threads",
           "1",
           "-i",
-          join(raw, file),
+          join(raw, `${String(rawFrame).padStart(3, "0")}.png`),
           "-vf",
           `pad=${width}:${height}:0:0:color=white,scale=${outputWidth}:${outputHeight}:flags=lanczos`,
           "-frames:v",
@@ -205,6 +257,8 @@ export async function record(
         frames: frameCount,
         duration: frameCount / fps,
         actionDurationMs,
+        capturedFrames: samples.length,
+        samples,
         timeline,
       },
       null,

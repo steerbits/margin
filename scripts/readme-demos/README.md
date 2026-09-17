@@ -4,6 +4,24 @@ Generate compact, five-second GIFs of Margin's UI for the repository README and 
 
 Prerequisites: the repository's npm dependencies, Playwright Chromium (`npx playwright install chromium`), and `ffmpeg` / `ffprobe` on PATH.
 
+## Review the current framing changes at both speeds (do not publish yet)
+
+```sh
+MARGIN_DEMO_OUTPUT=.margin-data/temporary/readme-speed-options/gifs/1x \
+  npx playwright test --config scripts/readme-demos/playwright.config.ts --grep '0[1246] '
+npx tsx scripts/readme-demos/compare-speeds.ts
+```
+
+This creates **four** revised workflows at 1× (5 seconds) and 0.75× (6.67 seconds), plus a comparison at `.margin-data/temporary/readme-speed-options/preview/index.html`. Both speeds contain identical decoded frames, not independent recordings. The comparison verifies those pixel hashes, playback timing, loops, dimensions, accent/chart colors, size budgets, and responsive 480px display width. It never edits `README.md` or its GIFs. Wait for the speed choice before copying any candidate files.
+
+The sandbox replacement for `project-workspaces.gif` is **pending real execution evidence**. Native sandbox startup was refused in the agent environment; `sandbox_apply: Operation not permitted` does not prove an outside write was blocked. From a normal macOS terminal at the repository root, run:
+
+```sh
+npx tsx scripts/readme-demos/sandbox-proof.ts
+```
+
+The probe uses the bundled native cco, writes an allowed control file inside a disposable workspace, attempts `../outside/hello.txt`, and verifies the outside file is absent and its sentinel is unchanged. All targets are under `.margin-data/temporary/` (not `/tmp`, which cco allows); no real home files are targeted. It saves raw diagnostics to `sandbox/attempt.json`, emits `sandbox/proof.json` only on success, removes stale success evidence before each run, and cleans up the probe directories. A successful proof is the prerequisite for building the sandbox GIF; the comparison currently shows a pending notice rather than an invented denial.
+
 ## Refresh the five GIFs currently embedded in README.md
 
 From the repository root (no README text or image-link changes needed):
@@ -39,4 +57,4 @@ The capture suite builds an isolated app in a temporary folder on port 4356. It 
 
 A smooth camera follows each interaction into its relevant controls, comment card, or composer instead of shrinking the entire app into the frame. The planning clip uses a narrower real viewport so its final reply fits. Camera crops, a pointer overlay, white padding at window edges, and GIF encoding apply only to the recordings; production fonts, sizes, layout, and styling are unchanged.
 
-For the five README clips, the recorder captures actual 2× pixels and asserts each source PNG's dimensions, rather than upscaling a 1× image. Unfocused extended-gallery recordings retain 1× capture to avoid slowing them down. It captures only the visible camera area to keep iframe recording fast enough. It rejects slow captures instead of silently accelerating them, and requires the interaction to finish before the five-second loop ends. Encoding uses a full 256-color palette and no dithering, preserving the pale yellow highlights that a diff-only 128-color palette could quantize to gray. Unit coverage protects the constrained README embeds; visual review of the decoded output still matters for framing and readability.
+For the five README clips, the recorder captures actual 2× pixels and asserts each source PNG's dimensions, rather than upscaling a 1× image. Unfocused extended-gallery recordings retain 1× capture to avoid slowing them down. It captures only the visible camera area to keep iframe recording fast enough. It keeps wall-clock pacing when wide iframe captures are slower than 12fps: the latest captured frame is repeated instead of accelerating a backlog. Capture must still provide at least six actual frames per second on average, have no gap over 350ms, and include the final hold. Each interaction must finish before the five-second loop ends. Encoding uses a full 256-color palette and no dithering, preserving the pale yellow highlights that a diff-only 128-color palette could quantize to gray. Unit coverage protects the constrained README embeds; visual review of the decoded output still matters for framing and readability.

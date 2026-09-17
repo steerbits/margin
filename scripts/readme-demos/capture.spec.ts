@@ -2,9 +2,11 @@ import { test, expect, type Page, type Locator } from "@playwright/test";
 import { mkdir, mkdtemp, writeFile, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { defaultSettings } from "../../shared/settings.ts";
+import { dashboardScript, dashboardStyles } from "./dashboard-fixture.ts";
 import {
   Camera,
   frame as frameClip,
+  frameTogether,
   record,
   framesRoot,
   output,
@@ -170,10 +172,7 @@ test("01 inline feedback", async ({ page }) => {
     await expect(
       page.getByLabel("Inline comment", { exact: true }),
     ).toBeFocused();
-    await camera.focus(page.locator(".comment-card"), {
-      left: 48,
-      centerY: true,
-    });
+    camera.move(main);
     await pause(440);
     await page
       .getByLabel("Inline comment", { exact: true })
@@ -185,16 +184,23 @@ test("01 inline feedback", async ({ page }) => {
     await expect(page.locator(".comment-text")).toHaveText(
       "Skip accounts in v1.",
     );
-    await camera.focus(page.locator(".comment-card"), {
-      left: 48,
-      centerY: true,
-    });
+    // Keep the highlighted passage and its saved comment in the same view.
+    for (const target of [
+      page.locator(".comment-card"),
+      page.getByText("Start with email sign-in.", { exact: true }),
+    ]) {
+      const box = (await target.boundingBox())!;
+      expect(box.x).toBeGreaterThanOrEqual(main.x);
+      expect(box.x + box.width).toBeLessThanOrEqual(main.x + main.width);
+      expect(box.y).toBeGreaterThanOrEqual(main.y);
+      expect(box.y + box.height).toBeLessThanOrEqual(main.y + main.height);
+    }
   });
 });
 
 test("02 shape before executing", async ({ page }) => {
-  // A real narrower viewport wraps the reply naturally, without changing fonts.
-  await page.setViewportSize({ width: 800, height: 760 });
+  // More vertical room keeps the entire question card and preceding reply visible.
+  await page.setViewportSize({ width: 1000, height: 900 });
   const id = await seed(page, {
     title: "Choose the direction together",
     markdown:
@@ -206,9 +212,11 @@ test("02 shape before executing", async ({ page }) => {
   await expect(
     page.getByRole("button", { name: "SQLite", exact: true }),
   ).toBeVisible();
-  const camera = new Camera(
-    await frameClip(page.locator(".question-card"), { top: 35 }),
-  );
+  const conversation = await frameTogether([
+    page.locator(".message.assistant").last(),
+    page.locator(".question-card"),
+  ]);
+  const camera = new Camera(conversation);
   await record(page, "shape-together", camera, async () => {
     await pause(650);
     await click(
@@ -217,7 +225,7 @@ test("02 shape before executing", async ({ page }) => {
     );
     const composer = page.getByLabel("Message", { exact: true });
     await click(page, composer);
-    await camera.focus(composer, { top: 48 });
+    camera.move({ x: 200, y: 400, width: 800, height: 500 });
     await pause(420);
     await composer.pressSequentially("Local-first. Skip accounts for now.", {
       delay: 28,
@@ -229,7 +237,12 @@ test("02 shape before executing", async ({ page }) => {
       exact: true,
     });
     await expect(reply).toBeVisible();
-    await camera.focus(reply, { top: 80, width: 600 });
+    camera.move(
+      await frameTogether(
+        [page.locator(".message.assistant").last(), page.locator(".composer")],
+        800,
+      ),
+    );
   });
 });
 
@@ -290,14 +303,8 @@ test("03 review generated Markdown", async ({ page }) => {
 test("04 point to a generated web app", async ({ page }) => {
   const data = await artifact(page);
   // Replace only the demo fixture's content; the review UI is unmodified.
-  await writeFile(
-    join(data.root, "main.js"),
-    `document.querySelector('#app').innerHTML = '<p class="eyebrow">WEEKLY PULSE</p><h1>Your team, at a glance.</h1><p>A calmer place to follow your projects.</p><div class="stats"><section><small>Active projects</small><strong>12</strong></section><section><small>Tasks complete</small><strong>84%</strong></section></div><button id="export">Export</button>'; document.querySelector('#export').onclick = () => document.querySelector('#export').textContent = 'Exported';`,
-  );
-  await writeFile(
-    join(data.root, "style.css"),
-    "body{font:18px/1.6 system-ui;color:#25332f;margin:0;padding:38px;background:#fafcf9}h1{font-size:30px;letter-spacing:-1px;line-height:1.2}.eyebrow{font-size:11px;letter-spacing:2px;color:#50745e}.stats{display:flex;gap:16px;margin:28px 0}section{padding:18px;background:white;border:1px solid #dfe7df;border-radius:12px;min-width:125px}small{display:block;color:#6a786e;font-size:12px}strong{display:block;font-size:32px}button{font:inherit;border:0;border-radius:8px;padding:10px 22px;color:white;background:#2b4c3b}",
-  );
+  await writeFile(join(data.root, "main.js"), dashboardScript);
+  await writeFile(join(data.root, "style.css"), dashboardStyles);
   await page.getByRole("button", { name: "Artifacts", exact: true }).click();
   await page.getByLabel("Review artifact").selectOption(data.app.id);
   const frame = page.frameLocator('iframe[title="Review artifact content"]');
@@ -313,20 +320,15 @@ test("04 point to a generated web app", async ({ page }) => {
     exact: true,
   });
   const camera = new Camera(
-    await frameClip(point, { left: 150, top: 40 }),
+    { x: 24, y: 120, width: 952, height: 595 },
     (await page.locator(".artifact-window").boundingBox())!,
   );
   await record(page, "review-web-app", camera, async () => {
     await pause(400);
     await click(page, point);
-    await camera.focus(exportButton, { left: 40, top: 180 });
     await pause(420);
     await click(page, exportButton);
     await expect(page.getByLabel("Feedback 1", { exact: true })).toBeVisible();
-    await camera.focus(page.locator(".artifact-comment"), {
-      left: 48,
-      centerY: true,
-    });
     await pause(420);
     await page
       .getByLabel("Feedback 1", { exact: true })
@@ -343,10 +345,6 @@ test("04 point to a generated web app", async ({ page }) => {
     await expect(page.locator(".artifact-comment-text")).toHaveText(
       "Label this “Export CSV”.",
     );
-    await camera.focus(page.locator(".artifact-comment"), {
-      left: 48,
-      centerY: true,
-    });
   });
 });
 
@@ -504,6 +502,8 @@ test("06 ask AI to customize Margin", async ({ page }) => {
       delay: 35,
     });
     await expect(composer).toHaveValue("Add a decision-log plugin to Margin.");
+    await pause(250);
+    camera.move(main);
   });
 });
 
