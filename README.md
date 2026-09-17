@@ -61,3 +61,10 @@ Margin is built by [@paraschopra](x.com/paraschopra) and thanks the following pr
 ## Margin is WIP, and currently meant for technical audience
 
 Please expect things to break. It is a very early release. Feedback welcome via Github issues.
+
+## License
+
+Copyright (c) 2026 Paras Chopra.
+
+Margin's original code and documentation are licensed under the [Apache License 2.0](LICENSE).
+Third-party components retain their own licenses, including the vendored [CCO code (MIT)](vendor/cco/LICENSE).
