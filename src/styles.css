@@ -1205,6 +1205,7 @@ a.project-breadcrumb > span {
 .selection-action:hover {
   background: #373737;
 }
+/* Keep passage highlights yellow; Cobalt is reserved for UI accents. */
 ::highlight(margin-comments) {
   background: #fff2a8;
   color: #212121;
@@ -2112,7 +2113,6 @@ a.project-breadcrumb > span {
   --cobalt: #4263d4;
   --cobalt-strong: #3655bf;
   --cobalt-soft: #edf1fc;
-  --cobalt-highlight: #eef2ff;
   --cobalt-highlight-active: #dce5fa;
   --cobalt-border: #c9d5f6;
   --cobalt-ring: #4263d414;
@@ -2152,17 +2152,6 @@ button.primary:not(.danger):not(:disabled):hover,
 
 .batch-chip:hover:not(:disabled) {
   background: var(--cobalt-highlight-active);
-}
-
-/* Preserve readable text on softly highlighted passages. */
-::highlight(margin-comments) {
-  background: var(--cobalt-highlight);
-  color: #212121;
-}
-
-::highlight(margin-active) {
-  background: var(--cobalt-highlight-active);
-  color: #212121;
 }
 
 .comment-card.active {

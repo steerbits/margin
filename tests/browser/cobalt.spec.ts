@@ -4,8 +4,9 @@ const colors = {
   primary: "rgb(66, 99, 212)",
   strong: "rgb(54, 85, 191)",
   soft: "rgb(237, 241, 252)",
-  highlight: "rgb(238, 242, 255)",
-  active: "rgb(220, 229, 250)",
+  highlight: "rgb(255, 242, 168)",
+  highlightActive: "rgb(255, 224, 120)",
+  badgeHover: "rgb(220, 229, 250)",
 };
 const screenshots = ".margin-data/temporary/cobalt/screenshots";
 
@@ -223,7 +224,7 @@ for (const width of [1440, 390]) {
     const chip = page.locator(".batch-chip");
     await expectFill(chip, colors.soft);
     await chip.hover();
-    await expectFill(chip, colors.active);
+    await expectFill(chip, colors.badgeHover);
     await page.mouse.move(0, 0);
     await page.locator(".comment-quote").last().click();
     await expect(page.locator(".comment-card.active")).toHaveCSS(
@@ -251,7 +252,7 @@ for (const width of [1440, 390]) {
       )
       .toEqual({
         normal: colors.highlight,
-        active: colors.active,
+        active: colors.highlightActive,
         ink: "rgb(33, 33, 33)",
         normalRanges: 1,
         activeRanges: 1,
