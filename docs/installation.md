@@ -20,6 +20,16 @@ An existing destination is rejected. Existing dependency/build directories are r
 
 The installer records the chosen port and a separate browser cookie name in the new installation's private data. Existing installations without that file retain their normal port/cookie defaults.
 
+## Ports and duplicate starts
+
+Use `bash install.sh --port 4318 --start` for a fresh installation or `bash start.sh --port 4318` for a one-time override. `npm start -- --port 4318` and `npm run dev -- --port 4318` use the same launcher policy. Start precedence is `--port` > `PORT` > saved installation port > 4317; valid ports are decimal integers from 1024 through 65535.
+
+Before installation/build or a checked start's sandbox probe, Margin tests binding `127.0.0.1`. If the requested port is busy, it checks at most the next **10** higher ports, stopping at 65535. It offers the first available one with a default-no confirmation. Declining, reaching the limit, or running without an interactive terminal exits nonzero with a manual `--port` command. An accepted installation port is saved; a later start's override/fallback is temporary. A port probe cannot reserve the port during a build or sandbox check: startup checks again and reports any final bind failure without printing a success link.
+
+The standard launcher claims one owner per physical checkout **before** offering another port. A second start from the same folder (including via a symlink or with a different `MARGIN_DATA_DIR`) fails with the existing launcher's URL, or a startup-in-progress message. Separate fresh checkouts may run on different ports; keep their private data separate. This does not change the explicit legacy single-server launch commands.
+
+Ownership is stored under the checkout's `.margin-data/launcher/`, independent of a custom data directory. Concurrent claims are serialized, normal exits release ownership, and a verified dead PID allows recovery after a crash. An unverifiable/live PID blocks takeover; elapsed time, laptop sleep, or a lost connection is not proof of death. Do not delete ownership files to force overlapping launches. **Restart the current launcher after updating** to activate this guard; it cannot retroactively register a launcher started by the old version.
+
 ## Project repositories
 
 Keep new workspaces outside Margin's source folder, normally under `~/Projects`. Each project can have its own Git repository. The normal gateway rejects registering a new project beneath the app source and avoids opening the chooser in an old nested location. Existing registered nested projects remain available to preserve their paths and conversations.

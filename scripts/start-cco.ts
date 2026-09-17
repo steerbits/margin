@@ -5,6 +5,7 @@ import { homedir } from "node:os";
 import { fileURLToPath } from "node:url";
 import { withinPath } from "../server/execution.ts";
 import { bundledCco, configureInstallation } from "./installation.ts";
+import { parsePort } from "./launch-port.mjs";
 
 export interface LaunchOptions {
   project: string;
@@ -12,6 +13,7 @@ export interface LaunchOptions {
   dev: boolean;
   dryRun: boolean;
   help: boolean;
+  port?: number;
 }
 export function parseLaunchOptions(
   args: string[],
@@ -29,7 +31,12 @@ export function parseLaunchOptions(
     if (arg === "--dev") options.dev = true;
     else if (arg === "--dry-run") options.dryRun = true;
     else if (arg === "--help" || arg === "-h") options.help = true;
-    else if (arg === "--project" || arg === "--add-dir") {
+    else if (arg === "--port") {
+      const value = args[++i];
+      if (!value || value.startsWith("--"))
+        throw new Error("--port requires a value.");
+      options.port = parsePort(value);
+    } else if (arg === "--project" || arg === "--add-dir") {
       const path = args[++i];
       if (!path || path.startsWith("--"))
         throw new Error(`${arg} requires a folder path.`);
@@ -69,6 +76,7 @@ export function ccoLaunchPlan(
   };
   for (const key of ["PORT", "MARGIN_AUTH_READ_ONLY"])
     if (environment[key] !== undefined) env[key] = environment[key]!;
+  if (options.port !== undefined) env.PORT = String(options.port);
   for (const [key, value] of Object.entries(env))
     args.push("--env", `${key}=${value}`);
   args.push(
@@ -86,7 +94,7 @@ export async function main(args = process.argv.slice(2)) {
   const options = parseLaunchOptions(args, appRoot);
   if (options.help) {
     console.log(
-      "Usage: npm start -- [--project FOLDER] [--add-dir FOLDER] [--dev] [--dry-run]\n\nRuns the whole server through cco defaults. The default project is Margin's source folder. Add more writable folders at launch; other readable folders can still be inspected. Pi state and Margin data are writable so login refresh and saved chats work.",
+      "Usage: npm start -- [--project FOLDER] [--add-dir FOLDER] [--port PORT] [--dev] [--dry-run]\n\nRuns the whole server through cco defaults. The default project is Margin's source folder. Add more writable folders at launch; other readable folders can still be inspected. Pi state and Margin data are writable so login refresh and saved chats work.",
     );
     return;
   }

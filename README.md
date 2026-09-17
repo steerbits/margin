@@ -47,6 +47,8 @@ bash install.sh --start
 
 The installer installs locked dependencies, builds Margin, verifies the real filesystem sandbox, and starts the app. Pi **0.85.1** and a pinned cco copy are included; no separate global Pi or cco installation is required. It leaves global Node/Git/Pi installations alone and refuses to replace existing dependency/build directories. Later starts use `bash start.sh`.
 
+Choose a port with `bash start.sh --port 4318` (or `bash install.sh --port 4318 --start`). If it is busy, Margin checks up to 10 higher ports and asks before switching. Without an interactive terminal, it exits with a suggested `--port` command. Installation saves the accepted port; start-time overrides are temporary. Only one launcher can run per checkout, even on a different port; separate fresh checkouts can run together.
+
 ## About
 
 Margin is built by [@paraschopra](x.com/paraschopra) and thanks the following projects

@@ -78,7 +78,7 @@ test("a cco failure is propagated without launching a native server", async () =
     await mkdir(bin, { recursive: true });
     await mkdir(join(root, "scripts"));
     await mkdir(join(root, "server"));
-    for (const file of ["scripts/start-cco.ts", "scripts/installation.ts", "server/execution.ts", "package.json"])
+    for (const file of ["scripts/start-cco.ts", "scripts/installation.ts", "scripts/launch-port.mjs", "server/execution.ts", "package.json"])
       await copyFile(resolve(file), join(root, file));
     await symlink(resolve("node_modules"), join(root, "node_modules"), "dir");
     const fake = join(bin, "cco");

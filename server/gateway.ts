@@ -1,4 +1,5 @@
 import express from "express";
+import type { ViteDevServer } from "vite";
 import { DatabaseSync } from "node:sqlite";
 import { randomUUID } from "node:crypto";
 import { existsSync, mkdirSync, realpathSync } from "node:fs";
@@ -6,6 +7,8 @@ import { basename, dirname, join, resolve } from "node:path";
 import { homedir } from "node:os";
 import { fileURLToPath } from "node:url";
 import { Readable } from "node:stream";
+import { createServer } from "node:http";
+import { listenOnLoopback } from "../scripts/launch-port.mjs";
 import { z } from "zod";
 import { Store } from "./store.ts";
 import { readSessionPreview } from "./session-preview.ts";
@@ -487,6 +490,7 @@ app.use("/api/customize", async (req, res) => {
 app.use("/api", (_req, res) =>
   res.status(404).json({ error: "Unknown API route." }),
 );
+let vite: ViteDevServer | undefined;
 if (process.env.NODE_ENV === "production") {
   app.use(express.static(join(appRoot, "dist")));
   app.get(
@@ -502,7 +506,7 @@ if (process.env.NODE_ENV === "production") {
   );
 } else {
   const { createServer } = await import("vite");
-  const vite = await createServer({
+  vite = await createServer({
     configFile: join(appRoot, "vite.config.ts"),
     server: { middlewareMode: true },
     appType: "spa",
@@ -530,15 +534,26 @@ app.use(
     });
   },
 );
-const server = app.listen(port, "127.0.0.1", () => {
-  console.log(`Margin: http://127.0.0.1:${port}`);
-  console.log(
-    `Connect this browser: http://127.0.0.1:${port}/#connect=${auth.token}`,
-  );
-  console.log(
-    "Pi and server plugins start inside a separate cco worker for each workspace.",
-  );
-});
+const server = createServer(app);
+try {
+  // Express 5 passes bind errors to app.listen's callback. Never print a
+  // success URL until the underlying HTTP server really is listening.
+  await listenOnLoopback(server, port);
+} catch (error) {
+  directoryPicker.close();
+  providerAccounts.close();
+  await workers.close();
+  await vite?.close();
+  registry.close();
+  throw error;
+}
+console.log(`Margin: http://127.0.0.1:${port}`);
+console.log(
+  `Connect this browser: http://127.0.0.1:${port}/#connect=${auth.token}`,
+);
+console.log(
+  "Pi and server plugins start inside a separate cco worker for each workspace.",
+);
 let stopping = false;
 async function shutdown() {
   if (stopping) return;
@@ -547,6 +562,7 @@ async function shutdown() {
   directoryPicker.close();
   providerAccounts.close();
   await workers.close();
+  await vite?.close();
   registry.close();
   process.exit(0);
 }

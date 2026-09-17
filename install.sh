@@ -19,6 +19,8 @@ Pi and cco are included with Margin; no separate global install is needed.
                           Saved data, workspaces, local environment files, and
                           credentials are not copied.
 --port PORT               Local port for this installation (default: 4317).
+                          If busy, offer the first free port among the next 10.
+                          Without a terminal, exit with a --port suggestion.
 --prepare-only            Install/build without running the OS sandbox probe.
                           The result is prepared, not verified for launch.
 --start                   Start Margin after the sandbox check succeeds.
@@ -55,7 +57,7 @@ command -v node >/dev/null || { echo "Install Node 24 LTS, then run this script 
 command -v npm >/dev/null || { echo "npm is required; install it with Node." >&2; exit 1; }
 command -v git >/dev/null && git --version >/dev/null || { echo "A working Git installation is required." >&2; exit 1; }
 node -e 'const [major,minor]=process.versions.node.split(".").map(Number);if(major<22||(major===22&&minor<19)){console.error("Node 22.19+ is required; use Node 24 LTS.");process.exit(1)}'
-node -e 'const p=Number(process.argv[1]);if(!Number.isInteger(p)||p<1024||p>65535){console.error("Choose a port between 1024 and 65535.");process.exit(2)}' "$margin_port"
+node --input-type=module -e 'import {pathToFileURL} from "node:url";const {parsePort}=await import(pathToFileURL(process.argv[1]).href);try{parsePort(process.argv[2])}catch(error){console.error(error.message);process.exit(2)}' "$margin_source/scripts/launch-port.mjs" "$margin_port"
 if [ "$(uname -s)" != "Darwin" ]; then
   echo "This first installer supports native macOS. Docker notes are in docs/docker-installation-notes.md." >&2
   exit 1
@@ -85,14 +87,20 @@ if [ -n "${MARGIN_DATA_DIR:-}" ] && [ "$MARGIN_DATA_DIR" != "$margin_root/.margi
   echo "MARGIN_DATA_DIR points elsewhere. Run this installer without that variable; no data was changed." >&2
   exit 1
 fi
+# Check before installing dependencies or writing configuration. The launcher
+# checks again before binding because installation can take several minutes.
+margin_port_action=""
+if [ "$margin_start" -eq 1 ]; then margin_port_action="--start"; fi
+margin_port="$(node "$margin_root/scripts/select-install-port.mjs" "$margin_port" "$margin_port_action")"
 export MARGIN_DATA_DIR="$margin_root/.margin-data"
 export PI_CODING_AGENT_DIR="$MARGIN_DATA_DIR/pi"
 export PORT="$margin_port"
 mkdir -p "$PI_CODING_AGENT_DIR"
-node --input-type=module -e 'import {existsSync,writeFileSync} from "node:fs"; import {randomBytes} from "node:crypto"; const file=process.argv[1];if(!existsSync(file))writeFileSync(file,JSON.stringify({version:1,port:Number(process.argv[2]),cookieName:"margin_"+randomBytes(8).toString("hex")},null,2)+"\n",{flag:"wx",mode:0o600});' "$MARGIN_DATA_DIR/installation.json" "$margin_port"
+node --input-type=module -e 'import {existsSync,readFileSync,writeFileSync} from "node:fs"; import {randomBytes} from "node:crypto"; const file=process.argv[1];const config=existsSync(file)?JSON.parse(readFileSync(file,"utf8")):{version:1,cookieName:"margin_"+randomBytes(8).toString("hex")};if(config.version!==1)throw new Error("Invalid installation.json; preserve it and correct its version.");config.port=Number(process.argv[2]);writeFileSync(file,JSON.stringify(config,null,2)+"\n",{mode:0o600});' "$MARGIN_DATA_DIR/installation.json" "$margin_port"
 echo "Installing Margin in: $margin_root"
 echo "Private saved data: $MARGIN_DATA_DIR"
 echo "Private Pi configuration: $PI_CODING_AGENT_DIR"
+echo "Saved local port: $margin_port"
 npm ci --include=dev --ignore-scripts
 npm run build
 
