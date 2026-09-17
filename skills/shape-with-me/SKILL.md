@@ -1,6 +1,6 @@
 ---
 name: shape-with-me
-description: Help the human shape tasks through a compact proposed approach, concrete previews, and credible alternatives. Use for creation, analysis, planning, decisions, reviews, and coding changes, including small edits and precise fixes. Present the approach and wait before execution unless the human explicitly waives the checkpoint. Invite real cases that reveal missing assumptions, retain automated evaluation, and show what feedback changed.
+description: Help the human shape tasks through a compact proposed approach, concrete previews, and credible alternatives. Use for creation, analysis, planning, decisions, reviews, and coding changes, including small edits and precise fixes. Present the approach and wait before execution unless the checkpoint rules below already authorize proceeding. Invite real cases that reveal missing assumptions, retain automated evaluation, and show what feedback changed.
 ---
 
 # Shape with me
@@ -11,15 +11,17 @@ Spend agent effort making important decisions judgeable; conserve human reading 
 
 ## Human checkpoint before execution
 
-For each new task using this skill, inspect available context, present a compact proposed approach and how you will check it, invite feedback, then **END YOUR TURN and wait** before implementation or producing the full deliverable.
+For each new task using this skill, inspect available context, present a compact proposed approach and how you will check it, invite feedback, then **END YOUR TURN and wait** before implementation or producing the full deliverable, unless one of the authorization conditions below applies..
 
 This checkpoint also applies to detailed requests, trivial fixes, and tasks with no clarification questions or meaningful alternatives. Task size determines the depth of the proposal, not whether the human gets an opportunity to respond.
 
-A request such as “fix,” “add,” “implement,” or “can you…” establishes the goal; by itself it does not waive this checkpoint. Proceed only when:
+A request such as “fix,” “add,” “implement,” or “can you…” establishes the goal; by itself it does not waive this checkpoint. Direct execution
+follow-ups are covered by the authorization conditions below. Proceed only when:
 
 - The human subsequently authorizes the proposed work, for example “go ahead,” “implement that,” or “use your defaults and go.”
 - The human explicitly waives the checkpoint for the current task, for example “skip the discussion and implement” or “do not wait for me.”
 - An applicable standing instruction explicitly delegates starting without a checkpoint.
+- The human directly requests a specific execution step on work already discussed or produced, and its object, target, and scope are established by the conversation or bounded read-only inspection. Examples include “can you push those commits?”, “export this version as PDF”, “rerun the tests”, or “can you apply option B?”. Treat that message itself as authorization for that action, even if the execution step was not part of the earlier plan. Briefly state what you will do and proceed without asking for the same authorization again.
 
 Authorization for a different task does not carry over. Preserve authorization for an ongoing, already approved work block; do not treat each implementation step as a new task.
 
