@@ -17,6 +17,7 @@ import type {
 } from "../shared/artifacts.ts";
 import { artifactReviewUrl } from "../shared/artifacts.ts";
 import { api } from "./api.ts";
+import { submitOnEnter } from "./submit-on-enter.ts";
 import { ArtifactDrafts, saveArtifactComment } from "./artifact-drafts.ts";
 import {
   artifactInitialRoute,
@@ -863,17 +864,9 @@ export function ArtifactReviewWindow({
                       edit({ ...c, text: e.target.value, saved: false })
                     }
                     onFocus={() => setActiveId(c.id)}
-                    onKeyDown={(e) => {
-                      if (
-                        (e.metaKey || e.ctrlKey) &&
-                        e.key === "Enter" &&
-                        !e.nativeEvent.isComposing
-                      ) {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        if (!sending && !e.repeat) void saveComment(c);
-                      }
-                    }}
+                    onKeyDown={(e) => submitOnEnter(e, () => {
+                      if (!sending) void saveComment(c);
+                    })}
                   />
                 ) : (
                   <p className="artifact-comment-text">{c.text}</p>
@@ -883,8 +876,8 @@ export function ArtifactReviewWindow({
                     (c.saved === false || !c.text ? (
                       <button
                         disabled={!c.text.trim() || sending}
-                        title="Save comment (⌘Enter or Ctrl+Enter)"
-                        aria-keyshortcuts="Meta+Enter Control+Enter"
+                        title="Save comment (Enter); Shift+Enter for a new line"
+                        aria-keyshortcuts="Enter Meta+Enter Control+Enter"
                         onClick={() => void saveComment(c)}
                       >
                         Save
@@ -1000,6 +993,9 @@ export function ArtifactReviewWindow({
               disabled={sending}
               placeholder="Thoughts about the whole review…"
               onChange={(e) => editOverall(e.target.value)}
+              onKeyDown={(e) => submitOnEnter(e, () => {
+                if (canSend) void send();
+              })}
             />
             {overall.conflict && (
               <div className="artifact-overall-conflict">
@@ -1054,6 +1050,8 @@ export function ArtifactReviewWindow({
             <button
               className="primary"
               disabled={!canSend}
+              title="Send feedback (Enter); Shift+Enter for a new line"
+              aria-keyshortcuts="Enter Meta+Enter Control+Enter"
               onClick={() => void send()}
             >
               {sending ? "Sending…" : "Send feedback"}

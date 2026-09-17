@@ -129,7 +129,7 @@ test("artifact Markdown selection persists across close/reload and sends precise
     fullPage: true,
   });
 });
-test("Command/Ctrl+Enter saves only the focused artifact comment, while Enter stays multiline", async ({
+test("Enter saves only the focused artifact comment, Shift+Enter stays multiline, and old shortcuts work", async ({
   page,
 }) => {
   const { id } = await seed(page);
@@ -139,10 +139,13 @@ test("Command/Ctrl+Enter saves only the focused artifact comment, while Enter st
   const editor = page.getByLabel("Feedback 1", { exact: true });
   await editor.fill("First line");
   await editor.press("End");
-  await editor.press("Enter");
+  await editor.press("Shift+Enter");
   await editor.pressSequentially("Second line");
   await expect(editor).toHaveValue("First line\nSecond line");
-  await editor.press("Meta+Enter");
+  await editor.dispatchEvent("keydown", { key: "Enter", isComposing: true });
+  await editor.dispatchEvent("keydown", { key: "Enter", repeat: true });
+  await expect(editor).toHaveValue("First line\nSecond line");
+  await editor.press("Enter");
   await expect(editor).toHaveCount(0);
   await expect(page.locator(".artifact-attached-count")).toHaveText(
     "1 comment attached",
@@ -173,6 +176,36 @@ test("Command/Ctrl+Enter saves only the focused artifact comment, while Enter st
         m.text.startsWith("I reviewed the generated artifacts"),
     ),
   ).toBe(false);
+});
+
+test("overall feedback uses Shift+Enter for newlines and Enter sends only after unfinished comments are saved", async ({ page }) => {
+  const { id } = await seed(page);
+  await page.getByRole("button", { name: "Comment on this page", exact: true }).click();
+  const editor = page.getByLabel("Feedback 1", { exact: true });
+  await editor.fill("Attach this first");
+  const overall = page.getByLabel("Overall feedback", { exact: true });
+  await overall.fill("First line");
+  await overall.press("End");
+  await overall.press("Shift+Enter");
+  await overall.pressSequentially("Second line");
+  await overall.press("Enter");
+  await expect(overall).toHaveValue("First line\nSecond line");
+  await expect(page.getByRole("button", { name: "Send feedback", exact: true })).toBeDisabled();
+  await editor.press("Enter");
+  await expect(page.locator(".artifact-attached-count")).toHaveText("1 comment attached");
+  await expect(page.getByRole("button", { name: "Send feedback", exact: true })).toBeEnabled();
+  await overall.dispatchEvent("keydown", { key: "Enter", isComposing: true });
+  await overall.dispatchEvent("keydown", { key: "Enter", repeat: true });
+  await expect(overall).toHaveValue("First line\nSecond line");
+  await overall.press("Enter");
+  await expect(page.locator(".artifact-window")).toHaveCount(0);
+  const chat = await (await page.request.get(`/api/sessions/${id}`)).json();
+  const feedback = chat.messages.filter((m: { role: string; text: string }) =>
+    m.role === "user" && m.text.startsWith("I reviewed the generated artifacts"));
+  expect(feedback).toHaveLength(1);
+  const payload = JSON.parse(feedback[0].text.slice(feedback[0].text.indexOf("{")));
+  expect(payload.overallReply).toBe("First line\nSecond line");
+  expect(payload.artifactComments).toHaveLength(1);
 });
 
 test("artifact runtime proxy supports real modal interactions and Vite HMR without losing a draft or activating a pointed button", async ({

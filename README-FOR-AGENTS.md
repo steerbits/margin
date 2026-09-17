@@ -75,6 +75,14 @@ Inline comments are sent as a normal user message: a short instruction followed 
 
 Tool rows show their outcome as text as well as color. Gray is normal running/success styling; red means Pi reported a tool error. For bash this may be a nonzero exit code (including a search returning no matches), a timeout, a stopped command, or a permission failure. Open the row for the actual output. Red is not a separate command-approval or danger classification.
 
+## Keyboard shortcuts and Help
+
+In the reply/message box (including customization chats) and artifact **Overall feedback**, **Enter sends** the message and attached batch; **Shift+Enter inserts a newline**. In reply comments and artifact comments (text, element, or whole page), **Enter saves/attaches only that comment**. It does not contact the agent: send the batch from the reply/overall-feedback box when ready. Short agent-question answers also submit with Enter.
+
+Notes, global/workspace instructions, custom connection headers/JSON, and agent-requested long-form editor dialogs keep ordinary Enter for newlines. Existing Cmd/Ctrl+Enter message/comment shortcuts still work. Keyboard submission respects the same readiness, unfinished-comment, and upload guards as the buttons; text-composition confirmation and held Enter do not submit. Send/Save tooltips describe the shortcuts without an extra footer beneath the reply box.
+
+The **Help** icon beside Settings prepares a new chat in Margin's source workspace with an editable help prompt. Nothing is sent automatically. The prompt asks the assistant to first find out what you need, discover relevant Margin docs/code, distinguish verified behavior from guesses, and avoid file changes unless requested. Normal source-workspace send/checkpoint guards still apply. If no AI models are available, Help opens [GitHub issues](https://github.com/steerbits/margin/issues) in a new tab; failed Help chat creation offers the same link. The assistant can also suggest issues for unresolved problems and help prepare a report without secrets. Configured models can still fail at inference time; Help does not test credentials or switch providers automatically.
+
 ## Reply buttons
 
 Margin teaches the agent to offer complete next responses as `:reply[Use your defaults and go]`. Skills stay unchanged. Click the resulting send button to append its visible text to your message box on a new line and immediately send it with your saved comments and attachments. This sends the entire draft, including partial text; there is no insert-only mode yet.

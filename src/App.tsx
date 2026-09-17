@@ -11,6 +11,7 @@ import {
   Check,
   ChevronDown,
   Circle,
+  CircleHelp,
   LoaderCircle,
   Folder,
   FolderPlus,
@@ -40,6 +41,8 @@ import type {
   ExecutionInfo,
 } from "../shared/types.ts";
 import { api } from "./api.ts";
+import { submitOnEnter } from "./submit-on-enter.ts";
+import { marginHelpPrompt, marginIssuesUrl } from "../shared/help.ts";
 import { connectConversation } from "./conversation-connection.ts";
 import { ArtifactLauncher } from "./ArtifactReview.tsx";
 import {
@@ -144,6 +147,10 @@ export function App() {
   const [recents, setRecents] = useState(readRecentWorkspaces);
   const [allWorkspaces, setAllWorkspaces] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [openingHelp, setOpeningHelp] = useState(false);
+  const helpOpening = useRef(false);
+  const [helpError, setHelpError] = useState("");
+  const savingComment = useRef(false);
   const [renameOpen, setRenameOpen] = useState(false);
   const [workspaceName, setWorkspaceName] = useState("");
   const [deleteTarget, setDeleteTarget] = useState<SessionInfo | null>(null);
@@ -888,7 +895,31 @@ export function App() {
     await go({ kind: "customize", tab: "examples" });
     if (window.innerWidth <= 650) setSidebar(false);
   }
+  async function openHelp() {
+    if (helpOpening.current) return;
+    setHelpError("");
+    if (!boot.models.length) {
+      window.open(marginIssuesUrl, "_blank", "noopener,noreferrer");
+      return;
+    }
+    helpOpening.current = true;
+    setOpeningHelp(true);
+    try {
+      const project = boot.projects.find((p) => p.id === boot.marginProjectId) ??
+        (await api<{ project: Project }>("/customize")).project;
+      await customizationPrompt(project, marginHelpPrompt);
+      if (window.innerWidth <= 650) setSidebar(false);
+    } catch (e) {
+      setHelpError(e instanceof Error ? e.message : String(e));
+    } finally {
+      helpOpening.current = false;
+      setOpeningHelp(false);
+    }
+  }
   async function customizationPrompt(project: Project, prompt: string) {
+    if (editing) {
+      throw new Error("Finish or cancel your draft comment before starting a conversation.");
+    }
     if (!(await instructionsGuard.confirmLeave())) return;
     await flushDraft();
     const s = await api<Snapshot>("/sessions", {
@@ -948,7 +979,8 @@ export function App() {
     setSnapshot((s) => (s?.session.id === id ? { ...s, comments } : s));
   }
   async function saveComment() {
-    if (!editing || !snapshot || !editing.text.trim()) return;
+    if (!editing || !snapshot || !editing.text.trim() || savingComment.current) return;
+    savingComment.current = true;
     try {
       const id = editing.id ?? crypto.randomUUID();
       const existing = snapshot.comments.find((c) => c.id === id);
@@ -966,6 +998,8 @@ export function App() {
       setActive(id);
     } catch (e) {
       fail(e);
+    } finally {
+      savingComment.current = false;
     }
   }
   function sendDisabledReason(): string | undefined {
@@ -1554,6 +1588,14 @@ export function App() {
             </span>
           </span>
           <button
+            aria-label="Help"
+            title={boot.models.length ? "Help with Margin" : "Help — GitHub issues (new tab)"}
+            disabled={loading || openingHelp}
+            onClick={() => void openHelp()}
+          >
+            {openingHelp ? <LoaderCircle size={18} className="spin" /> : <CircleHelp size={18} />}
+          </button>
+          <button
             aria-label="Settings"
             title="Settings"
             aria-haspopup="dialog"
@@ -1677,6 +1719,14 @@ export function App() {
               <span>{loaded ? "Could not refresh Margin." : "Could not load Margin."} {loadError}</span>
               <button onClick={() => void refresh()} disabled={loading}>
                 Retry loading
+              </button>
+            </div>
+          )}
+          {helpError && (
+            <div className="notice error" role="alert">
+              <span>Could not open Help. {helpError} <a href={marginIssuesUrl} target="_blank" rel="noopener noreferrer">Get help on GitHub</a></span>
+              <button aria-label="Dismiss help error" onClick={() => setHelpError("")}>
+                <X size={15} />
               </button>
             </div>
           )}
@@ -1905,12 +1955,10 @@ export function App() {
                           value={draft}
                           onChange={(e) => updateDraft(e.target.value)}
                           rows={3}
-                          onKeyDown={(e) => {
-                            if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
-                              e.preventDefault();
-                              if (!busy && !editing) void send();
-                            }
-                          }}
+                          onKeyDown={(e) => submitOnEnter(e, () => {
+                            if (draft.trim() || draftCount || attachments.files.length)
+                              void send();
+                          })}
                         />
                         <div className="composer-footer">
                           <div className="composer-options">
@@ -2041,6 +2089,8 @@ export function App() {
                                   : "Send message"
                               }
                               type="submit"
+                              title="Send (Enter); Shift+Enter for a new line"
+                              aria-keyshortcuts="Enter Meta+Enter Control+Enter"
                               disabled={
                                 !!sendReason ||
                                 (!draft.trim() && !draftCount &&
@@ -2083,14 +2133,11 @@ export function App() {
                           )}
                         </div>
                       )}
-                      <div className="composer-hint">
-                        {editing && (
-                          <span>
-                            Finish or cancel your draft comment before sending.
-                          </span>
-                        )}
-                        <kbd>⌘ ↵</kbd>
-                      </div>
+                      {editing && (
+                        <div className="composer-hint" role="status">
+                          Finish or cancel your draft comment before sending.
+                        </div>
+                      )}
                     </div>
                   </div>
                 )}
@@ -2584,14 +2631,8 @@ export function App() {
                                         )
                                       }
                                       onKeyDown={(e) => {
-                                        if (
-                                          (e.metaKey || e.ctrlKey) &&
-                                          e.key === "Enter"
-                                        ) {
-                                          e.preventDefault();
-                                          void saveComment();
-                                        }
-                                        if (e.key === "Escape")
+                                        submitOnEnter(e, () => void saveComment());
+                                        if (e.key === "Escape" && !e.nativeEvent.isComposing)
                                           setEditing(null);
                                       }}
                                     />
@@ -2602,6 +2643,8 @@ export function App() {
                                       <button
                                         className="primary"
                                         disabled={!editing?.text.trim()}
+                                        title="Save comment (Enter); Shift+Enter for a new line"
+                                        aria-keyshortcuts="Enter Meta+Enter Control+Enter"
                                         onClick={() => void saveComment()}
                                       >
                                         {editing?.id ? "Save" : "Add comment"}

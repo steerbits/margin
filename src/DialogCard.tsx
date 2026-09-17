@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
+import { submitOnEnter } from "./submit-on-enter.ts";
 import { CircleHelp, AlertTriangle } from "lucide-react";
 import type { Dialog } from "../shared/types.ts";
 export function DialogCard({
@@ -11,12 +12,16 @@ export function DialogCard({
   const [text, setText] = useState(dialog.prefill ?? ""),
     [sending, setSending] = useState(false),
     [error, setError] = useState("");
+  const pending = useRef(false);
   const answer = async (value: unknown, cancelled = false) => {
+    if (pending.current) return;
+    pending.current = true;
     setSending(true);
     try {
       await onAnswer(dialog.id, value, cancelled);
     } catch (e) {
       setError((e as Error).message);
+      pending.current = false;
       setSending(false);
     }
   };
@@ -74,9 +79,18 @@ export function DialogCard({
             rows={dialog.kind === "editor" ? 5 : 2}
             value={text}
             onChange={(e) => setText(e.target.value)}
+            onKeyDown={dialog.kind === "input"
+              ? (e) => submitOnEnter(e, () => void answer(text))
+              : undefined}
             autoFocus
           />
-          <button className="primary" disabled={sending} type="submit">
+          <button
+            className="primary"
+            disabled={sending}
+            type="submit"
+            title={dialog.kind === "input" ? "Submit answer (Enter); Shift+Enter for a new line" : undefined}
+            aria-keyshortcuts={dialog.kind === "input" ? "Enter" : undefined}
+          >
             Submit answer
           </button>
         </form>

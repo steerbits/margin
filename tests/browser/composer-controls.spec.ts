@@ -54,9 +54,9 @@ for (const width of [1440, 768, 390, 320]) {
     await expect(
       page.getByRole("button", { name: "Reload skills" }),
     ).toHaveCount(0);
-    await expect(page.locator(".composer-hint")).not.toContainText(
-      /guide your next message|Your skill sets the pace/,
-    );
+    await expect(page.locator(".composer-hint")).toHaveCount(0);
+    expect(await page.locator(".composer-dock > .review").evaluate((el) =>
+      parseFloat(getComputedStyle(el).paddingBottom))).toBeGreaterThanOrEqual(16);
     await expect(page.locator(".composer-dock-content")).not.toContainText(
       "ChatGPT subscription",
     );
@@ -66,6 +66,7 @@ for (const width of [1440, 768, 390, 320]) {
     await expect(
       page.getByRole("button", { name: "Settings", exact: true }),
     ).toBeVisible();
+    await expect(page.getByRole("button", { name: "Help", exact: true })).toBeInViewport();
     await expect(page.locator(".connection")).toHaveText("Connected");
     expect(
       await page.evaluate(
@@ -73,7 +74,7 @@ for (const width of [1440, 768, 390, 320]) {
       ),
     ).toBe(true);
     await page.screenshot({
-      path: `.margin-data/composer-controls-${width}.png`,
+      path: `.margin-data/temporary/keyboard-help/composer-controls-${width}.png`,
     });
   });
 }

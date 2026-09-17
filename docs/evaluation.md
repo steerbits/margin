@@ -1,5 +1,16 @@
 # Evaluation record
 
+## Enter-to-submit and Help
+
+Message/overall-feedback boxes now send with Enter and insert newlines with Shift+Enter. Comment editors use Enter only to save/attach, preserving batch delivery. Short question answers submit; document/configuration/long-form editors retain multiline Enter. The reply shortcut footer is removed, with at least 16px bottom padding retained. Help prepares an unsent source-workspace prompt that discovers relevant docs/code without naming a specific README, and offers GitHub issues when no models are available or chat creation fails.
+
+- **317 Node tests passed**; TypeScript and production/recovery builds passed. The existing Vite large-chunk advisory remains (approximately 737 KB / 226 KB gzip).
+- **23 focused Chromium tests passed**, covering chat and artifact batching, Shift+Enter, IME/keyCode-229 confirmation, repeated Enter, empty/busy/unfinished-comment/pending-question/upload guards, failed-send keyboard retry, old Cmd/Ctrl shortcuts, Help draft persistence/no automatic send, no-model fallback and creation errors, plus composer geometry at 1440/768/390/320px.
+- The complete browser suite produced **160 passes and 9 failures**: one workspace-Notes navigation test and eight customization tests timing out in their common sidebar-opening setup. The Notes failure also reproduced in an untouched HEAD copy during a broader baseline run. Representative Notes/customization tests both passed in isolation on HEAD and on this change; the full-suite navigation failures remain unresolved, not silently counted as passes. The bounded baseline run used a 10-second test timeout, also timed out an artifact-history test that normally takes about 10 seconds, and stopped at two failures; this is not a complete baseline comparison.
+- Self-review inspected actual desktop, 390px and 320px screenshots: Help is beside Settings, controls fit, and removing the footer does not eliminate the bottom breathing room. No independent reviewer was available.
+
+Browser replies were fixtures, not live inference. No live provider Help conversation, real IME/mobile keyboard, Safari, gateway regression, or OS-sandbox check was run. The no-model test verifies the issues URL/new-tab call without contacting GitHub. Prompt wording is guidance, not evidence of model compliance. No running user server was restarted; refresh the browser for the new built frontend (restart normally if your launcher requires it).
+
 ## Editable global and workspace instructions
 
 Implemented **Customize Margin → Instructions** and a workspace home opened by the workspace breadcrumb. Both edit real AGENTS.md files with manual saves, in-place dirty-exit confirmation, stale-revision rejection, and explicit alternate-file conflicts. The workspace home retains Notes and a separate model-choice/new-conversation path. Customize Margin’s existing framing remains unchanged.

@@ -1006,11 +1006,6 @@ a.project-breadcrumb > span {
   padding: 11px 4px 0;
   gap: 10px;
 }
-.composer-hint kbd {
-  margin-left: auto;
-  font-size: 12px;
-  white-space: nowrap;
-}
 .batch-chip {
   font-size: 12px;
   background: #f3f3f3;
