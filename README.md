@@ -32,9 +32,9 @@ _Ask AI to add features, change the interface, or build plugins for your workflo
 
 ### Isolated workspace for safe AI changes
 
-<img src="docs/demos/project-workspaces.gif" width="480" alt="Switch projects with their own conversations and shared notes.">
+<img src="docs/images/sandbox-boundary.gif" width="480" alt="A sandbox blocks a write outside the workspace.">
 
-_Margin isolates each workspace via an [embedded sandbox](https://github.com/nikvdp/cco) so that your AI working in one folder cannot change or delete anything outside that folder._
+_Margin isolates each workspace via an [embedded sandbox](https://github.com/nikvdp/cco) so that your AI working in one folder cannot change or delete anything outside that folder. The demo replays a verified denied write._
 
 
 ## Install and run

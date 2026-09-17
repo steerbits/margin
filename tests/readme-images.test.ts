@@ -19,7 +19,7 @@ test("retina README GIFs keep a fixed desktop width and responsive aspect ratio"
     assert.throws(() => readmeGifReferences(invalid));
 });
 
-test("all five existing README demo links retain their paths and constrained embeds", () => {
+test("README embeds the five selected demos at a constrained display size", () => {
   const readme = readFileSync(new URL("../README.md", import.meta.url), "utf8");
   assert.deepEqual(
     readmeGifReferences(readme).map((item) => item.path),
@@ -28,7 +28,7 @@ test("all five existing README demo links retain their paths and constrained emb
       "docs/images/shape-together.gif",
       "docs/images/review-web-app.gif",
       "docs/images/customize-margin.gif",
-      "docs/demos/project-workspaces.gif",
+      "docs/images/sandbox-boundary.gif",
     ],
   );
 });

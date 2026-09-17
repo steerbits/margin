@@ -8,7 +8,10 @@ import { readmeGifReferences } from "./readme-images.ts";
 
 const run = promisify(execFile);
 const root = resolve(import.meta.dirname, "../..");
-const preview = join(root, ".margin-data/temporary/readme-demos/preview");
+const preview = join(
+  root,
+  ".margin-data/temporary/readme-demos/published-preview",
+);
 const references = readmeGifReferences(
   await readFile(join(root, "README.md"), "utf8"),
 );
@@ -44,14 +47,16 @@ for (const { caption, path: relative } of references) {
   const info = JSON.parse(stdout);
   const stream = info.streams[0];
   const duration = Number(info.format.duration);
+  const speed = basename(path) === "review-web-app.gif" ? 0.75 : 1;
+  const expectedDuration = 5 / speed;
   if (
     stream.width !== 960 ||
     stream.height !== 600 ||
     Number(stream.nb_frames) !== 60 ||
-    Math.abs(duration - 5) > 0.01
+    Math.abs(duration - expectedDuration) > 0.02
   )
     throw new Error(
-      `${relative}: expected 960×600, 60 frames, five seconds; got ${stdout}`,
+      `${relative}: expected 960×600, 60 frames, ${expectedDuration.toFixed(2)} seconds (${speed}x); got ${stdout}`,
     );
   const loop = gif.indexOf("NETSCAPE2.0");
   if (
@@ -92,6 +97,7 @@ for (const { caption, path: relative } of references) {
     frame,
     cobalt: 0,
     yellow: 0,
+    errorRed: 0,
   }));
   for (let i = 0; i < decoded.stdout.length; i += 3) {
     const [r, g, b] = [
@@ -112,9 +118,18 @@ for (const { caption, path: relative } of references) {
       Math.abs(b - 173) <= 12
     )
       frame.yellow++;
+    if (
+      Math.abs(r - 163) <= 12 &&
+      Math.abs(g - 39) <= 12 &&
+      Math.abs(b - 36) <= 12
+    )
+      frame.errorRed++;
   }
   const cobalt = colors.reduce((a, b) => (a.cobalt > b.cobalt ? a : b));
   const yellow = colors.reduce((a, b) => (a.yellow > b.yellow ? a : b));
+  const errorRed = colors.reduce((a, b) => (a.errorRed > b.errorRed ? a : b));
+  if (basename(path) === "sandbox-boundary.gif" && errorRed.errorRed < 25)
+    throw new Error(`${relative}: lost the tool's red error state`);
   if (cobalt.cobalt < 25)
     throw new Error(`${relative}: lost its Cobalt accents`);
   if (basename(path) === "inline-feedback.gif" && yellow.yellow < 25)
@@ -129,15 +144,17 @@ for (const { caption, path: relative } of references) {
     displayHeight: 300,
     frames: 60,
     duration,
+    speed,
     bytes: gif.length,
     looping: true,
     cobaltFrame: cobalt.frame,
     cobaltPixels: cobalt.cobalt,
     yellowFrame: yellow.frame,
     yellowPixels: yellow.yellow,
+    errorRedPixels: errorRed.errorRed,
   });
   figures.push(
-    `<figure><figcaption>${escape(caption)}</figcaption><img src="data:image/gif;base64,${gif.toString("base64")}" alt="${escape(caption)}" width="480"><p><code>${escape(relative)}</code> · ${(gif.length / 1024).toFixed(1)} KiB</p></figure>`,
+    `<figure><figcaption>${escape(caption)}</figcaption><img src="data:image/gif;base64,${gif.toString("base64")}" alt="${escape(caption)}" width="480"><p><code>${escape(relative)}</code> · ${speed}× · ${duration.toFixed(2)}s · ${(gif.length / 1024).toFixed(1)} KiB</p></figure>`,
   );
 }
 await writeFile(
@@ -146,7 +163,7 @@ await writeFile(
 );
 const html = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Margin — sharper README GIFs</title><style>
 *{box-sizing:border-box}body{margin:0;background:#fff;color:#212121;font:16px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}main{max-width:1080px;margin:auto;padding:28px 20px}h1{line-height:1.2}p{color:#555}.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:28px}figure{margin:0}figcaption{font-weight:600;margin:12px 0}img{display:block;max-width:100%;height:auto;outline:1px solid #e5e5e5;border-radius:6px}figure p{font-size:12px;overflow-wrap:anywhere}@media(max-width:1040px){.grid{grid-template-columns:1fr}}@media(max-width:500px){main{padding:20px 12px}}
-</style></head><body><main><h1>Sharper README GIFs</h1><p>All five workflows now use 2× capture and close-ups where the action happens. The files are <strong>960 × 600</strong>; the visible README footprint remains <strong>480 × 300</strong>, shrinking proportionally on narrow screens. Each loop is five seconds.</p><div class="grid">${figures.join("\n")}</div><p>Close-ups preserve the app’s fonts and styling. All clips use the current Cobalt UI with pale yellow comment highlights.</p><p>Recorded in Chromium against an isolated test app with sample content. No live sign-in or inference. Workspace names and display paths are demo data; that clip shows context switching, not filesystem sandbox enforcement. The sample dashboard retains its own styling.</p><p>Checks: completed capture interactions, real-time pacing, dimensions, frame counts, infinite loops, file sizes, and decoded accent colors. Desktop/mobile footprints are checked at 1× and 2× screen density. Visual review is agent self-review; live GitHub rendering and physical devices have not been tested.</p></main></body></html>`;
+</style></head><body><main><h1>Sharper README GIFs</h1><p>All five selected workflows use 2× capture with wider context and focused camera moves where useful. The files are <strong>960 × 600</strong>; the visible README footprint remains <strong>480 × 300</strong>, shrinking proportionally on narrow screens. Four demos run at 1× for five seconds; the dashboard runs at 0.75× for 6.67 seconds.</p><div class="grid">${figures.join("\n")}</div><p>Close-ups preserve the app’s fonts and styling. All clips use the current Cobalt UI with pale yellow comment highlights.</p><p>Recorded in Chromium against an isolated test app with sample content. No live sign-in or inference. The sandbox clip replays the exact command, output, and exit code from a verified native-cco probe: its inside write succeeded and its outside write was denied. It is not live tool execution during recording, and no real home files were targeted. The sample dashboard retains its own styling.</p><p>Checks: completed capture interactions, real-time pacing, dimensions, frame counts, infinite loops, file sizes, and decoded accent colors. Desktop/mobile footprints are checked at 1× and 2× screen density. Visual review is agent self-review; live GitHub rendering and physical devices have not been tested.</p></main></body></html>`;
 const htmlPath = join(preview, "index.html");
 await writeFile(htmlPath, html);
 // Also check the literal README tags (not a preview-only width override).

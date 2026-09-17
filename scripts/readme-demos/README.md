@@ -1,10 +1,10 @@
 # README feature demos
 
-Generate compact, five-second GIFs of Margin's UI for the repository README and an optional extended Markdown gallery.
+Generate compact GIFs of Margin's UI for the repository README and an optional extended Markdown gallery. The selected README set runs at 1× (five seconds), except the dashboard at 0.75× (6.67 seconds).
 
 Prerequisites: the repository's npm dependencies, Playwright Chromium (`npx playwright install chromium`), and `ffmpeg` / `ffprobe` on PATH.
 
-## Review the current framing changes at both speeds (do not publish yet)
+## Regenerate speed comparisons and the selected preview
 
 ```sh
 MARGIN_DEMO_OUTPUT=.margin-data/temporary/readme-speed-options/gifs/1x \
@@ -16,11 +16,11 @@ npx tsx scripts/readme-demos/compare-speeds.ts --selected
 
 With the verified sandbox evidence below, this creates **five** revised workflows at 1× (5 seconds) and 0.75× (6.67 seconds). The full comparison is at `.margin-data/temporary/readme-speed-options/preview/index.html`; `--selected` writes the chosen five-demo preview to `.margin-data/temporary/readme-final-selection/preview/index.html`, putting the new sandbox clip first. It uses 1× for inline feedback, planning, customization, and sandboxing, and 0.75× for the dashboard.
 
-Both speeds contain identical decoded frames, not independent recordings. The comparison verifies those pixel hashes, playback timing, loops, dimensions, accent/chart/error colors, size budgets, and responsive 480px display width. Neither mode edits `README.md` or its GIFs. The selected set is still a preview, pending approval to replace the README assets.
+Both speeds contain identical decoded frames, not independent recordings. The comparison verifies those pixel hashes, playback timing, loops, dimensions, accent/chart/error colors, size budgets, and responsive 480px display width. Neither mode edits `README.md` or its GIFs. The selected speeds match the published README; use the refresh commands below to replace the assets after reviewing a new recording.
 
 ### Sandbox evidence and replay
 
-The new candidate is `sandbox-boundary.gif`; the existing project-switching clip is untouched. The host-terminal probe succeeded: an inside write was allowed, the outside write returned `/bin/sh: ../outside/hello.txt: Operation not permitted`, and the outside file remained absent. This is different from `sandbox_apply: Operation not permitted`, which only means sandbox startup failed.
+The README embeds `docs/images/sandbox-boundary.gif`; the legacy project-switching clip remains in `docs/demos/project-workspaces.gif` for the extended gallery. The host-terminal probe succeeded: an inside write was allowed, the outside write returned `/bin/sh: ../outside/hello.txt: Operation not permitted`, and the outside file remained absent. This is different from `sandbox_apply: Operation not permitted`, which only means sandbox startup failed.
 
 To reproduce the proof on another checkout, run from a normal macOS terminal at the repository root:
 
@@ -32,21 +32,22 @@ The probe uses the bundled native cco, writes an allowed control file inside a d
 
 ## Refresh the five GIFs currently embedded in README.md
 
-From the repository root (no README text or image-link changes needed):
+From the repository root, with the verified sandbox proof above available (no README text or image-link changes needed):
 
 ```sh
-MARGIN_DEMO_OUTPUT=.margin-data/temporary/readme-demos/gifs \
-  npx playwright test --config scripts/readme-demos/playwright.config.ts --grep '0[12456] '
-for name in inline-feedback shape-together review-web-app customize-margin; do
-  cp ".margin-data/temporary/readme-demos/gifs/$name.gif" "docs/images/$name.gif"
+MARGIN_DEMO_OUTPUT=.margin-data/temporary/readme-speed-options/gifs/1x \
+  npx playwright test --config scripts/readme-demos/playwright.config.ts --grep '0[1246] |11 '
+npx tsx scripts/readme-demos/compare-speeds.ts --selected
+for name in inline-feedback shape-together customize-margin sandbox-boundary; do
+  cp ".margin-data/temporary/readme-speed-options/gifs/1x/$name.gif" "docs/images/$name.gif"
 done
-cp .margin-data/temporary/readme-demos/gifs/project-workspaces.gif docs/demos/project-workspaces.gif
+cp .margin-data/temporary/readme-speed-options/gifs/0.75x/review-web-app.gif docs/images/review-web-app.gif
 npx tsx scripts/readme-demos/verify-readme.ts
 ```
 
 The files are **960 × 600**, but the README's `<img width="480">` embeds keep the visible footprint at **480 × 300**. Do not replace those tags with unconstrained Markdown images: that would double their displayed size. Omit a fixed height so narrow screens scale proportionally.
 
-The verifier reads those actual embeds, checks each GIF's five-second duration, 960 × 600 intrinsic size, 60 frames, infinite loop, and 1 MB per-file size budget. It inspects every decoded frame for Cobalt accents and the inline demo's pale yellow highlight. It then creates an animated, self-contained preview at `.margin-data/temporary/readme-demos/preview/index.html` and checks both that preview and the literal README image tags at 1200, 800, and 390px viewport widths, with 1× and 2× device density. These are local Chromium checks, not a live GitHub or physical-device test. The sample dashboard retains its own styling; only Margin's controls use Cobalt. Workspace display paths are sample paths, never the recording machine's filesystem paths.
+The verifier reads those actual embeds and checks the chosen duration (five seconds, or 6.67 for the dashboard), 960 × 600 intrinsic size, 60 frames, infinite loop, and 1 MB per-file size budget. It inspects every decoded frame for Cobalt accents, the inline demo's pale yellow highlight, and the sandbox tool's red error state. It then creates an animated, self-contained preview at `.margin-data/temporary/readme-demos/published-preview/index.html` and checks both that preview and the literal README image tags at 1200, 800, and 390px viewport widths, with 1× and 2× device density. These are local Chromium checks, not a live GitHub or physical-device test. The sample dashboard retains its own styling; only Margin's controls use Cobalt. Workspace display paths are sample paths, never the recording machine's filesystem paths.
 
 ## Regenerate the extended ten-demo gallery
 
@@ -55,7 +56,7 @@ npx playwright test --config scripts/readme-demos/playwright.config.ts --grep '^
 npx tsx scripts/readme-demos/gallery.ts
 ```
 
-- `docs/demos/*.gif`: the five camera-guided README workflows are 960 × 600; the remaining wide-frame gallery recordings retain their original 480 × 300 output. All use 12 frames per second and loop indefinitely.
+- `docs/demos/*.gif`: camera-guided gallery workflows are 960 × 600; the wide-frame gallery recordings retain their original 480 × 300 output. The legacy gallery uses 12 frames per second and loops indefinitely; the selected README dashboard is a separate 0.75× export under `docs/images/`.
 - `README-feature-gallery.md`: a two-column Markdown table, displaying each GIF at 440 × 275. Its relative paths work when copied into the root `README.md`.
 - `.margin-data/temporary/readme-demos/gallery/index.html`: a local animated preview, plus screenshots and verified GIF metadata.
 - `.margin-data/temporary/readme-demos/frames/`: raw camera crops (2× for the README clips), normalized frames, and per-demo `capture.json` camera/timing metadata.
