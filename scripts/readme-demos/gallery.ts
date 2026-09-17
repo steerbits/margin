@@ -7,7 +7,7 @@ import { chromium } from "@playwright/test";
 
 const run = promisify(execFile);
 const root = resolve(import.meta.dirname, "../..");
-const preview = join(root, ".margin-data/readme-demo-preview");
+const preview = join(root, ".margin-data/temporary/readme-demos/gallery");
 const demos = [
   [
     "inline-feedback",
@@ -81,8 +81,10 @@ for (const [file, title] of demos) {
   if (
     duration < 3 ||
     duration > 5.01 ||
-    stream.width !== 480 ||
-    stream.height !== 300 ||
+    !(
+      (stream.width === 480 && stream.height === 300) ||
+      (stream.width === 960 && stream.height === 600)
+    ) ||
     Number(stream.nb_frames) < 30
   ) {
     throw new Error(

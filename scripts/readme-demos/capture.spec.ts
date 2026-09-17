@@ -1,19 +1,19 @@
 import { test, expect, type Page, type Locator } from "@playwright/test";
 import { mkdir, mkdtemp, writeFile, rm } from "node:fs/promises";
-import { join, resolve } from "node:path";
-import { execFile } from "node:child_process";
-import { promisify } from "node:util";
+import { join } from "node:path";
 import { defaultSettings } from "../../shared/settings.ts";
+import {
+  Camera,
+  frame as frameClip,
+  record,
+  framesRoot,
+  output,
+  pause,
+  type Clip,
+} from "./record.ts";
 
 // These are real UI recordings with example conversations. The disposable test
 // host never uses the developer's credentials or changes the running app.
-const run = promisify(execFile);
-const framesRoot = resolve(".margin-data/temporary/readme-demos/frames");
-const output = resolve(process.env.MARGIN_DEMO_OUTPUT ?? "docs/demos");
-const fps = 12;
-const frameCount = 60;
-const pause = (ms: number) => new Promise((r) => setTimeout(r, ms));
-type Clip = { x: number; y: number; width: number; height: number };
 // Include the current bottom-docked composer, including its Send button.
 const main: Clip = { x: 270, y: 160, width: 928, height: 580 };
 
@@ -23,6 +23,7 @@ test.beforeAll(async () => {
 });
 
 test.beforeEach(async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: "reduce" });
   // Screenshot APIs omit the OS cursor. This overlay records actual pointer
   // movement and clicks, including inside artifact iframes.
   await page.addInitScript(() => {
@@ -88,59 +89,6 @@ async function click(page: Page, target: Locator) {
   await target.click();
 }
 
-async function record(
-  page: Page,
-  name: string,
-  clip: Clip,
-  actions: () => Promise<void>,
-) {
-  const folder = join(framesRoot, name);
-  await mkdir(folder, { recursive: true });
-  const start = performance.now();
-  const capture = async () => {
-    for (let i = 0; i < frameCount; i++) {
-      await pause(Math.max(0, start + (i * 1000) / fps - performance.now()));
-      await page.screenshot({
-        path: join(folder, `${String(i).padStart(3, "0")}.png`),
-        clip,
-      });
-    }
-  };
-  const [, actionDuration] = await Promise.all([
-    capture(),
-    actions().then(() => performance.now() - start),
-  ]);
-  expect(
-    actionDuration,
-    `${name}: finish the interaction before the final hold`,
-  ).toBeLessThan(4600);
-  await run("ffmpeg", [
-    "-hide_banner",
-    "-loglevel",
-    "error",
-    "-y",
-    "-framerate",
-    String(fps),
-    "-i",
-    join(folder, "%03d.png"),
-    "-filter_complex",
-    // A full 256-color palette preserves small, pale yellow highlights that
-    // a diff-only 128-color palette can incorrectly quantize to gray.
-    "[0:v]scale=480:300:flags=lanczos,split[a][b];[a]palettegen=stats_mode=full:max_colors=256[p];[b][p]paletteuse=dither=bayer:bayer_scale=3:diff_mode=rectangle",
-    "-loop",
-    "0",
-    join(output, `${name}.gif`),
-  ]);
-  await writeFile(
-    join(folder, "capture.json"),
-    JSON.stringify(
-      { clip, frames: frameCount, fps, duration: frameCount / fps },
-      null,
-      2,
-    ),
-  );
-}
-
 async function scrollDialogTo(target: Locator, top = 90) {
   await target.evaluate((element, top) => {
     const dialog = element.closest("dialog")!;
@@ -203,16 +151,33 @@ test("01 inline feedback", async ({ page }) => {
       "## A simpler first version\n\nStart with email sign-in.\n\nKeep notes in a local SQLite file.\n\nWhat would you change before we build?",
   });
   await page.locator(".scroll-area").evaluate((el) => (el.scrollTop = 0));
-  await record(page, "inline-feedback", main, async () => {
+  const camera = new Camera(
+    await frameClip(
+      page.getByRole("heading", {
+        name: "A simpler first version",
+        exact: true,
+      }),
+      { top: 75 },
+    ),
+  );
+  await record(page, "inline-feedback", camera, async () => {
     await pause(450);
     await selectQuote(page, "email sign-in");
     await click(
       page,
       page.getByRole("button", { name: "Comment", exact: true }),
     );
+    await expect(
+      page.getByLabel("Inline comment", { exact: true }),
+    ).toBeFocused();
+    await camera.focus(page.locator(".comment-card"), {
+      left: 48,
+      centerY: true,
+    });
+    await pause(440);
     await page
       .getByLabel("Inline comment", { exact: true })
-      .pressSequentially("Skip accounts in v1.", { delay: 35 });
+      .pressSequentially("Skip accounts in v1.", { delay: 45 });
     await click(
       page,
       page.getByRole("button", { name: "Add comment", exact: true }),
@@ -220,11 +185,16 @@ test("01 inline feedback", async ({ page }) => {
     await expect(page.locator(".comment-text")).toHaveText(
       "Skip accounts in v1.",
     );
+    await camera.focus(page.locator(".comment-card"), {
+      left: 48,
+      centerY: true,
+    });
   });
 });
 
 test("02 shape before executing", async ({ page }) => {
-  await page.setViewportSize({ width: 1300, height: 760 });
+  // A real narrower viewport wraps the reply naturally, without changing fonts.
+  await page.setViewportSize({ width: 800, height: 760 });
   const id = await seed(page, {
     title: "Choose the direction together",
     markdown:
@@ -236,31 +206,31 @@ test("02 shape before executing", async ({ page }) => {
   await expect(
     page.getByRole("button", { name: "SQLite", exact: true }),
   ).toBeVisible();
-  await record(
-    page,
-    "shape-together",
-    { x: 270, y: 118, width: 1024, height: 640 },
-    async () => {
-      await pause(1100);
-      await click(
-        page,
-        page.getByRole("button", { name: "SQLite", exact: true }),
-      );
-      const composer = page.getByLabel("Message", { exact: true });
-      await click(page, composer);
-      await composer.pressSequentially("Local-first. Skip accounts for now.", {
-        delay: 30,
-      });
-      await pause(200);
-      await click(
-        page,
-        page.getByRole("button", { name: "Send message", exact: true }),
-      );
-      await expect(
-        page.getByRole("heading", { name: "Revised direction", exact: true }),
-      ).toBeVisible();
-    },
+  const camera = new Camera(
+    await frameClip(page.locator(".question-card"), { top: 35 }),
   );
+  await record(page, "shape-together", camera, async () => {
+    await pause(650);
+    await click(
+      page,
+      page.getByRole("button", { name: "SQLite", exact: true }),
+    );
+    const composer = page.getByLabel("Message", { exact: true });
+    await click(page, composer);
+    await camera.focus(composer, { top: 48 });
+    await pause(420);
+    await composer.pressSequentially("Local-first. Skip accounts for now.", {
+      delay: 28,
+    });
+    await pause(200);
+    await composer.press("Enter");
+    const reply = page.getByRole("heading", {
+      name: "Revised direction",
+      exact: true,
+    });
+    await expect(reply).toBeVisible();
+    await camera.focus(reply, { top: 80, width: 600 });
+  });
 });
 
 async function artifact(page: Page) {
@@ -334,37 +304,50 @@ test("04 point to a generated web app", async ({ page }) => {
   await expect(
     frame.getByRole("button", { name: "Export", exact: true }),
   ).toBeVisible();
-  await record(
-    page,
-    "review-web-app",
-    { x: 24, y: 120, width: 952, height: 595 },
-    async () => {
-      await pause(650);
-      await click(
-        page,
-        page.getByRole("button", { name: "Point to comment", exact: true }),
-      );
-      await click(
-        page,
-        frame.getByRole("button", { name: "Export", exact: true }),
-      );
-      await page
-        .getByLabel("Feedback 1", { exact: true })
-        .pressSequentially("Label this “Export CSV”.", { delay: 40 });
-      await click(
-        page,
-        page
-          .locator(".artifact-comment")
-          .getByRole("button", { name: "Save", exact: true }),
-      );
-      await expect(
-        frame.getByRole("button", { name: "Export", exact: true }),
-      ).toBeVisible();
-      await expect(page.locator(".artifact-comment-text")).toHaveText(
-        "Label this “Export CSV”.",
-      );
-    },
+  const point = page.getByRole("button", {
+    name: "Point to comment",
+    exact: true,
+  });
+  const exportButton = frame.getByRole("button", {
+    name: "Export",
+    exact: true,
+  });
+  const camera = new Camera(
+    await frameClip(point, { left: 150, top: 40 }),
+    (await page.locator(".artifact-window").boundingBox())!,
   );
+  await record(page, "review-web-app", camera, async () => {
+    await pause(400);
+    await click(page, point);
+    await camera.focus(exportButton, { left: 40, top: 180 });
+    await pause(420);
+    await click(page, exportButton);
+    await expect(page.getByLabel("Feedback 1", { exact: true })).toBeVisible();
+    await camera.focus(page.locator(".artifact-comment"), {
+      left: 48,
+      centerY: true,
+    });
+    await pause(420);
+    await page
+      .getByLabel("Feedback 1", { exact: true })
+      .pressSequentially("Label this “Export CSV”.", { delay: 30 });
+    await click(
+      page,
+      page
+        .locator(".artifact-comment")
+        .getByRole("button", { name: "Save", exact: true }),
+    );
+    await expect(
+      frame.getByRole("button", { name: "Export", exact: true }),
+    ).toBeVisible();
+    await expect(page.locator(".artifact-comment-text")).toHaveText(
+      "Label this “Export CSV”.",
+    );
+    await camera.focus(page.locator(".artifact-comment"), {
+      left: 48,
+      centerY: true,
+    });
+  });
 });
 
 test("05 separate project contexts", async ({ page }) => {
@@ -447,29 +430,27 @@ test("05 separate project contexts", async ({ page }) => {
     await expect(page.locator(".workspace-home-heading code")).toHaveText(
       "/projects/website",
     );
-    await record(
-      page,
-      "project-workspaces",
-      { x: 0, y: 60, width: 1100, height: 687.5 },
-      async () => {
-        await pause(1000);
-        const select = page.getByRole("combobox", {
-          name: "Project",
-          exact: true,
-        });
-        const box = (await select.boundingBox())!;
-        await page.mouse.move(box.x + 90, box.y + 20, { steps: 10 });
-        await select.selectOption(projects[1].id);
-        await expect(
-          page.getByLabel("Project notes", { exact: true }),
-        ).toHaveValue(/Research notebook/);
-        await pause(1400);
-        await select.selectOption(projects[0].id);
-        await expect(
-          page.getByLabel("Project notes", { exact: true }),
-        ).toHaveValue(/Website launch/);
-      },
-    );
+    const notes = page.getByLabel("Project notes", { exact: true });
+    const camera = new Camera(await frameClip(notes, { left: 40, top: 165 }));
+    await record(page, "project-workspaces", camera, async () => {
+      await pause(800);
+      const select = page.getByRole("combobox", {
+        name: "Project",
+        exact: true,
+      });
+      await camera.focus(select, { left: 0, top: 60 });
+      await pause(420);
+      const box = (await select.boundingBox())!;
+      await page.mouse.move(box.x + 90, box.y + 20, { steps: 10 });
+      await select.focus();
+      await select.selectOption(projects[1].id);
+      await expect(notes).toHaveValue(/Research notebook/);
+      await expect(page.locator(".workspace-home-heading code")).toHaveText(
+        "/projects/research",
+      );
+      await pause(550);
+      await camera.focus(notes, { left: 40, top: 165 });
+    });
   } finally {
     for (const folder of folders)
       await rm(folder, { recursive: true, force: true });
@@ -504,8 +485,9 @@ test("06 ask AI to customize Margin", async ({ page }) => {
     .locator(".example-card")
     .filter({ hasText: "Let your assistant work with notes" });
   await example.scrollIntoViewIfNeeded();
-  await record(page, "customize-margin", { ...main, y: 110 }, async () => {
-    await pause(950);
+  const camera = new Camera(await frameClip(example, { left: 24, top: 32 }));
+  await record(page, "customize-margin", camera, async () => {
+    await pause(750);
     await click(
       page,
       example.getByRole("button", { name: "Use this prompt", exact: true }),
@@ -515,9 +497,11 @@ test("06 ask AI to customize Margin", async ({ page }) => {
     );
     const composer = page.getByLabel("Message", { exact: true });
     await click(page, composer);
+    await camera.focus(composer, { top: 55 });
+    await pause(420);
     await composer.press("Meta+A");
     await composer.pressSequentially("Add a decision-log plugin to Margin.", {
-      delay: 40,
+      delay: 35,
     });
     await expect(composer).toHaveValue("Add a decision-log plugin to Margin.");
   });
@@ -676,16 +660,21 @@ test("10 extend Margin with plugins", async ({ page }) => {
   const notes = page.getByRole("checkbox", { name: "Enable Project Notes" });
   await expect(notes).toBeChecked();
   await record(page, "plugins", main, async () => {
-    await pause(900);
+    await pause(450);
     await click(page, notes);
-    await expect(
-      page.getByText("Restart needed", { exact: true }),
-    ).toBeVisible();
+    // Default assertion backoff adds nearly a second after each asynchronous
+    // status update. Poll promptly so that idle waiting doesn't eat the hold.
+    await expect
+      .poll(
+        () => page.getByText("Restart needed", { exact: true }).isVisible(),
+        { intervals: [50] },
+      )
+      .toBe(true);
     await pause(300);
     await click(page, notes);
     await expect(notes).toBeChecked();
-    await expect(page.getByRole("status")).toContainText(
-      "No restart is needed",
-    );
+    await expect
+      .poll(() => page.getByRole("status").textContent(), { intervals: [50] })
+      .toContain("No restart is needed");
   });
 });

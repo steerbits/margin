@@ -5,12 +5,12 @@ export default defineConfig({
   testDir: import.meta.dirname,
   testMatch: "capture.spec.ts",
   workers: 1,
-  timeout: 60000,
+  timeout: 90000,
   outputDir: "../../.margin-data/temporary/readme-demos/results",
   use: {
     baseURL: "http://127.0.0.1:4356",
     viewport: { width: 1200, height: 760 },
-    deviceScaleFactor: 1,
+    deviceScaleFactor: 2,
     trace: "retain-on-failure",
   },
   webServer: {
