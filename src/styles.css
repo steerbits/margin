@@ -2106,3 +2106,95 @@ a.project-breadcrumb > span {
     border-bottom: 1px solid #f3f3f3;
   }
 }
+
+/* Cobalt: a restrained accent layer over Margin's existing neutral UI. */
+:root {
+  --cobalt: #4263d4;
+  --cobalt-strong: #3655bf;
+  --cobalt-soft: #edf1fc;
+  --cobalt-highlight: #eef2ff;
+  --cobalt-highlight-active: #dce5fa;
+  --cobalt-border: #c9d5f6;
+  --cobalt-ring: #4263d414;
+}
+
+/* Limit filled blue surfaces to enabled primary actions. */
+button.primary:not(.danger):not(:disabled),
+.send-button:not(:disabled),
+.selection-action:not(:disabled) {
+  background: var(--cobalt);
+  color: #fff;
+}
+
+button.primary:not(.danger):not(:disabled):hover,
+.send-button:not(:disabled):hover,
+.selection-action:not(:disabled):hover {
+  background: var(--cobalt-strong);
+  color: #fff;
+}
+
+/* Selected navigation and compact feedback markers. */
+.session-list > button.selected,
+.toolbar-actions .active-button:not(:disabled) {
+  background: var(--cobalt-soft);
+  color: var(--cobalt-strong);
+}
+
+.session-list > button.selected svg {
+  color: var(--cobalt-strong);
+}
+
+.count,
+.batch-chip:not(:disabled) {
+  background: var(--cobalt-soft);
+  color: var(--cobalt-strong);
+}
+
+.batch-chip:hover:not(:disabled) {
+  background: var(--cobalt-highlight-active);
+}
+
+/* Preserve readable text on softly highlighted passages. */
+::highlight(margin-comments) {
+  background: var(--cobalt-highlight);
+  color: #212121;
+}
+
+::highlight(margin-active) {
+  background: var(--cobalt-highlight-active);
+  color: #212121;
+}
+
+.comment-card.active {
+  border-color: var(--cobalt);
+  box-shadow: 0 0 0 1px var(--cobalt-ring);
+}
+
+.comment-quote {
+  border-left-color: var(--cobalt-border);
+}
+
+.comment-meta .avatar {
+  background: var(--cobalt-soft);
+  color: var(--cobalt-strong);
+}
+
+/* Small welcome and composer accents; retain all sizing and typography. */
+.welcome-icon {
+  background: var(--cobalt-soft);
+  color: var(--cobalt-strong);
+  border-color: var(--cobalt-border);
+}
+
+.skill-choice svg {
+  color: var(--cobalt-strong);
+}
+
+.composer:focus-within {
+  border-color: var(--cobalt);
+  box-shadow: 0 0 0 1px var(--cobalt-ring);
+}
+
+.app :is(button, a, summary, input, textarea, select):focus-visible {
+  outline-color: var(--cobalt);
+}
