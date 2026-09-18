@@ -68,14 +68,23 @@ test("short replies stay on one line while long unbroken text stays within the t
       .click();
     const bubble = page.locator(".message.user .user-bubble").last();
     await expect(bubble).toHaveText(text);
-    const lines = await bubble.locator("p").evaluate((el) => {
-      const r = document.createRange();
-      r.selectNodeContents(el);
-      return new Set(
-        [...r.getClientRects()].map((rect) => Math.round(rect.top)),
-      ).size;
-    });
-    expect(lines, `${text} should fit naturally on one line`).toBe(1);
+    // Acceptance replaces the optimistic bubble. Reacquire the current node
+    // while checking geometry so a detached paragraph's zero rects isn't
+    // mistaken for a wrapping regression. Still require exactly one text line.
+    await expect
+      .poll(
+        () =>
+          bubble.locator("p").evaluate((el, expected) => {
+            if (!el.isConnected || el.textContent !== expected) return 0;
+            const r = document.createRange();
+            r.selectNodeContents(el);
+            return new Set(
+              [...r.getClientRects()].map((rect) => Math.round(rect.top)),
+            ).size;
+          }, text),
+        { message: `${text} should fit naturally on one line` },
+      )
+      .toBe(1);
     await expect(
       page.getByRole("button", { name: "Stop", exact: true }),
     ).toHaveCount(0);
