@@ -1,3 +1,5 @@
+Do NOT edit README.md without user approval. You can edit README-FOR-AGENTS.md if you want to add some information for coding agents to follow.
+
 If you want to create temporary files or folders isolated from git, you should use .margin-data/temporary/ folder to put files as it is in .gitigore. Create new subfolders within temporary so that it is properly organized.
 
 ## Tests and releases

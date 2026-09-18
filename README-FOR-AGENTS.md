@@ -6,6 +6,13 @@ Use the pinned **Customize Margin** area for global instructions, example prompt
 
 [Releases and updates](docs/releases.md) documents cached release discovery, quiet versus independently highlighted releases, and an autosent customization review pinned to an official release commit. Installation still requires confirmation. Use `npm run test:release` for the isolated pre-release battery; add new suites to `scripts/release-suites.ts` and run focused checks during ordinary feature work.
 
+
+## Updating
+
+Settings shows the running and latest published versions and offers **Check for updates**. Only releases explicitly marked as **highlighted** show an **Update available** button in the header. Update and Help start an AI conversation automatically when connected; updates first explain the changes and ask for confirmation before modifying your installation. Without AI, Update opens the official release notes.
+
+Keep `.margin-data`, `.git`, workspaces, and local customizations when updating. Finish active tasks before replacing dependencies or restarting. The fresh-install script does not upgrade existing installations. Versions predating the checker need one manual upgrade first. See [release publishing, tests, and update limitations](docs/releases.md) and [installation preservation](docs/installation.md).
+
 ## Projects and the workspace picker
 
 The workspace sidebar currently lists **local project folders**. A conversation runs with its selected folder as Pi's working directory. These entries are not containers or isolated worktrees.
