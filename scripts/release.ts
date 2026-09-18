@@ -84,6 +84,8 @@ function clean(root: string) {
 }
 function validateNext(root: string, version: string) {
   if (!validVersion(version)) throw new Error("Use a stable x.y.z version.");
+  for (const file of ["package.json", "package-lock.json"])
+    requireRegularReleasePath(root, join(root, file));
   const current = json(join(root, "package.json")).version;
   if (
     !validVersion(current) ||

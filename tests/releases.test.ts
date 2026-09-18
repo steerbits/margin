@@ -193,12 +193,15 @@ test("release note validation rejects placeholders, missing or escaped images an
 });
 
 test("release directories cannot redirect writes; test-time mode changes and commit-hook changes cannot receive a release tag", (t) => {
-  const root = fixture(t);
-  mkdirSync(join(root, ".margin-data/private"), { recursive: true });
-  symlinkSync(join(root, ".margin-data/private"), join(root, "releases"));
-  git(root, "add", "releases");
-  git(root, "commit", "-qm", "Link fixture");
-  assert.throws(() => prepareRelease(root, "0.2.0"), /symbolic links/);
+  for (const name of ["releases", "package.json", "package-lock.json"]) {
+    const root = fixture(t);
+    mkdirSync(join(root, ".margin-data/private"), { recursive: true });
+    rmSync(join(root, name), { force: true });
+    symlinkSync(join(root, ".margin-data/private"), join(root, name));
+    git(root, "add", name);
+    git(root, "commit", "-qm", "Link fixture");
+    assert.throws(() => prepareRelease(root, "0.2.0"), /symbolic links/);
+  }
   for (const hook of [false, true]) {
     const candidate = fixture(t);
     prepareRelease(candidate, "0.2.0");
