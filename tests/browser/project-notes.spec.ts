@@ -142,7 +142,7 @@ test("unsaved drafts survive closing and switching sessions/projects; hidden dra
   await expect(editor(page)).toHaveValue("Keep this project draft");
   await page
     .getByRole("navigation", { name: "Conversations" })
-    .locator("button:not(.selected)")
+    .locator("[data-session-id]:not(.selected)")
     .click();
   await openNotes(page);
   await expect(editor(page)).toHaveValue("Keep this project draft");
@@ -154,7 +154,7 @@ test("unsaved drafts survive closing and switching sessions/projects; hidden dra
     .selectOption(otherProject);
   await page
     .getByRole("navigation", { name: "Conversations" })
-    .getByRole("button")
+    .locator("[data-session-id]")
     .click();
   await openNotes(page);
   await expect(editor(page)).toHaveValue("");
@@ -172,7 +172,7 @@ test("unsaved drafts survive closing and switching sessions/projects; hidden dra
     .selectOption(project);
   await page
     .getByRole("navigation", { name: "Conversations" })
-    .getByRole("button")
+    .locator("[data-session-id]")
     .first()
     .click();
   await openNotes(page);
@@ -184,11 +184,11 @@ test("unsaved drafts survive closing and switching sessions/projects; hidden dra
     .getByRole("combobox", { name: "Project", exact: true })
     .selectOption(otherProject);
   await expect(
-    page.getByRole("navigation", { name: "Conversations" }).getByRole("button"),
+    page.getByRole("navigation", { name: "Conversations" }).locator("[data-session-id]"),
   ).toHaveCount(1);
   await page
     .getByRole("navigation", { name: "Conversations" })
-    .getByRole("button")
+    .locator("[data-session-id]")
     .click();
   await openNotes(page);
   await expect(editor(page)).toHaveValue("Other draft");

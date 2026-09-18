@@ -1,4 +1,4 @@
-import { test, expect, type Page } from "@playwright/test";
+import { test, expect, type Locator, type Page } from "@playwright/test";
 import { showSidebar } from "./navigation-helpers.ts";
 
 test.beforeEach(async ({ page, baseURL }) => {
@@ -8,7 +8,9 @@ test.beforeEach(async ({ page, baseURL }) => {
   );
   await page.goto("/");
   await showSidebar(page);
-  await page.getByRole("button", { name: "Customize Margin", exact: true }).click();
+  await page
+    .getByRole("button", { name: "Customize Margin", exact: true })
+    .click();
   await expect(
     page.getByRole("heading", { name: "Customize Margin", exact: true }),
   ).toBeVisible();
@@ -120,11 +122,39 @@ test("plugin controls retain code/data and clearly indicate restart-required cha
 test("history previews changes, restores an older version, and can return to the newer state", async ({
   page,
 }) => {
+  // This round trip captures the entire disposable source repeatedly. Wait for
+  // each real filesystem operation, rather than spending a 5s DOM assertion
+  // budget while Git is still working (captures can take 6–14s on test hosts).
+  test.setTimeout(180000);
+  async function checkpointAction(
+    button: Locator,
+    operation: "create" | "preview" | "restore",
+  ) {
+    const [response] = await Promise.all([
+      page.waitForResponse(
+        (response) => {
+          const path = new URL(response.url()).pathname;
+          return (
+            response.request().method() ===
+              (operation === "preview" ? "GET" : "POST") &&
+            (operation === "create"
+              ? path === "/api/customize/checkpoints"
+              : path.startsWith("/api/customize/checkpoints/") &&
+                path.endsWith(`/${operation}`))
+          );
+        },
+        { timeout: 30000 },
+      ),
+      button.click(),
+    ]);
+    expect(response.ok(), await response.text()).toBe(true);
+  }
   await page.getByRole("button", { name: "History", exact: true }).click();
   await page.getByLabel("Checkpoint name").fill("Before experiment");
-  await page
-    .getByRole("button", { name: "Save checkpoint", exact: true })
-    .click();
+  await checkpointAction(
+    page.getByRole("button", { name: "Save checkpoint", exact: true }),
+    "create",
+  );
   await expect(
     page.getByRole("heading", { name: "Before experiment", exact: true }),
   ).toBeVisible();
@@ -134,15 +164,16 @@ test("history previews changes, restores an older version, and can return to the
     data: { text: "A new customization" },
   });
   await page.getByLabel("Checkpoint name").fill("With experiment");
-  await page
-    .getByRole("button", { name: "Save checkpoint", exact: true })
-    .click();
+  await checkpointAction(
+    page.getByRole("button", { name: "Save checkpoint", exact: true }),
+    "create",
+  );
   await expect(
     page.getByRole("heading", { name: "With experiment", exact: true }),
   ).toBeVisible();
   const second = (await (await page.request.get("/api/customize")).json())
     .history.checkpoints[0];
-  await page
+  const previewBefore = page
     .locator(".checkpoint-list article")
     .filter({
       has: page.getByRole("heading", {
@@ -150,8 +181,8 @@ test("history previews changes, restores an older version, and can return to the
         exact: true,
       }),
     })
-    .getByRole("button", { name: "Preview changes" })
-    .click();
+    .getByRole("button", { name: "Preview changes" });
+  await checkpointAction(previewBefore, "preview");
   await expect(
     page.getByRole("dialog", { name: "Preview checkpoint changes" }),
   ).toContainText("checkpoint-example.txt");
@@ -168,16 +199,7 @@ test("history previews changes, restores an older version, and can return to the
   ).toBe(true);
   await page.keyboard.press("Escape");
   await expect(dialog).toHaveCount(0);
-  await page
-    .locator(".checkpoint-list article")
-    .filter({
-      has: page.getByRole("heading", {
-        name: "Before experiment",
-        exact: true,
-      }),
-    })
-    .getByRole("button", { name: "Preview changes" })
-    .click();
+  await checkpointAction(previewBefore, "preview");
   // Preview alone has not changed the current code.
   expect(
     (
@@ -188,21 +210,24 @@ test("history previews changes, restores an older version, and can return to the
       ).json()
     ).files,
   ).toHaveLength(0);
-  await page
-    .getByRole("button", { name: "Save current state & restore" })
-    .click();
+  await checkpointAction(
+    page.getByRole("button", { name: "Save current state & restore" }),
+    "restore",
+  );
   await expect(
     page.getByRole("dialog", { name: "Preview checkpoint changes" }),
   ).toHaveCount(0);
-  await page
-    .getByRole("button", { name: "Return to before the last restore" })
-    .click();
+  await checkpointAction(
+    page.getByRole("button", { name: "Return to before the last restore" }),
+    "preview",
+  );
   await expect(
     page.getByRole("dialog", { name: "Preview checkpoint changes" }),
   ).toContainText("added");
-  await page
-    .getByRole("button", { name: "Save current state & restore" })
-    .click();
+  await checkpointAction(
+    page.getByRole("button", { name: "Save current state & restore" }),
+    "restore",
+  );
   await expect(
     page.getByRole("dialog", { name: "Preview checkpoint changes" }),
   ).toHaveCount(0);

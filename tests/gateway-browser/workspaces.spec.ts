@@ -140,7 +140,7 @@ test("external folders have independent workers and Notes shared by their chats;
   ).toBeVisible();
   await page
     .getByRole("navigation", { name: "Conversations" })
-    .locator("button:not(.selected)")
+    .locator("[data-session-id]:not(.selected)")
     .click();
   await expect
     .poll(() => page.evaluate(() => localStorage.getItem("margin.session")))
