@@ -185,6 +185,42 @@ test("one conditional shared request, manual cooldown, persisted cache, 304, and
   );
 });
 
+test("upstream Retry-After survives restart and manual refresh cannot bypass it", async (t) => {
+  const root = fixture(t);
+  let now = 1_800_000_000_000,
+    calls = 0;
+  const fetcher = (async () => {
+    calls++;
+    return new Response(null, {
+      status: 429,
+      headers: { "retry-after": "3600" },
+    });
+  }) as typeof fetch;
+  const checker = new UpdateChecker({
+    dataDir: root,
+    identity,
+    now: () => now,
+    fetch: fetcher,
+  });
+  await checker.check();
+  assert.equal(calls, 1);
+  now += 600_000;
+  await checker.check(true);
+  assert.equal(calls, 1);
+  const restarted = new UpdateChecker({
+    dataDir: root,
+    identity,
+    now: () => now,
+    fetch: fetcher,
+  });
+  await restarted.check(true);
+  assert.equal(calls, 1);
+  assert.ok(restarted.status().error);
+  now += 3_000_001;
+  await restarted.check(true);
+  assert.equal(calls, 2);
+});
+
 test("offline, malformed, oversized, identity rewrites and rollbacks keep last valid release with error", async (t) => {
   const root = fixture(t);
   let now = 1_800_000_000_000;

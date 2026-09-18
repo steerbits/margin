@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import {
+  chmodSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
@@ -161,7 +162,10 @@ test("release note validation rejects placeholders, missing or escaped images an
     "TODO",
     "![Screenshot](missing.png)",
     '<img src="https://other.invalid/private.png">',
+    '<img src = "https://other.invalid/private.png">',
+    "<img src=unquoted.png>",
     "![Screenshot][absent]",
+    "![Missing shortcut reference]",
   ]) {
     writeFileSync(path, original + tail);
     assert.throws(() => validateReleaseNotes(root, "0.2.0"));
@@ -175,7 +179,47 @@ test("release note validation rejects placeholders, missing or escaped images an
   assert.throws(() => validateReleaseNotes(root, "0.2.0"));
   writeFileSync(join(root, "releases/0.2.0/screenshot.png"), "fixture image");
   writeFileSync(path, original + "![Screenshot](screenshot.png)");
+  assert.throws(() => validateReleaseNotes(root, "0.2.0")); // Existing but untracked is not publishable.
+  git(root, "add", "releases/0.2.0/screenshot.png");
   assert.ok(validateReleaseNotes(root, "0.2.0"));
+  writeFileSync(
+    path,
+    original + "![Screenshot]\n\n[Screenshot]: screenshot.png\n",
+  );
+  assert.ok(validateReleaseNotes(root, "0.2.0"));
+});
+
+test("release directories cannot redirect writes; test-time mode changes and commit-hook changes cannot receive a release tag", (t) => {
+  const root = fixture(t);
+  mkdirSync(join(root, ".margin-data/private"), { recursive: true });
+  symlinkSync(join(root, ".margin-data/private"), join(root, "releases"));
+  git(root, "add", "releases");
+  git(root, "commit", "-qm", "Link fixture");
+  assert.throws(() => prepareRelease(root, "0.2.0"), /symbolic links/);
+  for (const hook of [false, true]) {
+    const candidate = fixture(t);
+    prepareRelease(candidate, "0.2.0");
+    notes(candidate, "0.2.0");
+    if (hook) {
+      const path = join(candidate, ".git/hooks/pre-commit");
+      writeFileSync(
+        path,
+        '#!/bin/sh\necho "hook change" >> source.txt\ngit add source.txt\n',
+      );
+      chmodSync(path, 0o755);
+    }
+    assert.throws(
+      () =>
+        finalizeRelease(candidate, "0.2.0", {
+          highlighted: false,
+          runTests: () => {
+            if (!hook) chmodSync(join(candidate, "source.txt"), 0o755);
+          },
+        }),
+      hook ? /commit hook changed/ : /changed during testing/,
+    );
+    assert.equal(git(candidate, "tag", "--list"), "");
+  }
 });
 
 test("release registry includes every browser configuration plus unit and build checks", () => {

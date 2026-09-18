@@ -1,4 +1,5 @@
 import { test, expect, type Page } from "@playwright/test";
+import { showSidebar } from "./navigation-helpers.ts";
 
 test.beforeEach(async ({ page, baseURL }) => {
   test.skip(
@@ -6,7 +7,7 @@ test.beforeEach(async ({ page, baseURL }) => {
     "Code-history UI tests require the disposable app configuration.",
   );
   await page.goto("/");
-  await page.getByRole("button", { name: "Show sidebar", exact: true }).click();
+  await showSidebar(page);
   await page.getByRole("button", { name: "Customize Margin", exact: true }).click();
   await expect(
     page.getByRole("heading", { name: "Customize Margin", exact: true }),

@@ -5,6 +5,7 @@ import {
   lstatSync,
   mkdirSync,
   readFileSync,
+  readlinkSync,
   realpathSync,
   rmSync,
   writeFileSync,
@@ -39,7 +40,22 @@ function save(path: string, value: unknown) {
   mkdirSync(dirname(path), { recursive: true });
   writeFileSync(path, JSON.stringify(value, null, 2) + "\n");
 }
+function requireRegularReleasePath(root: string, path: string) {
+  // Refuse symlinked release directories/files, including broken links. Otherwise
+  // the published tree could contain a link instead of the reviewed content.
+  let current = realpathSync(root);
+  for (const part of relative(root, path).split(sep)) {
+    current = join(current, part);
+    try {
+      if (lstatSync(current).isSymbolicLink())
+        throw new Error("Release paths must not be symbolic links.");
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+    }
+  }
+}
 function manifestAt(root: string): ReleaseManifest {
+  requireRegularReleasePath(root, join(root, "releases/stable.json"));
   return existsSync(join(root, "releases/stable.json"))
     ? parseReleaseManifest(json(join(root, "releases/stable.json")))
     : emptyManifest;
@@ -111,6 +127,7 @@ export function prepareRelease(root: string, version: string) {
     previousCommit: manifest.latest?.commit ?? null,
     manifest,
   };
+  requireRegularReleasePath(root, join(root, "releases", version));
   save(preparationPath(root, version), prep);
   mkdirSync(join(root, "releases", version), { recursive: true });
   return `Release ${version} prepared at ${sourceCommit}.\n\nGive your coding agent this prompt:\n\nReview ${prep.previousCommit ? `all changes from commit ${prep.previousCommit} to commit ${sourceCommit}` : `the source tree at commit ${sourceCommit} and its history for this first published release (there is no previous release)`} in ${marginRepository}. Write user-facing release notes in releases/${version}/README.md. Explain features, fixes, security implications, breaking changes, known limitations, and upgrade/restart requirements. Separate verified facts from assumptions; do not invent test results or security claims. Include only useful, real screenshots/images captured from disposable data, with no private information; store them under releases/${version}/ and use relative image links. Do not change application source while preparing these notes. Ask me to review the notes and images, then commit the reviewed files.\n\nAfter reviewing and committing the notes:\n  bash scripts/release.sh finalize ${version}\n\nIf application code changes, run prepare again and update the notes before finalizing. No release has been published.`;
@@ -118,10 +135,12 @@ export function prepareRelease(root: string, version: string) {
 export function validateReleaseNotes(root: string, version: string) {
   const directory = join(root, "releases", version);
   const path = join(directory, "README.md");
+  requireRegularReleasePath(root, path);
   if (!existsSync(path) || lstatSync(path).isSymbolicLink())
     throw new Error(
       "Add reviewed release notes at releases/VERSION/README.md.",
     );
+  git(root, "ls-files", "--error-unmatch", "--", relative(root, path));
   const notes = readFileSync(path, "utf8");
   if (
     notes.trim().length < 40 ||
@@ -135,12 +154,17 @@ export function validateReleaseNotes(root: string, version: string) {
     ...[
       ...notes.matchAll(/!\[[^\]]*\]\(\s*<?([^\s)>]+)>?(?:\s+[^)]*)?\)/g),
     ].map((m) => m[1]),
-    ...[...notes.matchAll(/<img\b[^>]*\bsrc=["']([^"']+)["'][^>]*>/gi)].map(
-      (m) => m[1],
-    ),
   ];
+  for (const match of notes.matchAll(/<img\b[^>]*>/gi)) {
+    const src = match[0].match(/\bsrc\s*=\s*["']([^"']+)["']/i);
+    if (!src || /\bsrcset\s*=/i.test(match[0]))
+      throw new Error(
+        "Use a quoted, single local src for release-note images.",
+      );
+    imageReferences.push(src[1]);
+  }
   // Reference-style images require a resolvable local definition too.
-  for (const match of notes.matchAll(/!\[([^\]]*)\]\[([^\]]*)\]/g)) {
+  for (const match of notes.matchAll(/!\[([^\]]*)\](?:\[([^\]]*)\])?(?!\()/g)) {
     const key = (match[2] || match[1]).toLowerCase();
     const definition = [
       ...notes.matchAll(/^\s*\[([^\]]+)\]:\s*<?([^\s>]+)>?/gm),
@@ -162,6 +186,7 @@ export function validateReleaseNotes(root: string, version: string) {
       throw new Error(
         `Image must be an existing bundled PNG/JPEG/GIF/WebP inside this release: ${ref}`,
       );
+    git(root, "ls-files", "--error-unmatch", "--", relative(root, image));
   }
   return notes;
 }
@@ -178,11 +203,17 @@ function fingerprint(root: string) {
     .filter(Boolean)
     .sort()) {
     hash.update(name + "\0");
-    hash.update(
-      existsSync(join(root, name))
-        ? readFileSync(join(root, name))
-        : "<deleted>",
-    );
+    try {
+      const path = join(root, name),
+        stat = lstatSync(path);
+      hash.update(String(stat.mode) + "\0");
+      hash.update(
+        stat.isSymbolicLink() ? readlinkSync(path) : readFileSync(path),
+      );
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+      hash.update("<deleted>");
+    }
   }
   return hash.digest("hex");
 }

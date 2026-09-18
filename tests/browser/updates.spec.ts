@@ -122,6 +122,39 @@ test("Update and Help preserve the existing busy guard and never queue a delayed
   }
 });
 
+test("editing the prepared prompt while initial readiness is pending cancels autosend", async ({
+  page,
+}) => {
+  await start(page);
+  let release!: () => void;
+  const hold = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  await page.route("**/api/sessions/*/send-availability", async (route) => {
+    await hold;
+    await route.fulfill({ json: { block: null } });
+  });
+  let sends = 0;
+  page.on("request", (r) => {
+    if (r.url().endsWith("/send")) sends++;
+  });
+  try {
+    await page.getByRole("button", { name: "Help", exact: true }).click();
+    await expect(editor(page)).toHaveValue(marginHelpPrompt);
+    await editor(page).fill("I want to edit this question first");
+    release();
+    await expect(
+      page.getByRole("button", { name: "Send message", exact: true }),
+    ).toBeEnabled();
+    await expect(editor(page)).toHaveValue(
+      "I want to edit this question first",
+    );
+    expect(sends).toBe(0);
+  } finally {
+    release();
+  }
+});
+
 test("failed autosend retains draft and explicit retry works without creating another chat", async ({
   page,
 }) => {

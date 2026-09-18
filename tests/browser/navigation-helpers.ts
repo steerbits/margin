@@ -1,7 +1,14 @@
-import type { Page } from "@playwright/test";
+import { expect, type Page } from "@playwright/test";
+export async function showSidebar(page: Page) {
+  // Bootstrap can reveal saved chats and open the sidebar. Wait until that
+  // initial state has settled before deciding whether a toggle is necessary.
+  await expect(page.getByRole("button", { name: "Help", exact: true })).toBeEnabled();
+  const show = page.getByRole("button", { name: "Show sidebar", exact: true });
+  if (await show.isVisible()) await show.click();
+  await expect(page.getByRole("button", { name: "Hide sidebar", exact: true })).toBeVisible();
+}
 export async function selectWorkspace(page: Page, id: string) {
-  if (!(await page.locator(".sidebar").isVisible()))
-    await page.getByRole("button", { name: "Show sidebar", exact: true }).click();
+  await showSidebar(page);
   await page
     .getByRole("combobox", { name: "Project", exact: true })
     .selectOption("__all__");

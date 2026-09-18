@@ -12,6 +12,8 @@ for (const width of [1440, 390]) {
     });
     expect(seed.ok()).toBe(true);
     const { id } = await seed.json();
+    const boot = await (await page.request.get("/api/bootstrap")).json();
+    const workspacePath: string = boot.projects.find((p: any) => p.id === boot.marginProjectId).path;
     const snapshot: Snapshot = await (
       await page.request.get(`/api/sessions/${id}`)
     ).json();
@@ -55,7 +57,10 @@ for (const width of [1440, 390]) {
           .filter(Boolean)
           .join("\n"),
       );
-    expect(labels).not.toMatch(/\bpi\b/i);
+    // Literal user/workspace paths can contain "pi" (including our checkout
+    // name). They are not product branding and must not be rewritten.
+    expect(labels).toContain(workspacePath);
+    expect(labels.replaceAll(workspacePath, "<workspace path>")).not.toMatch(/\bpi\b/i);
 
     await page.getByRole("button", { name: "Settings", exact: true }).click();
     const settings = page.getByRole("dialog", {
