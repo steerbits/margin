@@ -7,7 +7,7 @@ import {
 } from "node:fs";
 import { join, resolve } from "node:path";
 import { execFileSync, spawnSync } from "node:child_process";
-import { releaseSuites } from "./release-suites.ts";
+import { releaseSuites, releaseTestEnvironment } from "./release-suites.ts";
 
 // Build/test the current tracked working files, not HEAD; never rebuild the live
 // app's dist or use its credentials/data. Keep the report and failed fixture.
@@ -54,12 +54,7 @@ execFileSync(
   ],
   { cwd: app },
 );
-const env = Object.fromEntries(
-  Object.entries(process.env).filter(
-    ([key]) =>
-      !key.startsWith("MARGIN_") && !key.startsWith("PI_") && key !== "PORT",
-  ),
-);
+const env = releaseTestEnvironment();
 env.PI_CODING_AGENT_DIR = join(root, "private-pi");
 env.MARGIN_DATA_DIR = join(app, ".margin-data");
 mkdirSync(env.PI_CODING_AGENT_DIR, { recursive: true });

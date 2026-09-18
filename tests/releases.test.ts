@@ -17,7 +17,10 @@ import {
   finalizeRelease,
   validateReleaseNotes,
 } from "../scripts/release.ts";
-import { releaseSuites } from "../scripts/release-suites.ts";
+import {
+  releaseSuites,
+  releaseTestEnvironment,
+} from "../scripts/release-suites.ts";
 const parent = resolve(".margin-data/temporary/release-unit-tests");
 mkdirSync(parent, { recursive: true });
 function git(root: string, ...args: string[]) {
@@ -220,6 +223,24 @@ test("release directories cannot redirect writes; test-time mode changes and com
     );
     assert.equal(git(candidate, "tag", "--list"), "");
   }
+});
+
+test("release test environments do not inherit provider secrets, runtime identity or Node preload hooks", () => {
+  assert.deepEqual(
+    releaseTestEnvironment({
+      PATH: "/fixture/bin",
+      HOME: "/fixture/home",
+      LANG: "en_US.UTF-8",
+      OPENAI_API_KEY: "fixture-secret",
+      AWS_PROFILE: "production",
+      GITHUB_TOKEN: "fixture-secret",
+      MARGIN_WORKER_TOKEN: "fixture-token",
+      PI_CODING_AGENT_DIR: "/live/pi",
+      PORT: "4317",
+      NODE_OPTIONS: "--import private-loader.mjs",
+    }),
+    { PATH: "/fixture/bin", HOME: "/fixture/home", LANG: "en_US.UTF-8" },
+  );
 });
 
 test("release registry includes every browser configuration plus unit and build checks", () => {

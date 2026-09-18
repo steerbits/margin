@@ -88,6 +88,33 @@ test("quiet update appears only in Settings and manual checking refreshes its st
   ).toHaveCount(0);
 });
 
+test("a Settings update creation failure stays visible and preserves the previous chat draft", async ({
+  page,
+}) => {
+  const old = await start(page, false);
+  await editor(page).fill("Keep my work if review cannot start");
+  await page.route("**/api/sessions", (route) =>
+    route.request().method() === "POST"
+      ? route.fulfill({
+          status: 503,
+          json: { error: "Update chat unavailable" },
+        })
+      : route.continue(),
+  );
+  await page.getByRole("button", { name: "Settings", exact: true }).click();
+  await page
+    .getByRole("button", { name: "Review update", exact: true })
+    .click();
+  await expect(
+    page.getByRole("dialog", { name: "Settings", exact: true }),
+  ).toHaveCount(0);
+  await expect(page.getByRole("alert")).toContainText(
+    "Update chat unavailable",
+  );
+  await expect(editor(page)).toHaveValue("Keep my work if review cannot start");
+  await expect(page).toHaveURL(new RegExp(`/chats/${old}$`));
+});
+
 test("Update and Help preserve the existing busy guard and never queue a delayed auto-send", async ({
   page,
 }) => {

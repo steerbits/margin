@@ -35,6 +35,8 @@ test("older real build shows a highlighted update; a matching newer startup clea
     await expect(page.locator(".update-settings")).toContainText(
       "Running: 1.0.0",
     );
+    await page.locator(".settings-accounts > summary").click();
+    await page.locator(".update-settings").scrollIntoViewIfNeeded();
     await page.screenshot({
       path: ".margin-data/temporary/update-validation/older-installation.png",
     });
@@ -56,6 +58,8 @@ test("older real build shows a highlighted update; a matching newer startup clea
     await expect(page.locator(".update-settings")).toContainText(
       "No newer published version.",
     );
+    await page.locator(".settings-accounts > summary").click();
+    await page.locator(".update-settings").scrollIntoViewIfNeeded();
     await page.screenshot({
       path: ".margin-data/temporary/update-validation/newer-installation.png",
     });

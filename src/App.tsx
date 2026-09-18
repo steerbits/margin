@@ -944,8 +944,10 @@ export function App() {
       }
       setSettingsOpen(false);
       if (window.innerWidth <= 650) setSidebar(false);
-    } catch (e) { fail(e); }
-    finally { updateOpening.current = false; setOpeningUpdate(false); }
+    } catch (e) {
+      setSettingsOpen(false);
+      fail(e);
+    } finally { updateOpening.current = false; setOpeningUpdate(false); }
   }
   async function customizationPrompt(project: Project, prompt: string, auto = false) {
     if (editing) {
