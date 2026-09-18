@@ -138,14 +138,17 @@ for (const background of [false, true])
 test("managed Bash drains large foreground output and delayed descendant output without dropping the tail", async () => {
   const dir = mkdtempSync(join(tmpdir(), "margin-shell-output-"));
   const program = join(dir, "output.cjs");
+  const ready = join(dir, "output-ready");
   writeFileSync(
     program,
-    `process.stdout.write('x'.repeat(2*1024*1024));let n=0;const timer=setInterval(()=>{process.stdout.write('tail'+(++n));if(n===8){clearInterval(timer);process.stdout.write('END');}},30);`,
+    `const fs=require('node:fs');setTimeout(()=>process.stdout.write('x'.repeat(2*1024*1024),()=>{fs.writeFileSync(${JSON.stringify(ready)},'ready');let n=0;const timer=setInterval(()=>{process.stdout.write('tail'+(++n));if(n===8){clearInterval(timer);process.stdout.write('END');}},30);}),250);`,
   );
   try {
     let output = "";
     const result = await managedShell().exec(
-      `${quote(process.execPath)} ${quote(program)} &`,
+      // Let the shell exit only once the producer is active, then verify that
+      // all subsequent descendant output is drained, including the final tail.
+      `${quote(process.execPath)} ${quote(program)} & child=$!; while [ ! -s ${quote(ready)} ] && kill -0 "$child" 2>/dev/null; do sleep 0.01; done`,
       dir,
       { onData: (b) => (output += b), timeout: 5 },
     );

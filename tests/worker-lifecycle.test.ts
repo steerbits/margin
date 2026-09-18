@@ -33,10 +33,11 @@ function fixture(wrapper = false) {
   symlinkSync(resolve("node_modules"), join(app, "node_modules"), "dir");
   writeFileSync(join(app, "package.json"), '{"type":"module"}');
   const fake = join(bin, "cco");
+  const wrapperExit = join(root, "release-wrapper");
   // This shim exercises real processes and HTTP, not OS sandbox enforcement.
   writeFileSync(
     fake,
-    `#!/bin/bash\nset -e\nwhile [[ $# -gt 0 ]]; do\ncase "$1" in\n--backend) shift 2;;\n--env) export "$2"; shift 2;;\n--add-dir=*|--allow-readonly=*) shift;;\n--command) shift; ${wrapper ? '"$@" &\nsleep 1\nexit 0' : 'exec "$@"'};;\n*) exit 97;;\nesac\ndone\n`,
+    `#!/bin/bash\nset -e\nwhile [[ $# -gt 0 ]]; do\ncase "$1" in\n--backend) shift 2;;\n--env) export "$2"; shift 2;;\n--add-dir=*|--allow-readonly=*) shift;;\n--command) shift; ${wrapper ? `"$@" &\nchild=$!\nwhile [ ! -f ${JSON.stringify(wrapperExit)} ] && kill -0 "$child" 2>/dev/null; do sleep 0.02; done\nexit 0` : 'exec "$@"'};;\n*) exit 97;;\nesac\ndone\n`,
   );
   chmodSync(fake, 0o755);
   mkdirSync(join(app, "vendor", "cco"), { recursive: true });
@@ -49,6 +50,8 @@ import {RuntimeOwner} from ${JSON.stringify(pathToFileURL(resolve("server/runtim
 const owner = new RuntimeOwner(process.env.MARGIN_DATA_DIR!);
 const generation = process.env.MARGIN_RUNTIME_GENERATION!;
 owner.claim(generation);
+// Deliberately outlast the old fixture's fixed one-second wrapper lifetime.
+if (${wrapper}) await new Promise(resolve=>setTimeout(resolve,1200));
 const server = http.createServer((req,res)=>{
  if(req.headers.authorization !== 'Bearer '+process.env.MARGIN_WORKER_TOKEN){res.writeHead(401).end();return;}
  res.setHeader('Content-Type','application/json'); res.end('{}');
@@ -77,6 +80,7 @@ setTimeout(()=>process.exit(0),15000).unref();
     data,
     manager,
     project,
+    wrapperExit,
     async close() {
       await manager.close();
       process.env.PATH = oldPath;
@@ -132,7 +136,11 @@ test(
     try {
       const first = await f.manager.get(f.project);
       assert.notEqual(first.runtimePid, first.process.pid);
-      if (first.process.exitCode === null) await once(first.process, "exit");
+      // Trigger only the wrapper's exit after the manager accepted readiness.
+      // A fixed sleep can exit during startup on a busy release-test host.
+      const wrapperDied = once(first.process, "exit");
+      writeFileSync(f.wrapperExit, "exit");
+      await wrapperDied;
       assert.equal(processState(first.runtimePid), "alive");
       const second = await f.manager.get(f.project);
       assert.equal(second, first);
