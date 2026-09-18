@@ -339,6 +339,10 @@ for (const width of [1440, 390]) {
       await expect(home).toHaveCount(0);
       await expect(page.locator(".project-select")).toHaveValue(project.id);
       if (width > 650) await expect(page.locator(".sidebar")).toBeVisible();
+      // Workspace selection now opens its home/instructions first; creating a
+      // conversation is a separate action, not an automatic picker side effect.
+      await page.locator(".workspace-home").getByRole("button", { name: "New conversation", exact: true }).click();
+      await expect(page).toHaveURL(new RegExp(`/workspaces/${project.id}\\?view=new$`));
       await expect(
         page.getByRole("button", { name: "Start a conversation", exact: true }),
       ).toBeEnabled();
