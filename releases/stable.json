@@ -1,5 +1,15 @@
 {
   "schemaVersion": 1,
-  "latest": null,
-  "lastHighlightedVersion": null
+  "latest": {
+    "version": "0.1.1",
+    "commit": "c658e85829de3331c82272b0ed30e8267ac5a3e4",
+    "tag": "v0.1.1",
+    "highlighted": true,
+    "security": false,
+    "publishedAt": "2026-09-18T08:22:08.439Z",
+    "tests": {
+      "status": "passed"
+    }
+  },
+  "lastHighlightedVersion": "0.1.1"
 }
