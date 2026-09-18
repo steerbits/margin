@@ -6,6 +6,10 @@ This technical beta keeps the existing repository layout. It adds a private Pi d
 
 Update source in place. Keep the same `.margin-data`, `.git`, workspace folders, and external project locations. Conversation IDs and the customization workspace path remain unchanged; no path migration is necessary. Source changes take effect on the next rebuild/restart.
 
+After stopping Margin, `bash start.sh` and `npm start` automatically build local source when its version differs from the production build, or the build is missing or invalid. A failed/interrupted startup build is retried on the next start, and a failed build never starts the server. A matching build starts normally without rebuilding. This happens after the checkout ownership and port checks (and the sandbox probe for `start.sh`), so a duplicate launch cannot rebuild beneath the existing launcher. Development mode skips this step. Same-version edits still need `npm run build`; startup does not download releases or install dependencies. Refresh the browser after restarting.
+
+The check compares `package.json` with `dist/margin-build.json` and requires `dist/index.html`; it does not compare Git commits or scan source/plugin files. It also honors `.margin-data/startup-build-pending` under the checkout, which remains after a failed build until a complete retry succeeds. `--help` and `--dry-run` do not build. Explicit legacy entry points such as `start:native` and `start:single-sandbox` retain their manual build workflow. If dependency installation is required by an update, complete it while Margin is stopped before starting again.
+
 Pi now uses `<MARGIN_DATA_DIR>/pi`, defaulting to `.margin-data/pi`. A fresh sign-in through Settings may be required; global Pi credentials are neither moved nor deleted. Existing chats and notes are separate from provider authentication.
 
 The installer is for fresh checkouts. It does not update an already-running installation. Validate source changes in a disposable checkout, finish active work before activation, and keep the previous source/build. Do not run `npm ci` against a running installation, since it replaces dependency files.

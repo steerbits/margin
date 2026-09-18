@@ -395,3 +395,56 @@ test("a newer browser bundle and old server mismatch does not claim an installed
     page.getByRole("button", { name: "Update available", exact: true }),
   ).toHaveCount(0);
 });
+
+for (const scenario of [
+  "stale build",
+  "browser mismatch",
+  "unknown version",
+] as const) {
+  test(`manual discovery shows the latest release and review action with a ${scenario}`, async ({
+    page,
+  }) => {
+    const result = updateFixture();
+    if (scenario === "browser mismatch") result.runningVersion = "0.0.9";
+    if (scenario === "unknown version") result.runningVersion = null;
+    if (scenario === "stale build")
+      result.identityWarning = `Source is v${availableVersion}; the built app is v${installedVersion}. Restart Margin, then refresh, to finish applying the source changes.`;
+    await page.route("**/api/updates", (route) =>
+      route.fulfill({
+        json: { ...result, manifest: null, checkedAt: null },
+      }),
+    );
+    let checks = 0;
+    await page.route("**/api/updates/check", (route) => {
+      checks++;
+      return route.fulfill({ json: result });
+    });
+    await page.goto("/");
+    await page.getByRole("button", { name: "Settings", exact: true }).click();
+    const section = page.locator(".update-settings");
+    await expect(section.locator("summary")).toContainText("latest unknown");
+    await section.locator("summary").click();
+    await page
+      .getByRole("button", { name: "Check for updates", exact: true })
+      .click();
+    await expect.poll(() => checks).toBe(1);
+    await expect(section.locator("summary")).toContainText(
+      `v${availableVersion}`,
+    );
+    await expect(section).toContainText(
+      `Latest published: ${availableVersion}`,
+    );
+    await expect(section).toContainText("Last checked:");
+    await expect(section).not.toContainText("Update checks still work.");
+    await expect(
+      page.getByRole("button", { name: "Review update", exact: true }),
+    ).toBeVisible();
+    await expect(
+      section.getByRole("link", { name: "Release notes", exact: true }),
+    ).toHaveAttribute("href", releaseNotesUrl(result.manifest!.latest!));
+    if (scenario === "stale build") {
+      await expect(section).toContainText(`Running: ${installedVersion}`);
+      await expect(section).toContainText("the built app is");
+    }
+  });
+}

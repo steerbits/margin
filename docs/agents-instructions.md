@@ -35,6 +35,6 @@ Unreadable or invalid updated context blocks new input before acceptance and lea
 
 ## Activation and verification
 
-Build with `npm run build`, finish active work, restart Margin with the usual launch command, and refresh the browser. No data migration is required. After this version is active, saving instructions does not require further restarts.
+Finish active work, activate this source change with the [standard startup/build workflow](releases.md#discovery-and-running-identity), and refresh the browser. Production startup rebuilds changed versions automatically; same-version code edits require `npm run build` before restarting. No data migration is required. After this version is active, saving instructions does not require further restarts.
 
 See the [evaluation record](evaluation.md#editable-global-and-workspace-instructions) for automated checks and limitations, and the [interaction spec](agents-instructions-spec.md) for the shaped behavior.

@@ -33,6 +33,7 @@ function fixture(installed = true) {
     "install.sh",
     "package.json",
     "scripts/start-margin.ts",
+    "scripts/startup-build.ts",
     "scripts/start-verified.ts",
     "scripts/start-cco.ts",
     "scripts/installation.ts",
@@ -41,10 +42,28 @@ function fixture(installed = true) {
     "scripts/select-install-port.mjs",
     "server/execution.ts",
     "server/runtime-owner.ts",
+    "shared/updates.ts",
   ]) {
     mkdirSync(dirname(join(root, file)), { recursive: true });
     copyFileSync(resolve(file), join(root, file));
   }
+  const pkg = JSON.parse(readFileSync(join(root, "package.json"), "utf8"));
+  pkg.scripts.build = "node fixture-build.cjs";
+  writeFileSync(join(root, "package.json"), JSON.stringify(pkg));
+  writeFileSync(
+    join(root, "fixture-build.cjs"),
+    `
+    const fs = require('node:fs');
+    fs.appendFileSync('build-calls', 'build\\n');
+    if (process.env.TEST_BUILD_SKIP_OUTPUT !== '1') {
+      fs.mkdirSync('dist', {recursive: true});
+      const version = JSON.parse(fs.readFileSync('package.json', 'utf8')).version;
+      fs.writeFileSync('dist/margin-build.json', JSON.stringify({version}));
+      fs.writeFileSync('dist/index.html', 'fixture');
+    }
+    process.exitCode = Number(process.env.TEST_BUILD_EXIT || 0);
+  `,
+  );
   // This fixture exercises orchestration, not sandbox security or the UI.
   writeFileSync(
     join(root, "scripts/check-cco.ts"),
@@ -73,8 +92,15 @@ function fixture(installed = true) {
     process.once('SIGTERM', () => server.close(() => process.exit(0)));
   `,
   );
-  if (installed)
+  if (installed) {
     symlinkSync(resolve("node_modules"), join(root, "node_modules"), "dir");
+    mkdirSync(join(root, "dist"));
+    writeFileSync(join(root, "dist/index.html"), "fixture");
+    writeFileSync(
+      join(root, "dist/margin-build.json"),
+      JSON.stringify({ version: pkg.version }),
+    );
+  }
   const config = join(root, ".margin-data/installation.json");
   const savePort = (port: number) => {
     mkdirSync(dirname(config), { recursive: true });
@@ -161,6 +187,136 @@ test("start.sh help and bad arguments work without performing a sandbox probe", 
     }
     assert.equal(existsSync(join(f.root, "sandbox-checked")), false);
     assert.equal(existsSync(join(f.root, ".margin-data")), false);
+  } finally {
+    f.close();
+  }
+});
+
+test("production startup rebuilds changed versions and missing or damaged builds, then skips an up-to-date build", async () => {
+  const ports = await occupyPorts(1);
+  await ports.close();
+  const f = fixture();
+  try {
+    const expected = JSON.parse(
+      readFileSync(join(f.root, "package.json"), "utf8"),
+    ).version;
+    const buildFile = join(f.root, "dist/margin-build.json");
+    const cases = [
+      () => writeFileSync(buildFile, '{"version":"0.0.1"}'),
+      () => writeFileSync(buildFile, '{"version":"99.0.0"}'),
+      () => writeFileSync(buildFile, "broken"),
+      () => rmSync(buildFile),
+      () => rmSync(join(f.root, "dist/index.html")),
+      () => rmSync(join(f.root, "dist"), { recursive: true }),
+    ];
+    for (const damage of cases) {
+      damage();
+      const result = f.run(["--port", String(ports.port)]);
+      assert.equal(result.status, 0, result.stdout + result.stderr);
+      assert.match(result.stdout, /Building Margin before startup/);
+      assert.match(result.stdout, /FIXTURE_READY/);
+      assert.equal(
+        JSON.parse(readFileSync(buildFile, "utf8")).version,
+        expected,
+      );
+      assert.equal(
+        existsSync(join(f.root, ".margin-data/startup-build-pending")),
+        false,
+      );
+    }
+    const built = readFileSync(join(f.root, "build-calls"), "utf8");
+    assert.equal(built.trim().split("\n").length, cases.length);
+    const next = f.run(["--port", String(ports.port)]);
+    assert.equal(next.status, 0, next.stdout + next.stderr);
+    assert.doesNotMatch(next.stdout, /Building Margin/);
+    assert.equal(readFileSync(join(f.root, "build-calls"), "utf8"), built);
+  } finally {
+    f.close();
+  }
+});
+
+test("npm start also rebuilds before launching and a failed build blocks startup until a successful retry", async () => {
+  const ports = await occupyPorts(1);
+  await ports.close();
+  const f = fixture();
+  try {
+    rmSync(join(f.root, "dist"), { recursive: true });
+    const failed = f.run(["--port", String(ports.port)], {
+      TEST_BUILD_EXIT: "73",
+    });
+    assert.equal(failed.status, 1, failed.stdout + failed.stderr);
+    assert.match(failed.stderr, /Startup build failed/);
+    assert.doesNotMatch(failed.stdout, /FIXTURE_READY/);
+    assert.equal(
+      existsSync(join(f.root, ".margin-data/startup-build-pending")),
+      true,
+    );
+    claimLauncher(f.root).release();
+    // The failed build emitted matching metadata; the marker still forces retry.
+    const retried = spawnSync(
+      "npm",
+      ["start", "--", "--port", String(ports.port)],
+      {
+        cwd: f.root,
+        env: { ...f.env, TEST_EXIT_AFTER_LISTEN: "1" },
+        encoding: "utf8",
+        timeout: 20000,
+      },
+    );
+    assert.equal(retried.status, 0, retried.stdout + retried.stderr);
+    assert.match(retried.stdout, /previous startup build did not finish/);
+    assert.match(retried.stdout, /FIXTURE_READY/);
+    assert.equal(
+      readFileSync(join(f.root, "build-calls"), "utf8"),
+      "build\nbuild\n",
+    );
+  } finally {
+    f.close();
+  }
+});
+
+test("startup rejects a successful build command that leaves no matching output", async () => {
+  const ports = await occupyPorts(1);
+  await ports.close();
+  const f = fixture();
+  try {
+    rmSync(join(f.root, "dist"), { recursive: true });
+    const result = f.run(["--port", String(ports.port)], {
+      TEST_BUILD_SKIP_OUTPUT: "1",
+    });
+    assert.equal(result.status, 1, result.stdout + result.stderr);
+    assert.match(result.stderr, /did not produce a matching app/);
+    assert.doesNotMatch(result.stdout, /FIXTURE_READY/);
+    claimLauncher(f.root).release();
+  } finally {
+    f.close();
+  }
+});
+
+test("help, dry-run, development, and a blocked duplicate launch never rebuild", async () => {
+  const ports = await occupyPorts(1);
+  await ports.close();
+  const f = fixture();
+  try {
+    rmSync(join(f.root, "dist"), { recursive: true });
+    for (const args of [
+      ["--help"],
+      ["--dry-run"],
+      ["--dev", "--port", String(ports.port)],
+    ]) {
+      const result = f.run(args);
+      assert.equal(result.status, 0, result.stdout + result.stderr);
+      assert.equal(existsSync(join(f.root, "build-calls")), false);
+    }
+    const owner = claimLauncher(f.root);
+    try {
+      const result = f.run(["--port", String(ports.port)]);
+      assert.equal(result.status, 1);
+      assert.match(result.stderr, /already running/);
+      assert.equal(existsSync(join(f.root, "build-calls")), false);
+    } finally {
+      owner.release();
+    }
   } finally {
     f.close();
   }
@@ -343,7 +499,7 @@ test(`installer checks ports before npm; accepted fallback is saved and --start 
     });
     writeFileSync(
       join(bin, "npm"),
-      `#!/bin/sh\necho "$*" >> npm-calls\nif [ "$1" = ci ]; then ln -s '${resolve("node_modules").replaceAll("'", "'\\''")}' node_modules; fi\n`,
+      `#!/bin/sh\necho "$*" >> npm-calls\nif [ "$1" = ci ]; then ln -s '${resolve("node_modules").replaceAll("'", "'\\''")}' node_modules; fi\nif [ "$1" = run ] && [ "$2" = build ]; then node fixture-build.cjs; fi\n`,
       { mode: 0o755 },
     );
     mkdirSync(join(f.root, "vendor/cco"), { recursive: true });

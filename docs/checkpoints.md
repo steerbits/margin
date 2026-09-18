@@ -152,7 +152,7 @@ Restore performs these steps under the history lock:
 
 An interruption can leave a partially restored working folder. The recorded backup and pending state provide a recovery path; the entire restore is not an atomic filesystem transaction. The History UI's **Return to before the last restore** previews the saved backup and uses the same restore path.
 
-The server compares restored source with the tree recorded at startup. If they differ, normal agent work is blocked until rebuild/restart activates it. Returning to the source state already loaded can remove that requirement. Dependency changes may also require installation before building.
+The server compares restored source with the tree recorded at startup. If they differ, normal agent work is blocked until rebuild/restart activates it. Returning to the source state already loaded can remove that requirement. Dependency changes may also require installation before building. Rebuild explicitly after a restore: the [startup build check](installation.md#existing-users) compares package/build versions, and a checkpoint can change files without changing that version or can restore a launcher that predates the check.
 
 See [the recovery commands](customization-workspace.md#recovery-if-the-interface-breaks). The standalone recovery program is bundled once into the data directory and preserved by later builds. **An older recovery bundle may still contain older checkpoint code, including the pre-fix Git input path.** Updating application source does not update an existing recovery bundle. This follows [scripts/build-recovery.ts](../scripts/build-recovery.ts); versioned recovery updates are proposed below.
 

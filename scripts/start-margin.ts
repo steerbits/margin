@@ -7,6 +7,7 @@ import { parseLaunchOptions } from "./start-cco.ts";
 import { configureInstallation } from "./installation.ts";
 import { claimLauncher } from "./launcher-owner.ts";
 import { DEFAULT_PORT, selectPort } from "./launch-port.mjs";
+import { ensureStartupBuild } from "./startup-build.ts";
 
 async function checkSandbox(appRoot: string) {
   await new Promise<void>((done, reject) => {
@@ -81,7 +82,7 @@ export async function main(
       throw new Error(
         "Start the Margin launcher from a normal Terminal, outside an existing Margin worker.",
       );
-    // Take ownership before probing ports or doing the slower sandbox check.
+    // Take ownership before probing ports, checking the sandbox or rebuilding.
     // Another start from this checkout must never be offered a different port.
     owner = claimLauncher(appRoot);
     if (options.port !== undefined) process.env.PORT = String(options.port);
@@ -89,6 +90,7 @@ export async function main(
     const port = await selectPort(process.env.PORT ?? DEFAULT_PORT);
     process.env.PORT = String(port);
     if (verifySandbox) await checkSandbox(appRoot);
+    if (!options.dev) await ensureStartupBuild(appRoot);
     console.log(`Private Pi configuration: ${installation.piDir}`);
     console.log(`Bundled cco: ${installation.cco}`);
     process.env.NODE_ENV = options.dev ? "development" : "production";

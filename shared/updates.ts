@@ -1,6 +1,8 @@
 export const marginRepository = "https://github.com/steerbits/margin";
 export const marginReleaseFeed =
   "https://raw.githubusercontent.com/steerbits/margin/main/releases/stable.json";
+export const marginReleaseFeedFallback =
+  "https://api.github.com/repos/steerbits/margin/contents/releases/stable.json?ref=main";
 
 export interface Release {
   version: string;
@@ -127,9 +129,15 @@ export function highlightedUpdate(status: UpdateStatus | null): boolean {
 /** Compact Settings status; a failed/unknown check must not claim “latest”. */
 export function updateSummary(status: UpdateStatus | null): string {
   if (!status) return "Checking version…";
-  if (!status.runningVersion) return "Version not identified";
-  const current = `v${status.runningVersion}`;
   const latest = status.manifest?.latest;
+  if (!status.runningVersion) {
+    const current = "Version not identified";
+    if (latest)
+      return `${current} · latest v${latest.version}${status.error ? " (cached)" : ""}`;
+    if (status.error) return `${current} · check unavailable`;
+    return `${current} · ${status.manifest ? "no published release" : "latest unknown"}`;
+  }
+  const current = `v${status.runningVersion}`;
   if (latest && updateAvailable(status))
     return `${current} → v${latest.version} available${status.error ? " (cached)" : ""}`;
   if (status.error) return `${current} · check unavailable`;

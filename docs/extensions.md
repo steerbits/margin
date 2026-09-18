@@ -52,6 +52,8 @@ Add a directory under `plugins/` with either or both:
 
 Both use a unique lowercase `id` and `apiVersion: 1`. Server plugins load at startup; browser plugins are bundled by Vite. Restart during development, or rebuild and restart production, after adding a plugin. Server plugin code executes inside the workspace worker's cco boundary and is intended for your own trusted code.
 
+Adding or editing plugins normally leaves Margin's package version unchanged, so run `npm run build` explicitly before restarting production. Standard startup's automatic rebuild checks local source/build versions; it does not scan plugin directories or source changes. See [startup/build behavior](installation.md#existing-users).
+
 **Customize Margin → Plugins** now controls enabled directories through `margin.plugins.json`. The browser bundle contains discoverable modules but loads only the active folders named by the server; disabled server modules are skipped before import. Changes take effect after server restart/browser refresh, and the UI reports pending changes. Add optional `plugin.json` with `name` and `description` for a concise installed-plugin listing.
 
 ## Where plugins and their data live

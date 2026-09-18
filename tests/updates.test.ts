@@ -13,6 +13,7 @@ import {
   compareVersions,
   highlightedUpdate,
   marginReleaseFeed,
+  marginReleaseFeedFallback,
   marginUpdatePrompt,
   parseReleaseManifest,
   releaseNotesUrl,
@@ -100,7 +101,23 @@ test("compact version summaries distinguish available, latest, ahead, unknown an
   );
   assert.equal(
     updateSummary(status(manifest(), null)),
-    "Version not identified",
+    "Version not identified · latest v0.2.0",
+  );
+  assert.equal(
+    updateSummary({ ...status(manifest(), null), error: "Offline" }),
+    "Version not identified · latest v0.2.0 (cached)",
+  );
+  assert.equal(
+    updateSummary({ ...status(manifest(), null), manifest: null }),
+    "Version not identified · latest unknown",
+  );
+  assert.equal(
+    updateSummary({
+      ...status(manifest(), null),
+      manifest: null,
+      error: "Offline",
+    }),
+    "Version not identified · check unavailable",
   );
   assert.equal(
     updateSummary({ ...status(manifest()), manifest: null }),
@@ -225,40 +242,219 @@ test("one conditional shared request, manual cooldown, persisted cache, 304, and
   );
 });
 
-test("upstream Retry-After survives restart and manual refresh cannot bypass it", async (t) => {
-  const root = fixture(t);
-  let now = 1_800_000_000_000,
-    calls = 0;
-  const fetcher = (async () => {
-    calls++;
-    return new Response(null, {
-      status: 429,
-      headers: { "retry-after": "3600" },
-    });
-  }) as typeof fetch;
+test("a raw TLS timeout falls back once to the official API with a fresh timeout and shared result", async (t) => {
+  const calls: string[] = [];
+  let primarySignal: AbortSignal | null | undefined;
   const checker = new UpdateChecker({
-    dataDir: root,
+    dataDir: fixture(t),
+    identity,
+    fetch: (async (url, options) => {
+      calls.push(String(url));
+      assert.equal(options?.redirect, "error");
+      assert.ok(options?.signal);
+      if (url === marginReleaseFeed) {
+        primarySignal = options.signal;
+        assert.equal(
+          new Headers(options.headers).get("Accept"),
+          "application/json",
+        );
+        throw new DOMException("SSL connection timeout", "TimeoutError");
+      }
+      assert.equal(url, marginReleaseFeedFallback);
+      assert.notEqual(options.signal, primarySignal);
+      assert.equal(options.signal.aborted, false);
+      assert.deepEqual(options.headers, {
+        Accept: "application/vnd.github.raw+json",
+      });
+      return Response.json(manifest());
+    }) as typeof fetch,
+  });
+  await Promise.all([checker.check(), checker.check(true), checker.check()]);
+  assert.deepEqual(calls, [marginReleaseFeed, marginReleaseFeedFallback]);
+  assert.deepEqual(checker.status().manifest, manifest());
+  assert.ok(checker.status().checkedAt);
+  assert.equal(checker.status().error, undefined);
+});
+
+test("fallback ETags stay scoped to their endpoint across legacy caches, restart and raw recovery", async (t) => {
+  const root = fixture(t);
+  let now = 1_800_000_000_000;
+  let stage = "raw";
+  const calls: string[] = [];
+  const fetcher = (async (url, options) => {
+    calls.push(String(url));
+    const etag = new Headers(options?.headers).get("If-None-Match");
+    if (url === marginReleaseFeed) {
+      assert.equal(
+        etag,
+        stage === "fallback" || stage === "raw-304" ? '"raw"' : null,
+      );
+      if (stage === "fallback" || stage === "api-304")
+        throw new TypeError("fetch failed");
+      return stage === "raw-304"
+        ? new Response(null, { status: 304 })
+        : Response.json(manifest(), { headers: { etag: '"raw"' } });
+    }
+    assert.equal(url, marginReleaseFeedFallback);
+    assert.equal(etag, stage === "api-304" ? '"api"' : null);
+    return stage === "api-304"
+      ? new Response(null, { status: 304 })
+      : Response.json(manifest(), { headers: { etag: '"api"' } });
+  }) as typeof fetch;
+  const create = () =>
+    new UpdateChecker({
+      dataDir: root,
+      identity,
+      now: () => now,
+      fetch: fetcher,
+    });
+  await create().check();
+  const file = join(root, "updates/cache.json");
+  const legacy = JSON.parse(readFileSync(file, "utf8"));
+  delete legacy.etagSource;
+  writeFileSync(file, JSON.stringify(legacy));
+  for (const nextStage of ["fallback", "api-304", "raw-recovered", "raw-304"]) {
+    stage = nextStage;
+    now += 60_001;
+    const checker = create();
+    await checker.check(true);
+    assert.equal(checker.status().error, undefined);
+    assert.equal(checker.status().checkedAt, now);
+    assert.deepEqual(checker.status().manifest, manifest());
+  }
+  assert.deepEqual(calls, [
+    marginReleaseFeed,
+    marginReleaseFeed,
+    marginReleaseFeedFallback,
+    marginReleaseFeed,
+    marginReleaseFeedFallback,
+    marginReleaseFeed,
+    marginReleaseFeed,
+  ]);
+});
+
+test("HTTP failures and invalid primary feeds do not trigger the connection fallback", async (t) => {
+  for (const response of [
+    new Response(null, { status: 404 }),
+    new Response(null, { status: 429 }),
+    new Response(null, { status: 503 }),
+    new Response("invalid JSON"),
+    new Response("x".repeat(33000)),
+  ]) {
+    const calls: string[] = [];
+    const checker = new UpdateChecker({
+      dataDir: fixture(t),
+      identity,
+      fetch: (async (url) => {
+        calls.push(String(url));
+        return response;
+      }) as typeof fetch,
+    });
+    await checker.check();
+    assert.deepEqual(calls, [marginReleaseFeed]);
+    assert.equal(checker.status().manifest, null);
+    assert.equal(checker.status().checkedAt, null);
+    assert.ok(checker.status().error);
+  }
+});
+
+test("fallback failures, invalid bodies and release rollbacks preserve the last valid cache", async (t) => {
+  let now = 1_800_000_000_000;
+  const checkedAt = now;
+  let fallback: (() => Response) | undefined;
+  let calls = 0;
+  const checker = new UpdateChecker({
+    dataDir: fixture(t),
     identity,
     now: () => now,
-    fetch: fetcher,
+    fetch: (async (url) => {
+      calls++;
+      if (!fallback)
+        return Response.json(manifest(), { headers: { etag: '"raw"' } });
+      if (url === marginReleaseFeed) throw new TypeError("raw offline");
+      return fallback();
+    }) as typeof fetch,
   });
   await checker.check();
-  assert.equal(calls, 1);
-  now += 600_000;
+  for (const failure of [
+    () => {
+      throw new TypeError("API offline/private error");
+    },
+    () => new Response("invalid JSON"),
+    () => new Response("x".repeat(33000)),
+    () => new Response("{}", { headers: { "content-length": "33000" } }),
+    () => Response.json({ schemaVersion: 2 }),
+    () => Response.json(manifest("0.1.0")),
+    () => {
+      const changed = manifest();
+      changed.latest!.commit = "b".repeat(40);
+      return Response.json(changed);
+    },
+    () => Response.json(manifest("0.2.1", false)),
+    // A raw-feed ETag cannot validate an API 304.
+    () => new Response(null, { status: 304 }),
+  ]) {
+    fallback = failure;
+    now += 60_001;
+    calls = 0;
+    await checker.check(true);
+    assert.equal(calls, 2);
+    assert.deepEqual(checker.status().manifest, manifest());
+    assert.equal(checker.status().checkedAt, checkedAt);
+    assert.ok(checker.status().error);
+    assert.ok(!checker.status().error!.includes("private error"));
+    await checker.check(true);
+    assert.equal(
+      calls,
+      2,
+      "manual cooldown still applies after fallback failure",
+    );
+  }
+  fallback = () => Response.json(manifest("0.2.1", false, "0.2.0"));
+  now += 60_001;
   await checker.check(true);
-  assert.equal(calls, 1);
-  const restarted = new UpdateChecker({
-    dataDir: root,
-    identity,
-    now: () => now,
-    fetch: fetcher,
-  });
-  await restarted.check(true);
-  assert.equal(calls, 1);
-  assert.ok(restarted.status().error);
-  now += 3_000_001;
-  await restarted.check(true);
-  assert.equal(calls, 2);
+  assert.equal(checker.status().manifest?.latest?.version, "0.2.1");
+  assert.equal(checker.status().error, undefined);
+});
+
+test("upstream Retry-After from either endpoint survives restart and manual refresh cannot bypass it", async (t) => {
+  for (const useFallback of [false, true]) {
+    const root = fixture(t);
+    let now = 1_800_000_000_000,
+      calls = 0;
+    const fetcher = (async (url) => {
+      if (useFallback && url === marginReleaseFeed)
+        throw new TypeError("raw offline");
+      calls++;
+      return new Response(null, {
+        status: 429,
+        headers: { "retry-after": "3600" },
+      });
+    }) as typeof fetch;
+    const checker = new UpdateChecker({
+      dataDir: root,
+      identity,
+      now: () => now,
+      fetch: fetcher,
+    });
+    await checker.check();
+    assert.equal(calls, 1);
+    now += 600_000;
+    await checker.check(true);
+    assert.equal(calls, 1);
+    const restarted = new UpdateChecker({
+      dataDir: root,
+      identity,
+      now: () => now,
+      fetch: fetcher,
+    });
+    await restarted.check(true);
+    assert.equal(calls, 1);
+    assert.ok(restarted.status().error);
+    now += 3_000_001;
+    await restarted.check(true);
+    assert.equal(calls, 2);
+  }
 });
 
 test("offline, malformed, oversized, identity rewrites and rollbacks keep last valid release with error", async (t) => {
@@ -325,9 +521,53 @@ test("first-check failure never reports current; malformed cache is ignored; pro
   assert.equal(before.runningVersion, "0.1.0");
   writeFileSync(join(root, "package.json"), '{"version":"0.2.0"}');
   assert.equal(before.runningVersion, "0.1.0");
-  assert.equal(runningIdentity(root, true).runningVersion, null);
+  const stale = runningIdentity(root, true);
+  assert.equal(stale.runningVersion, "0.1.0");
+  assert.equal(stale.runningCommit, "a".repeat(40));
+  assert.match(
+    stale.identityWarning!,
+    /Source is v0\.2\.0; the built app is v0\.1\.0/,
+  );
   writeFileSync(join(root, "dist/margin-build.json"), '{"version":"0.2.0"}');
   assert.equal(runningIdentity(root, true).runningVersion, "0.2.0");
+});
+
+test("stale or missing builds do not prevent manual discovery or release review", async (t) => {
+  for (const buildVersion of ["0.1.0", null]) {
+    const root = fixture(t);
+    writeFileSync(join(root, "package.json"), '{"version":"0.2.0"}');
+    if (buildVersion) {
+      mkdirSync(join(root, "dist"));
+      writeFileSync(
+        join(root, "dist/margin-build.json"),
+        JSON.stringify({ version: buildVersion }),
+      );
+    }
+    const capturedIdentity = runningIdentity(root, true);
+    let calls = 0;
+    const checker = new UpdateChecker({
+      dataDir: join(root, "data"),
+      identity: capturedIdentity,
+      fetch: (async () => {
+        calls++;
+        return Response.json(manifest());
+      }) as typeof fetch,
+    });
+    await checker.check(true);
+    const result = checker.status();
+    assert.equal(calls, 1);
+    assert.equal(result.runningVersion, buildVersion);
+    assert.deepEqual(result.manifest, manifest());
+    assert.ok(result.checkedAt);
+    assert.equal(result.error, undefined);
+    assert.ok(result.identityWarning);
+    assert.match(updateSummary(result), /v0\.2\.0/);
+    assert.match(
+      marginUpdatePrompt(result, result.manifest!.latest!),
+      /to 0\.2\.0/,
+    );
+    assert.equal(updateAvailable(result), buildVersion !== null);
+  }
 });
 
 test("older and newer disposable hosts expose their own running identity without reading live-edited versions", async (t) => {

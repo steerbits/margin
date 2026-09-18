@@ -1,5 +1,17 @@
 # Evaluation record
 
+## Update transport fallback and startup builds — September 18, 2026
+
+Local requests to `raw.githubusercontent.com` stalled during TLS on `185.199.109.133`; the other three resolved addresses returned the release feed. A live check with disposable update-cache data verified the new fallback: the raw request timed out after eight seconds, the official GitHub contents API returned HTTP 200 in approximately 0.4 seconds, and discovery reported `0.1.1` without an error.
+
+Standard production startup now rebuilds missing/invalid builds, differing local source/build versions, and previously failed startup builds before starting the gateway. Matching versions skip rebuilding; same-version source/plugin edits and restores still need an explicit build. Known build versions remain visible with a separate source/build warning, and unknown-version summaries retain the latest published release and review action.
+
+- **35 focused Node tests passed** across update discovery, launcher and port suites. Launcher fixtures use disposable source/data directories, a build fixture and sandbox shim; they cover `start.sh` and `npm start`, missing/stale output, failed-build retry, post-build verification, development/help/dry-run skips, and duplicate-launch protection. Terminal prompts used the suite's simulated TTY fallback because PTYs were unavailable.
+- **14 Chromium update tests passed**, including manual discovery/review with a stale build, mismatched browser/server versions, or an unknown installed version.
+- **TypeScript checking and `npm run build` passed**. The production build in this checkout identifies as `0.1.1`; the existing bundle-size advisory remains. The agent did not restart the live launcher.
+
+The full release battery, real OS-sandbox enforcement, and live provider inference were not run for this focused change. No release version, manifest or tag was changed. See [startup/build behavior](installation.md#existing-users) and [update discovery](releases.md#discovery-and-running-identity).
+
 ## Follow-up: compact, collapsed update status and local activation
 
 The user found the Settings section missing and asked for a smaller, collapsed section whose summary still shows version availability. Inspection found this checkout's production `dist` was still the September 17 bundle, with no update UI or build-identity file: restarting/refreshing alone had not rebuilt it.

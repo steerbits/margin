@@ -5,6 +5,7 @@ import type { Express } from "express";
 import {
   compareVersions,
   marginReleaseFeed,
+  marginReleaseFeedFallback,
   parseReleaseManifest,
   validVersion,
   type ReleaseManifest,
@@ -20,6 +21,7 @@ interface Cache {
   attemptedAt: number;
   nextCheck: number;
   etag?: string;
+  etagSource?: string;
   retryUntil?: number;
   error?: string;
 }
@@ -41,14 +43,20 @@ export function runningIdentity(
     const build = JSON.parse(
       readFileSync(join(root, "dist/margin-build.json"), "utf8"),
     );
-    if (!validVersion(build.version) || build.version !== source.version)
-      throw new Error();
+    if (!validVersion(build.version)) throw new Error();
     return {
       runningVersion: build.version,
       runningCommit:
         typeof build.commit === "string" && /^[a-f0-9]{40}$/.test(build.commit)
           ? build.commit
           : null,
+      ...(build.version !== source.version
+        ? {
+            identityWarning:
+              `Source is v${source.version}; the built app is v${build.version}. ` +
+              "Restart Margin, then refresh, to finish applying the source changes.",
+          }
+        : {}),
     };
   } catch {
     return {
@@ -109,6 +117,9 @@ export class UpdateChecker {
         c.nextCheck > now + 86400000 ||
         (c.etag !== undefined &&
           (typeof c.etag !== "string" || c.etag.length > 500)) ||
+        (c.etagSource !== undefined &&
+          c.etagSource !== marginReleaseFeed &&
+          c.etagSource !== marginReleaseFeedFallback) ||
         (c.retryUntil !== undefined &&
           (!Number.isFinite(c.retryUntil) || c.retryUntil > now + 86400000)) ||
         (c.error !== undefined &&
@@ -140,6 +151,37 @@ export class UpdateChecker {
     });
     return this.pending;
   }
+  private async fetchFeed() {
+    const request = async (source: string, accept: string) => {
+      // Older caches contain validators for the raw feed only. Never send a
+      // validator to a different endpoint, even when both serve the same file.
+      const etag =
+        this.cache.manifest &&
+        (this.cache.etagSource ?? marginReleaseFeed) === source
+          ? this.cache.etag
+          : undefined;
+      const response = await (this.options.fetch ?? fetch)(source, {
+        signal: AbortSignal.timeout(8000),
+        redirect: "error",
+        headers: {
+          Accept: accept,
+          ...(etag ? { "If-None-Match": etag } : {}),
+        },
+      });
+      return { response, source, etag };
+    };
+    try {
+      return await request(marginReleaseFeed, "application/json");
+    } catch {
+      // A raw-content edge can stall during TLS while GitHub's API is healthy.
+      // Only connection failures trigger fallback; HTTP errors and invalid
+      // manifests still follow the normal validation and retry policy.
+      return request(
+        marginReleaseFeedFallback,
+        "application/vnd.github.raw+json",
+      );
+    }
+  }
   private async perform(force: boolean) {
     await this.initialized;
     if (this.options.disabled) return;
@@ -151,14 +193,7 @@ export class UpdateChecker {
     this.cache.attemptedAt = now;
     let retryAfter = 0;
     try {
-      const response = await (this.options.fetch ?? fetch)(marginReleaseFeed, {
-        signal: AbortSignal.timeout(8000),
-        redirect: "error",
-        headers: {
-          Accept: "application/json",
-          ...(this.cache.etag ? { "If-None-Match": this.cache.etag } : {}),
-        },
-      });
+      const { response, source, etag: requestedEtag } = await this.fetchFeed();
       const retry = response.headers.get("retry-after");
       if (retry)
         retryAfter = Math.min(
@@ -170,7 +205,7 @@ export class UpdateChecker {
               : Date.parse(retry) - now,
           ),
         );
-      if (response.status === 304 && this.cache.manifest) {
+      if (response.status === 304 && this.cache.manifest && requestedEtag) {
         await response.body?.cancel();
       } else {
         if (!response.ok) {
@@ -228,6 +263,7 @@ export class UpdateChecker {
         this.cache.manifest = manifest;
         const etag = response.headers.get("etag");
         this.cache.etag = etag && etag.length <= 500 ? etag : undefined;
+        this.cache.etagSource = source;
       }
       this.cache.checkedAt = now;
       this.cache.nextCheck =

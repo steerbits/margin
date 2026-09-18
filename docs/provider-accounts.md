@@ -2,7 +2,7 @@
 
 ## First-time setup
 
-1. Install and launch Margin normally (`npm ci --ignore-scripts`, `npm run build`, `npm start`; Node 22.13+ and cco are required).
+1. For a fresh native installation, use `bash install.sh --start` (Node 22.19+; cco is bundled). For later starts, use `bash start.sh`; changed local versions rebuild automatically. See [installation and startup](installation.md) for existing installations and same-version edits.
 2. Open the connection link printed in Terminal. This authorizes your browser to use your local Margin server; it is separate from provider sign-in.
 3. On a fresh installation, choose **Connect an AI provider**. Later, open the gear → **AI connections**. Both open the same Settings overlay. All configured providers and custom servers appear under **Saved connections**. Choose **Add connection** to see featured providers or **Browse all providers**. Nothing is selected automatically, and selection uses a neutral outline.
 4. Follow Pi's prompts. For browser authorization, click **Open sign-in page**, authorize on the provider's site, and return to Margin. If the callback cannot reach this machine, paste the final redirect URL/code in the fallback field. For device login, open the verification page and enter the displayed code; Margin checks completion automatically.

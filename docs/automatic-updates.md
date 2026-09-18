@@ -1,6 +1,6 @@
 # Automatic update discovery and updates through customization chat
 
-**Historical proposal.** Release tooling, cached discovery, quiet/highlighted notifications, and autosent update reviews are now described in [Releases and updates](releases.md). That implementation supersedes this note's unsent-draft interaction; transactional installation/recovery improvements below remain proposals.
+**Historical proposal.** Release tooling, cached discovery, quiet/highlighted notifications, autosent update reviews, and automatic startup builds for changed local versions are now described in [Releases and updates](releases.md). That implementation supersedes this note's unsent-draft interaction and manual-build-only assumptions; transactional installation/recovery improvements below remain proposals.
 
 Design note, 16 September 2026. This records the proposed first version; no update checker, header notification, or automatic installer is implemented by this document. “Automatic” refers to discovering releases. Changing the installation starts with a user request.
 

@@ -39,6 +39,8 @@ Every checkpoint remains available. Restoring does not move your Git branch, rew
 
 Source restores need a rebuild/restart before normal agent work resumes. If you return to the source state already loaded by the running server, another restart is unnecessary. Checkpoint and plugin changes are refused while known agent/background/plugin operations are active. Finish or stop those operations first; do not edit the source from another process during restoration.
 
+Run `npm run build` explicitly after a restore: checkpoints can change source without changing its package version, and can restore an older launcher without automatic builds. The standard launcher's [automatic build check](installation.md#existing-users) handles version changes, not arbitrary source differences.
+
 ### Scope and limits
 
 - Checkpoints exclude `.margin-data`, the configured data directory, top-level `workspaces`, dependencies, generated build/test output, log files, and local `.env` files. Chats and saved notes are not rolled back.

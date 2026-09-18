@@ -13,6 +13,8 @@ Settings shows the running and latest published versions and offers **Check for 
 
 Keep `.margin-data`, `.git`, workspaces, and local customizations when updating. Finish active tasks before replacing dependencies or restarting. The fresh-install script does not upgrade existing installations. Versions predating the checker need one manual upgrade first. See [release publishing, tests, and update limitations](docs/releases.md) and [installation preservation](docs/installation.md).
 
+After updating local source, stop Margin and start it with `bash start.sh` or `npm start`, then refresh the browser. Production startup runs `npm run build` when the source/build versions differ, the build or its version metadata is missing/invalid, or a previous startup build did not finish. It verifies the result before launching; a failed build stops startup and is retried next time. Matching builds skip rebuilding. This uses local source and installed dependencies; it does not download releases or install dependencies. **Same-version source/plugin edits still require an explicit `npm run build`.** Development, help/dry-run, and explicit legacy launch commands do not use this automatic build step. Finish active work before rebuilding or restarting, and report a completed build as ready to restart until the new runtime is verified.
+
 ## Projects and the workspace picker
 
 The workspace sidebar currently lists **local project folders**. A conversation runs with its selected folder as Pi's working directory. These entries are not containers or isolated worktrees.
@@ -137,7 +139,7 @@ Select text, choose **Point to comment**, or use **Comment on this page**. **Sav
 
 Feedback stays in private Margin conversation storage, never in generated source files. Runtime-only injection leaves HTML and app code unchanged. Drafts survive closing/reloading, failed saves, and target changes; only explicit deletion removes annotations. Sending waits until the agent is ready. PDF/image viewers, arbitrary websites and self-improvement are deferred. See [artifact review](docs/artifact-review.md) for storage, proxy restrictions and verified workflows.
 
-After updating the source, run `npm run build`, finish active agent work, restart Margin with your usual launch command, then refresh the browser. This is a shared core feature with modular viewers, not a separately installable v1 plugin.
+Activate source changes using the [startup/build steps](docs/releases.md#discovery-and-running-identity): finish active work, rebuild explicitly for same-version edits, restart Margin, and refresh the browser. Standard production startup builds changed versions automatically. This is a shared core feature with modular viewers, not a separately installable v1 plugin.
 
 ## Skills and authentication
 
@@ -169,7 +171,7 @@ To try customization through prompting, select **Margin's source folder** as the
 
 > Read `docs/extensions.md`, `server/plugin-api.ts`, and `src/plugin-api.ts`. Build a local `project-notes` plugin with a Notes side panel. Save notes separately for each project, and add a message action that can copy an assistant reply into a note. Use the existing version 1 plugin APIs. Verify persistence and run the build. Do not restart the running app; tell me when it is ready to reload.
 
-Use `npm run dev` while iterating. For the production server, rebuild with `npm run build`, then stop/start the server once current agent work finishes. There is no automatic production plugin installer or hot activation yet.
+Use `npm run dev` while iterating. For production customization, finish active work, run `npm run build` for same-version source/plugin edits, then stop/start the server and refresh. The startup version check does not detect arbitrary file edits or new plugin directories. There is no automatic production plugin installer or hot activation yet.
 
 Background-agent primitives exist in the plugin API, but the default main agent does **not** have a built-in subagent spawning tool. Installing a compatible Pi extension or adding a plugin that exposes that tool is still necessary for model-driven delegation.
 
