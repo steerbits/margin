@@ -124,6 +124,22 @@ export function highlightedUpdate(status: UpdateStatus | null): boolean {
     ) > 0
   );
 }
+/** Compact Settings status; a failed/unknown check must not claim “latest”. */
+export function updateSummary(status: UpdateStatus | null): string {
+  if (!status) return "Checking version…";
+  if (!status.runningVersion) return "Version not identified";
+  const current = `v${status.runningVersion}`;
+  const latest = status.manifest?.latest;
+  if (latest && updateAvailable(status))
+    return `${current} → v${latest.version} available${status.error ? " (cached)" : ""}`;
+  if (status.error) return `${current} · check unavailable`;
+  if (!status.manifest) return `${current} · latest unknown`;
+  if (!latest) return `${current} · no published release`;
+  if (compareVersions(status.runningVersion, latest.version) > 0)
+    return `${current} · ahead of published`;
+  return `${current} · ${status.checkedAt !== null ? "already latest" : "latest unknown"}`;
+}
+
 export function marginUpdatePrompt(
   status: UpdateStatus,
   release: Release,

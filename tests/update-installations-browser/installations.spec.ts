@@ -32,6 +32,11 @@ test("older real build shows a highlighted update; a matching newer startup clea
       (await (await page.request.get("/api/updates")).json()).runningVersion,
     ).toBe("1.0.0");
     await page.getByRole("button", { name: "Settings", exact: true }).click();
+    await expect(page.locator(".update-settings")).not.toHaveAttribute("open");
+    await expect(page.locator(".update-settings > summary")).toContainText(
+      "v1.0.0 → v1.1.0 available",
+    );
+    await page.locator(".update-settings > summary").click();
     await expect(page.locator(".update-settings")).toContainText(
       "Running: 1.0.0",
     );
@@ -52,6 +57,11 @@ test("older real build shows a highlighted update; a matching newer startup clea
       page.getByRole("button", { name: "Update available", exact: true }),
     ).toHaveCount(0);
     await page.getByRole("button", { name: "Settings", exact: true }).click();
+    await expect(page.locator(".update-settings")).not.toHaveAttribute("open");
+    await expect(page.locator(".update-settings > summary")).toContainText(
+      "v1.1.0 · already latest",
+    );
+    await page.locator(".update-settings > summary").click();
     await expect(page.locator(".update-settings")).toContainText(
       "Running: 1.1.0",
     );

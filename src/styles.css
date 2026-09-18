@@ -224,8 +224,6 @@ p {
   background: var(--soft);
   font-size: 12px;
 }
-.update-settings { border-top: 1px solid var(--line); margin-top: 18px; padding-top: 12px; }
-.update-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
 @media (max-width: 650px) {
   .has-update .connection, .has-update .brand small { display: none; }
   .has-update .header-right { gap: 3px; }

@@ -1,3 +1,43 @@
+.update-settings {
+  border-top: 1px solid var(--line);
+  margin-top: 18px;
+  padding-top: 12px;
+}
+.update-settings > summary {
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.6;
+}
+.update-summary {
+  margin-left: 8px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 400;
+  overflow-wrap: anywhere;
+}
+@media (max-width: 480px) {
+  .update-summary {
+    display: block;
+    margin: 3px 0 0 14px;
+  }
+}
+.update-details {
+  padding-top: 8px;
+  font-size: 13px;
+}
+.update-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+}
+.update-actions button {
+  border: 1px solid var(--line);
+  padding: 6px 8px;
+  font: inherit;
+}
 .settings-section-heading {
   display: flex;
   align-items: center;

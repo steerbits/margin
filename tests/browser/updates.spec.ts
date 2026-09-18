@@ -68,10 +68,19 @@ test("quiet update appears only in Settings and manual checking refreshes its st
   });
   await page.getByRole("button", { name: "Settings", exact: true }).click();
   const section = page.locator(".update-settings");
+  await expect(section).not.toHaveAttribute("open");
+  await expect(section.locator("summary")).toContainText(
+    `v${installedVersion} → v${availableVersion} available`,
+  );
+  await expect(
+    page.getByRole("button", { name: "Check for updates" }),
+  ).toBeHidden();
+  await section.locator("summary").click();
   await expect(section).toContainText(`Running: ${installedVersion}`);
   await expect(section).toContainText(`Latest published: ${availableVersion}`);
   await page.getByRole("button", { name: "Check for updates" }).click();
   await expect.poll(() => checks).toBe(1);
+  await expect(section).toHaveAttribute("open", "");
   await expect(
     page.getByRole("link", { name: "Release notes", exact: true }),
   ).toHaveAttribute("href", releaseNotesUrl(updateFixture().manifest!.latest!));
@@ -88,6 +97,86 @@ test("quiet update appears only in Settings and manual checking refreshes its st
   ).toHaveCount(0);
 });
 
+for (const width of [1440, 320]) {
+  test(`compact update summary stays informative and resets closed at ${width}px`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: 1000 });
+    let fixture = updateFixture(false);
+    await page.route("**/api/updates", (route) =>
+      route.fulfill({ json: fixture }),
+    );
+    await page.route("**/api/updates/check", (route) =>
+      route.fulfill({ json: fixture }),
+    );
+    await page.goto("/");
+    await page.getByRole("button", { name: "Settings", exact: true }).click();
+    const section = page.locator(".update-settings");
+    const summary = section.locator("summary");
+    await expect(summary).toContainText(
+      `v${installedVersion} → v${availableVersion} available`,
+    );
+    await expect(section).not.toHaveAttribute("open");
+    await expect(
+      page.getByRole("button", { name: "Review update", exact: true }),
+    ).toBeHidden();
+    await expect(summary).toHaveCSS("font-size", "14px");
+    await page.locator(".settings-accounts > summary").click();
+    await summary.scrollIntoViewIfNeeded();
+    await expect(summary).toBeInViewport();
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= innerWidth,
+      ),
+    ).toBe(true);
+    await page.screenshot({
+      path: `.margin-data/temporary/update-validation/compact-available-${width}.png`,
+    });
+    await summary.focus();
+    await page.keyboard.press("Enter");
+    await expect(section).toHaveAttribute("open", "");
+    await expect(
+      page.getByRole("button", { name: "Review update", exact: true }),
+    ).toBeVisible();
+    fixture = {
+      ...fixture,
+      manifest: {
+        schemaVersion: 1,
+        lastHighlightedVersion: null,
+        latest: {
+          ...fixture.manifest!.latest!,
+          version: installedVersion,
+          tag: `v${installedVersion}`,
+        },
+      },
+    };
+    await page
+      .getByRole("button", { name: "Check for updates", exact: true })
+      .click();
+    await expect(summary).toContainText(
+      `v${installedVersion} · already latest`,
+    );
+    await expect(section).toHaveAttribute("open", "");
+    await expect(
+      page.getByRole("button", { name: "Review update", exact: true }),
+    ).toHaveCount(0);
+    await page
+      .getByRole("dialog", { name: "Settings", exact: true })
+      .getByRole("button", { name: "Close", exact: true })
+      .click();
+    await page.getByRole("button", { name: "Settings", exact: true }).click();
+    await expect(section).not.toHaveAttribute("open");
+    await expect(summary).toContainText(
+      `v${installedVersion} · already latest`,
+    );
+    await page.locator(".settings-accounts > summary").click();
+    await summary.scrollIntoViewIfNeeded();
+    await page.screenshot({
+      path: `.margin-data/temporary/update-validation/compact-current-${width}.png`,
+    });
+  });
+}
+
 test("a Settings update creation failure stays visible and preserves the previous chat draft", async ({
   page,
 }) => {
@@ -102,6 +191,7 @@ test("a Settings update creation failure stays visible and preserves the previou
       : route.continue(),
   );
   await page.getByRole("button", { name: "Settings", exact: true }).click();
+  await page.locator(".update-settings > summary").click();
   await page
     .getByRole("button", { name: "Review update", exact: true })
     .click();
@@ -270,6 +360,11 @@ test("offline discovery retains cached badge and Settings does not claim a succe
     page.getByRole("button", { name: "Update available", exact: true }),
   ).toBeVisible();
   await page.getByRole("button", { name: "Settings", exact: true }).click();
+  await expect(page.locator(".update-settings > summary")).toContainText(
+    "available (cached)",
+  );
+  await page.locator(".update-settings > summary").click();
+  await expect(page.locator(".update-settings [role=status]")).toBeVisible();
   await expect(page.locator(".update-settings")).toContainText(
     "Cached information may be out of date",
   );
@@ -288,6 +383,11 @@ test("a newer browser bundle and old server mismatch does not claim an installed
   );
   await page.goto("/");
   await page.getByRole("button", { name: "Settings", exact: true }).click();
+  await expect(page.locator(".update-settings > summary")).toContainText(
+    "Version not identified",
+  );
+  await page.locator(".update-settings > summary").click();
+  await expect(page.locator(".update-details")).toBeVisible();
   await expect(page.locator(".update-settings")).toContainText(
     "Browser and running server versions differ",
   );

@@ -46,6 +46,8 @@ During feature work, use focused tests/checks instead. The full battery is a pre
 
 ## Quiet versus highlighted
 
+Settings keeps **Margin updates** small and collapsed on each visit. Its summary still shows `v0.1.0 → v0.1.1 available`, or `v0.1.1 · already latest` when the known published version matches. Unknown versions, missing releases, failed checks, and a checkout ahead of the published version have distinct labels; a failed check never claims “already latest.” Expand the row for details, release notes, and update actions. Highlighted header notifications are unchanged.
+
 The manifest records `latest.highlighted` independently of its version and retains `lastHighlightedVersion` across quiet releases.
 
 Example: `0.2.0` is highlighted, followed by quiet `0.2.1`:
@@ -62,6 +64,8 @@ The committed initial feed has `latest: null`; it deliberately does not fabricat
 The gateway (or standalone native host) checks the fixed HTTPS feed at `https://raw.githubusercontent.com/steerbits/margin/main/releases/stable.json`. Workspace workers and browser tabs do not independently contact GitHub. One in-flight request, a six-hour interval with jitter, one-minute manual cooldown, bounded timeout/body size, ETag conditional requests, and retry/backoff keep checks lightweight. The last valid feed and check state live under private `updates/cache.json`. Manual checks respect upstream Retry-After. Startup is not blocked by GitHub.
 
 Invalid/unsupported manifests, offline failures, changed commits under the same version, backwards release pointers, or backwards highlight history preserve the last valid result and expose a Settings notice. Cached results can still advertise an update, with their last-check time. An error is never treated as proof that the installation is current. Release notes URLs are constructed from the official repository and validated commit/version, never accepted as arbitrary remote navigation destinations. The feed trust boundary is GitHub HTTPS and the official repository; cryptographic release-signature verification is not implemented.
+
+**Activating source changes:** pushing/pulling Git commits, restarting, and refreshing do not rebuild `dist`. From this checkout, run `npm run build`, then finish active tasks, stop the existing launcher, run `bash start.sh` with your usual port options, and refresh the browser. If the coding agent has already built this same checkout, only the restart/refresh remain. A different checkout needs its own build.
 
 Vite writes `dist/margin-build.json` and embeds the frontend version. Hosts capture identity at startup, requiring source/build versions to agree in production. Browser/server version mismatches show an unknown-version/restart warning. Editing `package.json` or rebuilding under an existing host does not change its captured identity; a fresh, matching startup and browser refresh are required. This records an upstream baseline, not proof that every customized file is identical to upstream. Development mode captures source version at startup and explicitly labels that limitation.
 

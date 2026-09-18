@@ -17,6 +17,7 @@ import {
   parseReleaseManifest,
   releaseNotesUrl,
   updateAvailable,
+  updateSummary,
   validVersion,
   type ReleaseManifest,
   type UpdateStatus,
@@ -84,6 +85,45 @@ test("stable numeric ordering, notification importance, quiet follow-ups, skippe
   assert.equal(updateAvailable(status(patch, "0.2.1")), false);
   assert.equal(updateAvailable(status(patch, "1.0.0")), false);
   assert.equal(highlightedUpdate(status(patch, null)), false);
+});
+
+test("compact version summaries distinguish available, latest, ahead, unknown and failed checks", () => {
+  assert.equal(updateSummary(null), "Checking version…");
+  assert.equal(updateSummary(status(manifest())), "v0.1.0 → v0.2.0 available");
+  assert.equal(
+    updateSummary(status(manifest(), "0.2.0")),
+    "v0.2.0 · already latest",
+  );
+  assert.equal(
+    updateSummary(status(manifest(), "0.3.0")),
+    "v0.3.0 · ahead of published",
+  );
+  assert.equal(
+    updateSummary(status(manifest(), null)),
+    "Version not identified",
+  );
+  assert.equal(
+    updateSummary({ ...status(manifest()), manifest: null }),
+    "v0.1.0 · latest unknown",
+  );
+  assert.equal(
+    updateSummary({ ...status(manifest(), "0.2.0"), checkedAt: null }),
+    "v0.2.0 · latest unknown",
+  );
+  assert.equal(
+    updateSummary(
+      status({ schemaVersion: 1, latest: null, lastHighlightedVersion: null }),
+    ),
+    "v0.1.0 · no published release",
+  );
+  assert.equal(
+    updateSummary({ ...status(manifest()), error: "Offline" }),
+    "v0.1.0 → v0.2.0 available (cached)",
+  );
+  assert.equal(
+    updateSummary({ ...status(manifest(), "0.2.0"), error: "Offline" }),
+    "v0.2.0 · check unavailable",
+  );
 });
 
 test("manifest validation rejects unsafe identities and malformed notification/test metadata", () => {

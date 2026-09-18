@@ -47,7 +47,18 @@ test("update status and refresh are gateway-owned, authenticated, and reject hos
       })
     ).status(),
   ).toBe(415);
+  // Update polling starts after the authenticated bootstrap. A cold source
+  // worker has the gateway's 35-second startup budget, unlike the local routes.
+  await expect(
+    page.getByRole("button", { name: "Help", exact: true }),
+  ).toBeEnabled({ timeout: 40_000 });
   await page.getByRole("button", { name: "Settings", exact: true }).click();
+  await expect(page.locator(".update-settings")).not.toHaveAttribute("open");
+  await expect(page.locator(".update-settings > summary")).toContainText(
+    `v${pkg.version} · latest unknown`,
+  );
+  await page.locator(".update-settings > summary").click();
+  await expect(page.locator(".update-details")).toBeVisible();
   await expect(page.locator(".update-settings")).toContainText(
     `Running: ${pkg.version}`,
   );
