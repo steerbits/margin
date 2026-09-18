@@ -1,5 +1,17 @@
 # Evaluation record
 
+## Follow-up: compact, collapsed update status and local activation
+
+The user found the Settings section missing and asked for a smaller, collapsed section whose summary still shows version availability. Inspection found this checkout's production `dist` was still the September 17 bundle, with no update UI or build-identity file: restarting/refreshing alone had not rebuilt it.
+
+Implemented a native keyboard-accessible disclosure, closed on each Settings visit, with a 14px heading matching the other Settings section headings. The summary shows `v0.1.0 → v0.1.1 available` or `v0.1.1 · already latest`. Failed checks, cached updates, no published release, unknown versions, and versions ahead of publication remain distinct; unavailable checks do not falsely claim “already latest.” Manual checks preserve the currently open disclosure. Mobile places the version status on its own indented line. Highlighted header notifications, review actions, and existing source-send guards are unchanged.
+
+- **9 focused Node tests passed**, including the added summary-state matrix; **22 focused Chromium tests passed** for updates, Settings and Help; **1 gateway update test** and **1 two-installation test** passed. Keyboard expansion, default collapse/reopening, manual refresh, desktop/320px geometry, quiet-update summaries, matching-version summaries, and error states were checked. The gateway check initially asserted before cold bootstrap completed; it now waits for the existing bounded app-readiness condition and passes.
+- Self-review inspected actual desktop and 320px screenshots. No independent reviewer was available.
+- **`npm run build` passed in the actual checkout**, intentionally activating the requested local frontend build after disposable checks. TypeScript, Vite and recovery-build steps succeeded; the existing bundle-size advisory remains. `dist/margin-build.json` records version `0.1.0` at code commit `856fbd6b0f1aa9c4ebb6814f04db495e3c89d149`. The live launcher was **not restarted**; a normal restart and browser refresh are still required for matching backend identity/routes.
+
+The full release battery was not rerun for this focused UI follow-up. No live inference, public release, data migration, or OS-sandbox check was performed. No release is currently advertised by the committed manifest, so the initial real status is “no published release,” not the fixture's “already latest.” See [activation steps](releases.md#discovery-and-running-identity).
+
 ## Release tooling, quiet/highlighted discovery, and guarded autosend
 
 Implemented reviewed release preparation/finalization, an independent `highlighted` field with a carried-forward notification threshold, cached gateway-owned discovery, Settings version/check controls, and an autosent update review pinned to an official commit. Help now autosends too; customization examples remain drafts. Both actions reuse the unchanged source-task conflict message and normal send/checkpoint path. A blocked/failed attempt stays saved for explicit retry, never queued behind another customization task. See [usage and limits](releases.md).
