@@ -7,6 +7,8 @@ export function ConversationMenu({
   x,
   y,
   active,
+  unread,
+  onToggleRead,
   onDelete,
   onStop,
   onClose,
@@ -15,6 +17,8 @@ export function ConversationMenu({
   x: number;
   y: number;
   active: boolean;
+  unread: boolean;
+  onToggleRead: () => void;
   onDelete: () => void;
   onStop: () => void;
   onClose: () => void;
@@ -24,8 +28,16 @@ export function ConversationMenu({
   close.current = onClose;
   useLayoutEffect(() => {
     const menu = ref.current!;
+    // Measure rather than guessing: touch targets and running chats add height.
+    menu.style.left = `${Math.max(8, Math.min(x, window.innerWidth - menu.offsetWidth - 8))}px`;
+    menu.style.top = `${Math.max(8, Math.min(y, window.innerHeight - menu.offsetHeight - 8))}px`;
+  }, [x, y, active, unread]);
+  useLayoutEffect(() => {
+    const menu = ref.current!;
     const previous = document.activeElement as HTMLElement | null;
-    menu.querySelector<HTMLButtonElement>("button:not(:disabled)")?.focus();
+    menu
+      .querySelector<HTMLButtonElement>("button:not(:disabled)")
+      ?.focus({ preventScroll: true });
     const outside = (event: PointerEvent) => {
       if (!menu.contains(event.target as Node)) close.current();
     };
@@ -54,10 +66,7 @@ export function ConversationMenu({
       role="menu"
       aria-label={`Actions for ${session.title}`}
       className="conversation-menu"
-      style={{
-        left: Math.max(8, Math.min(x, window.innerWidth - 228)),
-        top: Math.max(8, Math.min(y, window.innerHeight - (active ? 100 : 58))),
-      }}
+      style={{ left: x, top: y }}
       onKeyDown={(event) => {
         if (event.key === "Escape" || event.key === "Tab") {
           if (event.key === "Escape") event.preventDefault();
@@ -86,6 +95,9 @@ export function ConversationMenu({
         }
       }}
     >
+      <button role="menuitem" onClick={onToggleRead}>
+        {unread ? "Mark as read" : "Mark unread"}
+      </button>
       {active && (
         <button role="menuitem" onClick={onStop}>
           Stop conversation

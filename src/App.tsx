@@ -854,6 +854,11 @@ export function App() {
           ? { kind: "chat", sessionId: id, panel: workspacePanel() }
           : { kind: "workspace", projectId, panel: workspacePanel() },
       );
+      if (
+        id &&
+        routeRef.current.kind === "chat" &&
+        routeRef.current.sessionId === id
+      ) reopen(id);
       if (window.innerWidth <= 650) setSidebar(false);
       return true;
     } catch (error) {
@@ -1381,7 +1386,7 @@ export function App() {
   const currentActivity =
     boot.sessions.find((s) => s.id === sessionId)?.activity ??
     snapshot?.session.activity;
-  const isUnread = useUnread(
+  const { isUnread, markUnread, markRead, reopen } = useUnread(
     sessionId,
     currentActivity,
     !homeOpen && !hubOpen &&
@@ -1420,6 +1425,9 @@ export function App() {
         "idle",
     );
   }
+  const menuSession = contextMenu
+    ? boot.sessions.find((s) => s.id === contextMenu.session.id) ?? contextMenu.session
+    : undefined;
   const model = snapshot?.session.model;
   const agentName =
     (snapshot?.session.backend ?? "pi") === "pi"
@@ -1444,10 +1452,21 @@ export function App() {
   }, [pageTitle]);
   return (
     <div className={`app ${sidebar ? "" : "sidebar-hidden"}`}>
-      {contextMenu && (
+      {contextMenu && menuSession && (
         <ConversationMenu
           {...contextMenu}
           active={sessionActive(contextMenu.session)}
+          unread={isUnread(menuSession.id, menuSession.activity)}
+          onToggleRead={() => {
+            try {
+              if (isUnread(menuSession.id, menuSession.activity))
+                markRead(menuSession.id, menuSession.activity);
+              else markUnread(menuSession.id);
+              setContextMenu(null);
+            } catch (error) {
+              fail(error);
+            }
+          }}
           onClose={() => setContextMenu(null)}
           onStop={() => {
             const id = contextMenu.session.id;

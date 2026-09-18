@@ -148,7 +148,7 @@ for (const width of [1440, 390]) {
       await page
         .getByRole("button", { name: "Show sidebar", exact: true })
         .click();
-    const selected = page.locator(".session-list > button.selected");
+    const selected = page.locator(".session-list .session-select.selected");
     await expectFill(selected, colors.soft);
     await expect(selected).toHaveCSS("color", colors.strong);
     await selected.hover();

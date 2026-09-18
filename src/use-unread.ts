@@ -1,8 +1,17 @@
 import { useEffect, useState, type RefObject } from "react";
 import type { SessionActivity } from "../shared/types.ts";
-function savedRead(): Record<string, string> {
+// A null marker is an explicit reminder: automatic visibility checks must not
+// clear it, including after a reload. Strings acknowledge a particular completion.
+type ReadMarkers = Record<string, string | null>;
+function savedRead(): ReadMarkers {
   try {
-    return JSON.parse(localStorage.getItem("margin.read") ?? "{}");
+    const saved = JSON.parse(localStorage.getItem("margin.read") ?? "{}");
+    if (!saved || typeof saved !== "object" || Array.isArray(saved)) return {};
+    return Object.fromEntries(
+      Object.entries(saved).filter(
+        ([, value]) => value === null || typeof value === "string",
+      ),
+    ) as ReadMarkers;
   } catch {
     return {};
   }
@@ -15,9 +24,26 @@ export function useUnread(
   contentVersion?: string,
 ) {
   const [read, setRead] = useState(savedRead);
+  function save(next: ReadMarkers) {
+    localStorage.setItem("margin.read", JSON.stringify(next));
+    setRead(next);
+  }
+  function markUnread(sessionId: string) {
+    save({ ...savedRead(), [sessionId]: null });
+  }
+  function markRead(sessionId: string, activity?: SessionActivity) {
+    save({ ...savedRead(), [sessionId]: activity?.completionId ?? "" });
+  }
+  function reopen(sessionId: string) {
+    const next = savedRead();
+    if (next[sessionId] !== null) return;
+    delete next[sessionId];
+    save(next);
+  }
   useEffect(() => {
     const changed = (event: StorageEvent) => {
-      if (event.key === "margin.read") setRead(savedRead());
+      if (event.key === "margin.read" || event.key === null)
+        setRead(savedRead());
     };
     window.addEventListener("storage", changed);
     return () => window.removeEventListener("storage", changed);
@@ -26,6 +52,7 @@ export function useUnread(
     if (
       !id ||
       !visible ||
+      read[id] === null ||
       !activity?.completionId ||
       !activity.replyId ||
       ["running", "waiting"].includes(activity.status) ||
@@ -55,9 +82,10 @@ export function useUnread(
         !(top === reply || reply.contains(top) || top.contains(reply))
       )
         return;
-      const next = { ...savedRead(), [id]: activity.completionId! };
-      localStorage.setItem("margin.read", JSON.stringify(next));
-      setRead(next);
+      const latest = savedRead();
+      // A manual action in this or another tab wins over a queued observer.
+      if (latest[id] === null) return;
+      save({ ...latest, [id]: activity.completionId! });
     };
     const observer = new IntersectionObserver(
       ([entry]) => {
@@ -84,6 +112,12 @@ export function useUnread(
     scroller,
     contentVersion,
   ]);
-  return (sessionId: string, activity?: SessionActivity) =>
-    !!activity?.completionId && read[sessionId] !== activity.completionId;
+  return {
+    isUnread: (sessionId: string, activity?: SessionActivity) =>
+      read[sessionId] === null ||
+      (!!activity?.completionId && read[sessionId] !== activity.completionId),
+    markUnread,
+    markRead,
+    reopen,
+  };
 }

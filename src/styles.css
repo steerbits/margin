@@ -404,25 +404,51 @@ p {
 .sidebar-search button {
   padding: 1px;
 }
-.session-list > button {
+.session-row {
+  display: flex;
+  align-items: stretch;
+  margin-bottom: 4px;
+}
+.session-menu-trigger {
+  display: none;
+  flex: 0 0 44px;
+  min-height: 44px;
+  padding: 0;
+}
+.session-select {
+  flex: 1;
+  min-width: 0;
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
+  touch-action: pan-y pinch-zoom;
+}
+@media (max-width: 650px), (any-pointer: coarse) {
+  .session-menu-trigger {
+    display: inline-flex;
+  }
+  .session-select {
+    min-height: 44px;
+  }
+}
+.session-list .session-select {
   width: 100%;
   justify-content: flex-start;
   text-align: left;
   font-size: 14px;
   color: #5b5b5b;
   padding: 11px 10px;
-  margin-bottom: 4px;
 }
-.session-list > button span {
+.session-list .session-select span {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.session-list > button.selected {
+.session-list .session-select.selected {
   background: #e0e0e0;
   color: #373737;
 }
-.session-list > button.selected svg {
+.session-list .session-select.selected svg {
   color: #5b5b5b;
 }
 .sidebar-empty {
@@ -1746,10 +1772,10 @@ a.project-breadcrumb > span {
   background: #f7f7f8;
   color: #333;
 }
-.session-list > button {
+.session-list .session-select {
   font-size: 15px;
 }
-.session-list > button.selected {
+.session-list .session-select.selected {
   background: #ebebeb;
   color: #171717;
 }
@@ -1865,10 +1891,10 @@ a.project-breadcrumb > span {
 }
 
 /* Workspace and chat management */
-.session-list > button {
+.session-list .session-select {
   gap: 10px;
 }
-.session-list > button .session-title {
+.session-list .session-select .session-title {
   flex: 1;
   min-width: 0;
   white-space: nowrap;
@@ -1922,7 +1948,9 @@ a.project-breadcrumb > span {
 .conversation-menu {
   position: fixed;
   z-index: 100;
-  width: 220px;
+  width: min(220px, calc(100vw - 16px));
+  max-height: calc(100dvh - 16px);
+  overflow-y: auto;
   padding: 5px;
   background: white;
   border: 1px solid #dedede;
@@ -1932,6 +1960,7 @@ a.project-breadcrumb > span {
 .conversation-menu button {
   display: flex;
   width: 100%;
+  min-height: 44px;
   text-align: left;
   justify-content: flex-start;
   padding: 10px 12px;
@@ -2145,13 +2174,13 @@ button.primary:not(.danger):not(:disabled):hover,
 }
 
 /* Selected navigation and compact feedback markers. */
-.session-list > button.selected,
+.session-list .session-select.selected,
 .toolbar-actions .active-button:not(:disabled) {
   background: var(--cobalt-soft);
   color: var(--cobalt-strong);
 }
 
-.session-list > button.selected svg {
+.session-list .session-select.selected svg {
   color: var(--cobalt-strong);
 }
 

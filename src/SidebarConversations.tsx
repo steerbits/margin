@@ -1,21 +1,13 @@
 import { useEffect, useRef, useState } from "react";
 import { Search, X } from "lucide-react";
 import type { Project, SessionActivity, SessionInfo } from "../shared/types.ts";
+import { SidebarConversationRow } from "./SidebarConversationRow.tsx";
 import {
   isActiveConversation,
   orderConversations,
   searchConversations,
   visibleConversations,
 } from "./sidebar-conversations.ts";
-
-const statusLabels = {
-  idle: "Ready",
-  running: "Running",
-  waiting: "Waiting for you",
-  finished: "Finished",
-  failed: "Failed",
-  stopped: "Stopped",
-};
 
 /** The count is an overflow cue, not a duplicate of already-visible indicators. */
 function ActiveConversationCount({
@@ -105,63 +97,17 @@ export function SidebarConversations({
     if (await onSelect(id)) setQuery("");
   }
   function row(s: SessionInfo) {
-    const status = s.activity?.status ?? "idle";
-    const unread = isUnread(s.id, s.activity);
-    const tooltip = `${names.get(s.projectId) ?? "Workspace unavailable"} — ${s.title}`;
-    const label = `${tooltip} — ${statusLabels[status]}${unread ? " · Unread" : ""}`;
     return (
-      <button
-        className={sessionId === s.id ? "selected" : ""}
+      <SidebarConversationRow
         key={s.id}
-        data-session-id={s.id}
-        onClick={() => void open(s.id)}
-        onMouseEnter={() => onPrefetch(s.id)}
-        onFocus={() => onPrefetch(s.id)}
-        onContextMenu={(event) => {
-          event.preventDefault();
-          onContextMenu(s, event.clientX, event.clientY);
-        }}
-        onKeyDown={(event) => {
-          if (
-            event.key === "ContextMenu" ||
-            (event.shiftKey && event.key === "F10")
-          ) {
-            event.preventDefault();
-            const rect = event.currentTarget.getBoundingClientRect();
-            onContextMenu(s, rect.left + 20, rect.bottom);
-          }
-        }}
-        aria-haspopup="menu"
-        aria-current={sessionId === s.id ? "page" : undefined}
-        aria-label={label}
-        title={tooltip}
-      >
-        <span className="session-title">{s.title}</span>
-        {status === "running" ? (
-          <span
-            className="conversation-spinner"
-            role="img"
-            aria-label="Running"
-            title="Running"
-          />
-        ) : status === "waiting" ? (
-          <span
-            className="conversation-waiting"
-            role="img"
-            aria-label="Waiting for you"
-            title="Waiting for you"
-          >
-            !
-          </span>
-        ) : unread ? (
-          <span
-            className="conversation-unread"
-            role="img"
-            aria-label="Unread"
-            title="Unread"
-          />
-        ) : null}
-      </button>
+        session={s}
+        selected={sessionId === s.id}
+        unread={isUnread(s.id, s.activity)}
+        workspaceName={names.get(s.projectId) ?? "Workspace unavailable"}
+        onSelect={() => void open(s.id)}
+        onPrefetch={() => onPrefetch(s.id)}
+        onContextMenu={(x, y) => onContextMenu(s, x, y)}
+      />
     );
   }
   function section(
@@ -294,7 +240,7 @@ export function SidebarConversations({
               event.preventDefault();
               document
                 .querySelector<HTMLButtonElement>(
-                  ".sidebar-search-results .session-list > button",
+                  ".sidebar-search-results [data-session-id]",
                 )
                 ?.focus();
             }

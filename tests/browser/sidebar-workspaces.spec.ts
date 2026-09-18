@@ -8,7 +8,7 @@ const current = (page: Page) =>
   page.getByRole("navigation", { name: "Conversations", exact: true });
 const other = (page: Page) =>
   page.getByRole("navigation", { name: "Other workspaces", exact: true });
-const rows = (page: Page) => page.locator(".session-list > button");
+const rows = (page: Page) => page.locator(".session-list [data-session-id]");
 const row = (page: Page, id: string) =>
   page.locator(`[data-session-id="${id}"]`);
 const search = (page: Page) =>
