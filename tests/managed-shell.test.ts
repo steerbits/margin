@@ -65,7 +65,7 @@ test("managed Bash preserves output, exit status, timeout and abort semantics", 
 });
 for (const background of [false, true])
   test(
-    `SDK host SIGKILL stops ${background ? "post-shell-exit output producers" : "the in-flight command"} through guardian IPC`,
+    `SDK host SIGKILL stops ${background ? "post-shell-exit output producers after slow startup" : "the in-flight command"} through guardian IPC`,
     { timeout: 15000 },
     async () => {
       const dir = mkdtempSync(join(tmpdir(), "margin-guardian-crash-"));
@@ -73,16 +73,25 @@ for (const background of [false, true])
       const id = owner.reserve().generation;
       const heartbeat = join(dir, "heartbeat");
       const childInfo = join(dir, "command-pid");
+      const shellInfo = join(dir, "shell-pid");
       const command = join(dir, "command.cjs");
       const host = join(dir, "host.mjs");
       // The watchdog bounds this test even if the behavior regresses.
       writeFileSync(
         command,
-        `const fs=require('node:fs');fs.writeFileSync(${JSON.stringify(childInfo)},String(process.pid));let n=0;setInterval(()=>{fs.writeFileSync(${JSON.stringify(heartbeat)},String(++n));process.stdout.write('.');},30);setTimeout(()=>process.exit(0),8000);`,
+        `const fs=require('node:fs');fs.writeFileSync(${JSON.stringify(childInfo)},String(process.pid));let n=0;setTimeout(()=>setInterval(()=>{process.stdout.write('.');fs.writeFileSync(${JSON.stringify(heartbeat)},String(++n));},30),${background ? 250 : 0});setTimeout(()=>process.exit(0),8000);`,
       );
+      const invocation = `exec ${quote(process.execPath)} ${quote(command)}`;
+      // This case tests an already-producing descendant after its shell exits,
+      // not a quiet background service. Wait for output readiness so Node's
+      // startup cannot race the normal 100ms post-exit output grace. Deliberately
+      // slow startup exercises the handshake even on otherwise fast machines.
+      const shellCommand = background
+        ? `printf '%s' "$$" > ${quote(shellInfo)}; ${invocation} & child=$!; while [ ! -s ${quote(heartbeat)} ] && kill -0 "$child" 2>/dev/null; do sleep 0.01; done`
+        : invocation;
       writeFileSync(
         host,
-        `import {RuntimeOwner} from ${JSON.stringify(pathToFileURL(resolve("server/runtime-owner.ts")).href)};import {managedShell} from ${JSON.stringify(pathToFileURL(resolve("server/managed-shell.ts")).href)};const storage=new RuntimeOwner(${JSON.stringify(dir)});storage.claim(${JSON.stringify(id)});await managedShell({storage,generation:${JSON.stringify(id)}}).exec(${JSON.stringify(`exec ${quote(process.execPath)} ${quote(command)}${background ? " &" : ""}`)},${JSON.stringify(dir)},{onData(){}});`,
+        `import {RuntimeOwner} from ${JSON.stringify(pathToFileURL(resolve("server/runtime-owner.ts")).href)};import {managedShell} from ${JSON.stringify(pathToFileURL(resolve("server/managed-shell.ts")).href)};const storage=new RuntimeOwner(${JSON.stringify(dir)});storage.claim(${JSON.stringify(id)});await managedShell({storage,generation:${JSON.stringify(id)}}).exec(${JSON.stringify(shellCommand)},${JSON.stringify(dir)},{onData(){}});`,
       );
       const sdkHost = spawn(process.execPath, ["--import", "tsx", host], {
         stdio: "ignore",
@@ -90,6 +99,11 @@ for (const background of [false, true])
       try {
         await until(() => existsSync(heartbeat));
         const commandPid = Number(readFileSync(childInfo, "utf8"));
+        if (background) {
+          const shellPid = Number(readFileSync(shellInfo, "utf8"));
+          assert.notEqual(shellPid, commandPid);
+          await until(() => processState(shellPid) === "dead");
+        }
         await delay(250);
         assert.equal(processState(commandPid), "alive");
         const guardianPid = owner.current()!.guardians[0];
