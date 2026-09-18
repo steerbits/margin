@@ -1,6 +1,8 @@
 import { test, expect, type Page } from "@playwright/test";
 import { randomUUID } from "node:crypto";
 import { sourceSendConflict } from "../../shared/source-send.ts";
+import { scriptedNewChats, updateFixture } from "../browser/update-helpers.ts";
+import { marginHelpPrompt } from "../../shared/help.ts";
 
 async function seed(page: Page, options: Record<string, unknown> = {}) {
   const response = await page.request.post("/api/test/seed", {
@@ -241,6 +243,32 @@ test("ordinary workspaces can still send while Margin is busy", async ({
     await stop(page, active.id);
   }
 });
+
+for (const action of ["Help", "Update available"]) {
+  test(`${action} automatic send respects the real source guard without delayed queuing`, async ({ page }) => {
+    await page.route("**/api/updates", (route) => route.fulfill({ json: updateFixture() }));
+    await scriptedNewChats(page);
+    await page.goto("/");
+    const active = await running(page);
+    try {
+      let sends = 0;
+      page.on("request", (request) => { if (request.url().endsWith("/send")) sends++; });
+      await page.getByRole("button", { name: action, exact: true }).click();
+      const composer = page.getByLabel("Message", { exact: true });
+      await expect(composer).toHaveValue(action === "Help" ? marginHelpPrompt : /Review updating Margin/);
+      await expect(page.locator(".source-send-notice")).toContainText(sourceSendConflict);
+      expect(sends).toBe(0);
+      await stop(page, active.id);
+      const send = page.getByRole("button", { name: "Send message", exact: true });
+      await expect(send).toBeEnabled();
+      expect(sends).toBe(0);
+      await expect(page.locator(".message.user")).toHaveCount(0);
+      await send.click();
+      await expect(page.locator(".message.assistant")).toHaveCount(1);
+      expect(sends).toBe(1);
+    } finally { await stop(page, active.id); }
+  });
+}
 
 test("availability failures keep drafts and offer a retry instead of silently enabling Send", async ({
   page,

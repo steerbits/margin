@@ -1,5 +1,6 @@
 import { test, expect, type Page } from "@playwright/test";
 import { marginHelpPrompt, marginIssuesUrl } from "../../shared/help.ts";
+import { scriptedNewChats } from "./update-helpers.ts";
 
 async function seed(page: Page, options: Record<string, unknown> = {}) {
   await page.goto("/");
@@ -200,10 +201,11 @@ test("Enter respects upload guards and failed sends retain the draft for keyboar
   expect(sends).toBe(2);
 });
 
-test("Help creates a source-workspace chat with an unsent editable prompt and preserves the previous draft", async ({
+test("Help autosends once in the source workspace and preserves the previous draft", async ({
   page,
 }) => {
   const id = await seed(page);
+  await scriptedNewChats(page);
   await message(page).fill("Keep this existing draft");
   let sends = 0;
   page.on("request", (request) => {
@@ -211,18 +213,18 @@ test("Help creates a source-workspace chat with an unsent editable prompt and pr
   });
   const bootstrap = await (await page.request.get("/api/bootstrap")).json();
   await page.getByRole("button", { name: "Help", exact: true }).click();
-  await expect(message(page)).toHaveValue(marginHelpPrompt);
-  await expect(message(page)).toBeFocused();
+  await expect.poll(() => sends).toBe(1);
+  await expect(message(page)).toHaveValue("");
   const helpId = page.url().split("/chats/")[1];
   expect(helpId).not.toBe(id);
   const help = await state(page, helpId);
   expect(help.session.projectId).toBe(bootstrap.marginProjectId);
-  expect(help.messages).toHaveLength(0);
-  expect(help.composer).toBe(marginHelpPrompt);
-  expect(help.composer).not.toContain("README-FOR-AGENTS.md");
-  expect(sends).toBe(0);
+  await expect.poll(async () => (await state(page, helpId)).messages.filter((m: any) => m.role === "user").length).toBe(1);
+  expect((await state(page, helpId)).messages.find((m: any) => m.role === "user").text).toContain(marginHelpPrompt);
+  expect(marginHelpPrompt).not.toContain("README-FOR-AGENTS.md");
   await page.reload();
-  await expect(message(page)).toHaveValue(marginHelpPrompt);
+  await expect(message(page)).toHaveValue("");
+  expect(sends).toBe(1);
   expect((await state(page, id)).composer).toBe("Keep this existing draft");
 });
 

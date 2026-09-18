@@ -43,6 +43,8 @@ import type {
 import { api } from "./api.ts";
 import { submitOnEnter } from "./submit-on-enter.ts";
 import { marginHelpPrompt, marginIssuesUrl } from "../shared/help.ts";
+import { highlightedUpdate, marginUpdatePrompt, releaseNotesUrl } from "../shared/updates.ts";
+import { useUpdates } from "./use-updates.ts";
 import { connectConversation } from "./conversation-connection.ts";
 import { ArtifactLauncher } from "./ArtifactReview.tsx";
 import {
@@ -150,6 +152,11 @@ export function App() {
   const [openingHelp, setOpeningHelp] = useState(false);
   const helpOpening = useRef(false);
   const [helpError, setHelpError] = useState("");
+  const [openingUpdate, setOpeningUpdate] = useState(false);
+  const updateOpening = useRef(false);
+  const [autoSend, setAutoSend] = useState<{ id: string; prompt: string } | null>(null);
+  const updates = useUpdates(loaded);
+  const updateChats = useRef(new Map<string, string>());
   const savingComment = useRef(false);
   const [renameOpen, setRenameOpen] = useState(false);
   const [workspaceName, setWorkspaceName] = useState("");
@@ -896,7 +903,7 @@ export function App() {
     if (window.innerWidth <= 650) setSidebar(false);
   }
   async function openHelp() {
-    if (helpOpening.current) return;
+    if (helpOpening.current || updateOpening.current || autoSend || sending) return;
     setHelpError("");
     if (!boot.models.length) {
       window.open(marginIssuesUrl, "_blank", "noopener,noreferrer");
@@ -907,7 +914,7 @@ export function App() {
     try {
       const project = boot.projects.find((p) => p.id === boot.marginProjectId) ??
         (await api<{ project: Project }>("/customize")).project;
-      await customizationPrompt(project, marginHelpPrompt);
+      await customizationPrompt(project, marginHelpPrompt, true);
       if (window.innerWidth <= 650) setSidebar(false);
     } catch (e) {
       setHelpError(e instanceof Error ? e.message : String(e));
@@ -916,7 +923,31 @@ export function App() {
       setOpeningHelp(false);
     }
   }
-  async function customizationPrompt(project: Project, prompt: string) {
+  async function openUpdate() {
+    const status = updates.status, release = status?.manifest?.latest;
+    if (!status || !release || updateOpening.current || helpOpening.current || autoSend || sending) return;
+    if (!boot.models.length) {
+      window.open(releaseNotesUrl(release), "_blank", "noopener,noreferrer");
+      return;
+    }
+    updateOpening.current = true;
+    setOpeningUpdate(true);
+    try {
+      const existing = updateChats.current.get(release.commit);
+      if (existing && boot.sessions.some((s) => s.id === existing)) {
+        await go({ kind: "chat", sessionId: existing });
+      } else {
+        const project = boot.projects.find((p) => p.id === boot.marginProjectId) ??
+          (await api<{ project: Project }>("/customize")).project;
+        const id = await customizationPrompt(project, marginUpdatePrompt(status, release), true);
+        if (id) updateChats.current.set(release.commit, id);
+      }
+      setSettingsOpen(false);
+      if (window.innerWidth <= 650) setSidebar(false);
+    } catch (e) { fail(e); }
+    finally { updateOpening.current = false; setOpeningUpdate(false); }
+  }
+  async function customizationPrompt(project: Project, prompt: string, auto = false) {
     if (editing) {
       throw new Error("Finish or cancel your draft comment before starting a conversation.");
     }
@@ -931,7 +962,31 @@ export function App() {
     const data = { ...boot, sessions: [s.session, ...boot.sessions] };
     setBoot(data);
     await go({ kind: "chat", sessionId: s.session.id }, data);
+    if (auto) setAutoSend({ id: s.session.id, prompt });
+    return s.session.id;
   }
+  // One explicit click, one attempt through the ordinary send/checkpoint path.
+  // Waiting for initial connection is not permission to queue behind active work.
+  useEffect(() => {
+    if (!autoSend) return;
+    const destination = routeRef.current;
+    if (destination.kind !== "chat" || destination.sessionId !== autoSend.id) {
+      setAutoSend(null);
+      return;
+    }
+    if (sessionId !== autoSend.id || snapshot?.session.id !== autoSend.id || !connected || !sourceSend.checked) return;
+    setAutoSend(null);
+    if (draftRef.current !== autoSend.prompt || sendDisabledReason()) return;
+    void send();
+  }, [autoSend, sessionId, snapshot, connected, sourceSend.checked, sourceSend.disabled, hubOpen, homeOpen]);
+  useEffect(() => {
+    if (!autoSend) return;
+    const timer = setTimeout(() => {
+      setAutoSend(null);
+      setError("Automatic send could not start. Your prompt is saved; send it when the conversation is ready.");
+    }, 10_000);
+    return () => clearTimeout(timer);
+  }, [autoSend]);
   async function chooseWorkspace() {
     if (choosingWorkspaceRef.current) return;
     if (!(await instructionsGuard.confirmLeave())) return;
@@ -1548,9 +1603,11 @@ export function App() {
         <SettingsDialog
           onClose={() => setSettingsOpen(false)}
           onModelsChanged={(models) => setBoot((current) => ({ ...current, models }))}
+          updates={{ status: updates.status, checking: updates.checking,
+            onCheck: () => void updates.refresh(), onReview: () => void openUpdate() }}
         />
       )}
-      <header className="app-header">
+      <header className={`app-header${highlightedUpdate(updates.status) ? " has-update" : ""}`}>
         <div className="header-left">
           <button
             className="sidebar-toggle"
@@ -1575,6 +1632,14 @@ export function App() {
           </button>
         </div>
         <div className="header-right">
+          {highlightedUpdate(updates.status) && (
+            <button className="update-available" aria-label="Update available"
+              title={`Review Margin ${updates.status!.manifest!.latest!.version}${boot.models.length ? " with AI (sends a review request)" : " release notes on GitHub"}`}
+              disabled={loading || openingUpdate || openingHelp || !!autoSend || sending}
+              onClick={() => void openUpdate()}>
+              <span>Update available</span>
+            </button>
+          )}
           <span
             className={`connection ${connected ? "connected" : ""}`}
             role={!loaded ? "status" : undefined}
@@ -1589,8 +1654,8 @@ export function App() {
           </span>
           <button
             aria-label="Help"
-            title={boot.models.length ? "Help with Margin" : "Help — GitHub issues (new tab)"}
-            disabled={loading || openingHelp}
+            title={boot.models.length ? "Help with Margin — starts an AI chat" : "Help — GitHub issues (new tab)"}
+            disabled={loading || openingHelp || openingUpdate || !!autoSend || sending}
             onClick={() => void openHelp()}
           >
             {openingHelp ? <LoaderCircle size={18} className="spin" /> : <CircleHelp size={18} />}
@@ -1784,7 +1849,7 @@ export function App() {
                   returnRoute.current ?? { kind: "home" },
                 ).catch(fail)
               }
-              onPrompt={customizationPrompt}
+              onPrompt={async (project, prompt) => { await customizationPrompt(project, prompt); }}
             />
           ) : (
             <>

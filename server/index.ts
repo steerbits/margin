@@ -23,6 +23,7 @@ import { LiveSession, errorText } from "./sessions.ts";
 import { createModels, listModels } from "./models.ts";
 import { ProviderAccounts, installProviderAccountRoutes } from "./provider-accounts.ts";
 import { installCustomConnectionRoutes } from "./custom-connections.ts";
+import { installUpdateRoutes } from "./updates.ts";
 import {
   installSettingsRoutes,
   modelReferenceSchema,
@@ -596,6 +597,7 @@ if (!workerToken) {
   installSettingsRoutes(app, store, availableModels);
   installProviderAccountRoutes(app, providerAccounts);
   installCustomConnectionRoutes(app);
+  installUpdateRoutes(app, appRoot, dataDir);
 }
 app.post(
   "/api/models/refresh",
@@ -1004,7 +1006,7 @@ if (workerToken) {
       "/customize",
       "/customize/:tab",
     ],
-    (_req, res) => res.sendFile(join(appRoot, "dist", "index.html")),
+    (_req, res) => res.sendFile("index.html", { root: join(appRoot, "dist") }),
   );
 } else {
   const { createServer } = await import("vite");

@@ -7,8 +7,8 @@ import {
   writeFileSync,
   chmodSync,
   realpathSync,
+  readFileSync,
 } from "node:fs";
-import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { execFileSync } from "node:child_process";
@@ -28,8 +28,9 @@ for (const key of [
 ])
   delete process.env[key];
 const source = resolve(import.meta.dirname, "..");
-mkdirSync(join(source, ".margin-data"), { recursive: true });
-const root = realpathSync(mkdtempSync(join(tmpdir(), "margin-notes-e2e-app-")));
+const temporary = join(source, ".margin-data/temporary/browser-tests");
+mkdirSync(temporary, { recursive: true });
+const root = realpathSync(mkdtempSync(join(temporary, "app-")));
 // Browser fixtures need a model catalog, never the developer's real login.
 process.env.PI_CODING_AGENT_DIR = join(root, "fixture-pi");
 mkdirSync(process.env.PI_CODING_AGENT_DIR);
@@ -67,6 +68,21 @@ execFileSync("git", ["init", "-q", root]);
 process.env.MARGIN_TEST_MODE = "1";
 process.env.MARGIN_DISPOSABLE_TEST_APP = "1";
 process.env.MARGIN_DATA_DIR = join(root, "data");
+// Two real disposable builds exercise version discovery without a public release.
+if (process.env.MARGIN_TEST_INSTALLED_VERSION) {
+  const { validVersion, parseReleaseManifest } = await import("../shared/updates.ts");
+  const version = process.env.MARGIN_TEST_INSTALLED_VERSION;
+  if (!validVersion(version)) throw new Error("Invalid disposable build version");
+  const pkg = JSON.parse(readFileSync(join(root, "package.json"), "utf8"));
+  pkg.version = version;
+  writeFileSync(join(root, "package.json"), JSON.stringify(pkg));
+  const manifest = parseReleaseManifest({ schemaVersion: 1, lastHighlightedVersion: "1.1.0",
+    latest: { version: "1.1.0", tag: "v1.1.0", commit: "a".repeat(40), highlighted: true,
+      security: false, publishedAt: "2026-09-18T00:00:00Z", tests: { status: "passed" } } });
+  mkdirSync(join(root, "data/updates"), { recursive: true });
+  writeFileSync(join(root, "data/updates/cache.json"), JSON.stringify({ manifest,
+    checkedAt: Date.now(), attemptedAt: Date.now(), nextCheck: Date.now() + 3600000 }));
+}
 process.env.NODE_ENV = "production";
 execFileSync(
   process.execPath,
@@ -101,7 +117,7 @@ done
   mkdirSync(join(root, "vendor", "cco"), { recursive: true });
   symlinkSync(fake, join(root, "vendor", "cco", "cco"));
   process.env.PATH = `${bin}:${process.env.PATH}`;
-  const externalParent = realpathSync(mkdtempSync(join(tmpdir(), "margin-external-projects-")));
+  const externalParent = realpathSync(mkdtempSync(join(temporary, "external-projects-")));
   process.env.MARGIN_WORKSPACE_PARENT = externalParent;
   process.on("exit", () => rmSync(externalParent, { recursive: true, force: true }));
   const originalLog = console.log;

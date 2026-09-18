@@ -22,13 +22,17 @@ import {
   thinkingHelp,
 } from "../shared/model-capabilities.ts";
 import "./SettingsDialog.css";
+import { UpdateSettings } from "./UpdateSettings.tsx";
+import type { UpdateStatus } from "../shared/updates.ts";
 
 export function SettingsDialog({
   onClose,
   onModelsChanged,
+  updates,
 }: {
   onClose: () => void;
   onModelsChanged?: (models: ModelInfo[]) => void;
+  updates: { status: UpdateStatus | null; checking: boolean; onCheck: () => void; onReview: () => void };
 }) {
   const [draft, setDraft] = useState<MarginSettings>({ ...defaultSettings });
   const [models, setModels] = useState<ModelInfo[]>([]);
@@ -307,6 +311,11 @@ export function SettingsDialog({
             </button>
           </div>
         )}
+        <UpdateSettings {...updates} onReview={() => {
+          void (async () => {
+            if (!autosave.current || await autosave.current.flush()) updates.onReview();
+          })();
+        }} />
         <div className="management-actions">
           <button
             className="primary"

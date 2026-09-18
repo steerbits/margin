@@ -49,6 +49,12 @@ The installer installs locked dependencies, builds Margin, verifies the real fil
 
 Choose a port with `bash start.sh --port 4318` (or `bash install.sh --port 4318 --start`). If it is busy, Margin checks up to 10 higher ports and asks before switching. Without an interactive terminal, it exits with a suggested `--port` command. Installation saves the accepted port; start-time overrides are temporary. Only one launcher can run per checkout, even on a different port; separate fresh checkouts can run together.
 
+## Updating
+
+Settings shows the running and latest published versions and offers **Check for updates**. Only releases explicitly marked as **highlighted** show an **Update available** button in the header. Update and Help start an AI conversation automatically when connected; updates first explain the changes and ask for confirmation before modifying your installation. Without AI, Update opens the official release notes.
+
+Keep `.margin-data`, `.git`, workspaces, and local customizations when updating. Finish active tasks before replacing dependencies or restarting. The fresh-install script does not upgrade existing installations. Versions predating the checker need one manual upgrade first. See [release publishing, tests, and update limitations](docs/releases.md) and [installation preservation](docs/installation.md).
+
 ## About
 
 Margin is built by [@paraschopra](x.com/paraschopra) and thanks the following projects

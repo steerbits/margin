@@ -4,7 +4,7 @@ Use the pinned **Customize Margin** area for global instructions, example prompt
 
 [Checkpoint behavior and recommendations](docs/checkpoints.md) explains what happens before each source-workspace message, what is saved, how restore works, and the checkpoint hang fix and remaining improvements.
 
-[Automatic update proposal](docs/automatic-updates.md) describes a cached release check in the header and updates through a prefilled customization chat, sharing checkpoint and recovery improvements with ordinary customization.
+[Releases and updates](docs/releases.md) documents cached release discovery, quiet versus independently highlighted releases, and an autosent customization review pinned to an official release commit. Installation still requires confirmation. Use `npm run test:release` for the isolated pre-release battery; add new suites to `scripts/release-suites.ts` and run focused checks during ordinary feature work.
 
 ## Projects and the workspace picker
 
@@ -81,7 +81,7 @@ In the reply/message box (including customization chats) and artifact **Overall 
 
 Notes, global/workspace instructions, custom connection headers/JSON, and agent-requested long-form editor dialogs keep ordinary Enter for newlines. Existing Cmd/Ctrl+Enter message/comment shortcuts still work. Keyboard submission respects the same readiness, unfinished-comment, and upload guards as the buttons; text-composition confirmation and held Enter do not submit. Send/Save tooltips describe the shortcuts without an extra footer beneath the reply box.
 
-The **Help** icon beside Settings prepares a new chat in Margin's source workspace with an editable help prompt. Nothing is sent automatically. The prompt asks the assistant to first find out what you need, discover relevant Margin docs/code, distinguish verified behavior from guesses, and avoid file changes unless requested. Normal source-workspace send/checkpoint guards still apply. If no AI models are available, Help opens [GitHub issues](https://github.com/steerbits/margin/issues) in a new tab; failed Help chat creation offers the same link. The assistant can also suggest issues for unresolved problems and help prepare a report without secrets. Configured models can still fail at inference time; Help does not test credentials or switch providers automatically.
+The **Help** icon beside Settings opens a new chat in Margin's source workspace and automatically sends its help prompt when the normal source-task guard allows it. A blocked or failed send leaves the prompt saved for explicit retry, never queued for later. The prompt asks the assistant to first find out what you need, discover relevant Margin docs/code, distinguish verified behavior from guesses, and avoid file changes unless requested. Normal source-workspace send/checkpoint guards still apply. If no AI models are available, Help opens [GitHub issues](https://github.com/steerbits/margin/issues) in a new tab; failed Help chat creation offers the same link. The assistant can also suggest issues for unresolved problems and help prepare a report without secrets. Configured models can still fail at inference time; Help does not test credentials or switch providers automatically.
 
 ## Reply buttons
 

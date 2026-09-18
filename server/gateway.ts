@@ -25,6 +25,7 @@ import { installSettingsRoutes, readSettings } from "./settings.ts";
 import { createModels } from "./models.ts";
 import { ProviderAccounts, installProviderAccountRoutes } from "./provider-accounts.ts";
 import { installCustomConnectionRoutes } from "./custom-connections.ts";
+import { installUpdateRoutes } from "./updates.ts";
 import { withinPath } from "./execution.ts";
 import { getAgentDir } from "@earendil-works/pi-coding-agent";
 import { installInstructionsRoute } from "./instructions.ts";
@@ -397,6 +398,7 @@ const providerAccounts = new ProviderAccounts(() =>
 );
 installProviderAccountRoutes(app, providerAccounts);
 installCustomConnectionRoutes(app);
+installUpdateRoutes(app, appRoot, dataDir);
 installSettingsRoutes(app, registry, async () => {
   const response = await workerFetch(
     projectById(initial.id),
@@ -502,7 +504,7 @@ if (process.env.NODE_ENV === "production") {
       "/customize",
       "/customize/:tab",
     ],
-    (_req, res) => res.sendFile(join(appRoot, "dist", "index.html")),
+    (_req, res) => res.sendFile("index.html", { root: join(appRoot, "dist") }),
   );
 } else {
   const { createServer } = await import("vite");

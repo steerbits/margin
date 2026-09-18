@@ -16,6 +16,7 @@
     "start:native": "NODE_ENV=production tsx scripts/start-native.ts",
     "dev:native": "tsx watch scripts/start-native.ts",
     "test": "tsx --test tests/*.test.ts",
+    "test:release": "tsx scripts/test-release.ts",
     "test:e2e": "playwright test --config tests/project-notes.playwright.config.ts",
     "check": "npm run test && npm run build",
     "probe": "tsx scripts/probe.ts",

@@ -49,6 +49,7 @@ export function useSourceSend(sessionId: string | null) {
   }, [sessionId, attempt]);
   const current = state?.sessionId === sessionId ? state : null;
   return {
+    checked: !!current,
     disabled: !!sessionId && (!current || !!current.block || !!current.error),
     reason: !sessionId
       ? null
