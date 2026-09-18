@@ -25,11 +25,33 @@ test("gateway account API requires browser authentication, rejects cross-origin 
   const { url } = JSON.parse(
     readFileSync(".margin-data/gateway-test-link.json", "utf8"),
   );
-  await page.goto(url);
-  await page.getByRole("button", { name: "Settings", exact: true }).click();
+  // This is the first authenticated browser in the connection-gateway suite:
+  // bootstrap can cold-start its workspace worker. Wait for that response rather
+  // than spending the model control's 5s assertion budget on worker startup.
+  const [bootstrap] = await Promise.all([
+    page.waitForResponse(
+      (response) => new URL(response.url()).pathname === "/api/bootstrap",
+      { timeout: 40000 },
+    ),
+    page.goto(url),
+  ]);
+  expect(bootstrap.ok()).toBe(true);
+  await bootstrap.finished();
+  const [settings] = await Promise.all([
+    page.waitForResponse(
+      (response) => new URL(response.url()).pathname === "/api/settings",
+      { timeout: 30000 },
+    ),
+    page.getByRole("button", { name: "Settings", exact: true }).click(),
+  ]);
+  expect(settings.ok()).toBe(true);
+  await settings.finished();
   const dialog = page.getByRole("dialog", { name: "Settings", exact: true });
   await expect(dialog.getByLabel("Default model")).toBeEnabled();
-  await expect(dialog.locator(".settings-accounts")).toHaveAttribute("open", "");
+  await expect(dialog.locator(".settings-accounts")).toHaveAttribute(
+    "open",
+    "",
+  );
   await expect(
     dialog.getByText(/Account changes are disabled by MARGIN_AUTH_READ_ONLY/),
   ).toBeVisible();
